@@ -22,6 +22,8 @@ document instead of raw text.
 - Quick Look preview (Space in Finder, Quick Look in Spotlight, Mail attachments)
   with the same rendering.
 - ⌘R reloads on demand. Pinch to zoom.
+- Settings (⌘,) for theme, the Quick Look extension, and the default Markdown app;
+  offered once in a Welcome window on first launch.
 
 ## Requirements
 
@@ -67,12 +69,32 @@ settings pane or macOS may keep using it.
 - File ▸ Open (⌘O) and Open Recent work as in any document app.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.
 
+## Settings
+
+Open Settings with ⌘, (Uncial ▸ Settings…). On the first launch the same controls
+appear in a Welcome window with **Skip** and **Done**; either one dismisses it for good.
+
+- **Theme**: System, Light, or Dark. Windows and the rendered document switch
+  immediately, no reload needed.
+- **Quick Look extension**: *Install* registers the extension bundled in this copy
+  of Uncial and enables it. *Remove* disables it, the same switch as System
+  Settings ▸ Extensions ▸ Quick Look.
+- **Default app**: *Make Default* makes Uncial the handler for Markdown files.
+  *Remove* hands the role back to the app that had it before, or TextEdit if that
+  is unknown. macOS takes a few seconds to apply either change.
+
+To see the Welcome window again:
+
+```sh
+defaults delete com.maksimradaev.uncial hasCompletedFirstRun
+```
+
 ## How it works
 
 | Part | What it does |
 |---|---|
 | `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, image inlining, GitHub-like CSS. Also the file watcher. |
-| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with JavaScript disabled and reloads it when the watcher fires. |
+| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with JavaScript disabled and reloads it when the watcher fires. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
 | `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. |
 
 Design notes live in `docs/superpowers/specs/2026-09-05-uncial-design.md` and the

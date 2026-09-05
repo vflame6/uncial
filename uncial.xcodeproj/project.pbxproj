@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		5A1C1A1E000000000000000E /* UncialCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1C1A1E000000000000000C /* UncialCore */; };
+		5A1C1A1E000000000000000F /* UncialCore in Frameworks */ = {isa = PBXBuildFile; productRef = 5A1C1A1E000000000000000D /* UncialCore */; };
+		5A1C1A1E0000000000000013 /* UncialQuickLook.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 5A1C1A1E0000000000000001 /* UncialQuickLook.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		22DDDE1F304C355000A461AF /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -21,12 +27,34 @@
 			remoteGlobalIDString = 22DDDE0D304C354F00A461AF;
 			remoteInfo = uncial;
 		};
+		5A1C1A1E0000000000000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 22DDDE06304C354F00A461AF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A1C1A1E0000000000000004;
+			remoteInfo = UncialQuickLook;
+		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		5A1C1A1E0000000000000012 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5A1C1A1E0000000000000013 /* UncialQuickLook.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
-		22DDDE0E304C354F00A461AF /* uncial.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = uncial.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		22DDDE0E304C354F00A461AF /* Uncial.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Uncial.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		22DDDE1E304C355000A461AF /* uncialTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uncialTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		22DDDE28304C355000A461AF /* uncialUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uncialUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		5A1C1A1E0000000000000001 /* UncialQuickLook.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = UncialQuickLook.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -36,6 +64,13 @@
 				Info.plist,
 			);
 			target = 22DDDE0D304C354F00A461AF /* uncial */;
+		};
+		5A1C1A1E0000000000000003 /* Exceptions for "UncialQuickLook" folder in "UncialQuickLook" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 5A1C1A1E0000000000000004 /* UncialQuickLook */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
@@ -58,6 +93,14 @@
 			path = uncialUITests;
 			sourceTree = "<group>";
 		};
+		5A1C1A1E0000000000000002 /* UncialQuickLook */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				5A1C1A1E0000000000000003 /* Exceptions for "UncialQuickLook" folder in "UncialQuickLook" target */,
+			);
+			path = UncialQuickLook;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -65,6 +108,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				5A1C1A1E000000000000000E /* UncialCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -82,6 +126,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A1C1A1E0000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5A1C1A1E000000000000000F /* UncialCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -91,6 +143,7 @@
 				22DDDE10304C354F00A461AF /* uncial */,
 				22DDDE21304C355000A461AF /* uncialTests */,
 				22DDDE2B304C355000A461AF /* uncialUITests */,
+				5A1C1A1E0000000000000002 /* UncialQuickLook */,
 				22DDDE0F304C354F00A461AF /* Products */,
 			);
 			sourceTree = "<group>";
@@ -98,9 +151,10 @@
 		22DDDE0F304C354F00A461AF /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				22DDDE0E304C354F00A461AF /* uncial.app */,
+				22DDDE0E304C354F00A461AF /* Uncial.app */,
 				22DDDE1E304C355000A461AF /* uncialTests.xctest */,
 				22DDDE28304C355000A461AF /* uncialUITests.xctest */,
+				5A1C1A1E0000000000000001 /* UncialQuickLook.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -115,19 +169,22 @@
 				22DDDE0A304C354F00A461AF /* Sources */,
 				22DDDE0B304C354F00A461AF /* Frameworks */,
 				22DDDE0C304C354F00A461AF /* Resources */,
+				5A1C1A1E0000000000000012 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				5A1C1A1E0000000000000011 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				22DDDE10304C354F00A461AF /* uncial */,
 			);
 			name = uncial;
 			packageProductDependencies = (
+				5A1C1A1E000000000000000C /* UncialCore */,
 			);
 			productName = uncial;
-			productReference = 22DDDE0E304C354F00A461AF /* uncial.app */;
+			productReference = 22DDDE0E304C354F00A461AF /* Uncial.app */;
 			productType = "com.apple.product-type.application";
 		};
 		22DDDE1D304C355000A461AF /* uncialTests */ = {
@@ -176,6 +233,29 @@
 			productReference = 22DDDE28304C355000A461AF /* uncialUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
+		5A1C1A1E0000000000000004 /* UncialQuickLook */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5A1C1A1E0000000000000005 /* Build configuration list for PBXNativeTarget "UncialQuickLook" */;
+			buildPhases = (
+				5A1C1A1E0000000000000006 /* Sources */,
+				5A1C1A1E0000000000000007 /* Frameworks */,
+				5A1C1A1E0000000000000008 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				5A1C1A1E0000000000000002 /* UncialQuickLook */,
+			);
+			name = UncialQuickLook;
+			packageProductDependencies = (
+				5A1C1A1E000000000000000D /* UncialCore */,
+			);
+			productName = UncialQuickLook;
+			productReference = 5A1C1A1E0000000000000001 /* UncialQuickLook.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -197,6 +277,9 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 22DDDE0D304C354F00A461AF;
 					};
+					5A1C1A1E0000000000000004 = {
+						CreatedOnToolsVersion = 26.6;
+					};
 				};
 			};
 			buildConfigurationList = 22DDDE09304C354F00A461AF /* Build configuration list for PBXProject "uncial" */;
@@ -208,6 +291,9 @@
 			);
 			mainGroup = 22DDDE05304C354F00A461AF;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				5A1C1A1E000000000000000B /* XCLocalSwiftPackageReference "Packages/UncialCore" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 22DDDE0F304C354F00A461AF /* Products */;
 			projectDirPath = "";
@@ -216,6 +302,7 @@
 				22DDDE0D304C354F00A461AF /* uncial */,
 				22DDDE1D304C355000A461AF /* uncialTests */,
 				22DDDE27304C355000A461AF /* uncialUITests */,
+				5A1C1A1E0000000000000004 /* UncialQuickLook */,
 			);
 		};
 /* End PBXProject section */
@@ -236,6 +323,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		22DDDE26304C355000A461AF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5A1C1A1E0000000000000008 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -266,6 +360,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5A1C1A1E0000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -279,6 +380,11 @@
 			target = 22DDDE0D304C354F00A461AF /* uncial */;
 			targetProxy = 22DDDE29304C355000A461AF /* PBXContainerItemProxy */;
 		};
+		5A1C1A1E0000000000000011 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 5A1C1A1E0000000000000004 /* UncialQuickLook */;
+			targetProxy = 5A1C1A1E0000000000000010 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -291,12 +397,13 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XWTLHG45H7;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readwrite;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = uncial/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -304,7 +411,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncial;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Uncial;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -324,12 +431,13 @@
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XWTLHG45H7;
-				ENABLE_APP_SANDBOX = YES;
+				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
-				ENABLE_USER_SELECTED_FILES = readwrite;
+				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = uncial/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -337,7 +445,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncial;
-				PRODUCT_NAME = "$(TARGET_NAME)";
+				PRODUCT_NAME = Uncial;
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -402,7 +510,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -460,7 +568,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -476,7 +584,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XWTLHG45H7;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncialTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -485,7 +593,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/uncial.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/uncial";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Uncial.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Uncial";
 			};
 			name = Debug;
 		};
@@ -497,7 +605,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = XWTLHG45H7;
 				GENERATE_INFOPLIST_FILE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncialTests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -506,7 +614,7 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/uncial.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/uncial";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Uncial.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Uncial";
 			};
 			name = Release;
 		};
@@ -545,6 +653,64 @@
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
 				TEST_TARGET_NAME = uncial;
+			};
+			name = Release;
+		};
+		5A1C1A1E0000000000000009 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XWTLHG45H7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = UncialQuickLook/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Uncial Quick Look";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncial.QuickLook;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		5A1C1A1E000000000000000A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = XWTLHG45H7;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = UncialQuickLook/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Uncial Quick Look";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncial.QuickLook;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -587,7 +753,34 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		5A1C1A1E0000000000000005 /* Build configuration list for PBXNativeTarget "UncialQuickLook" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5A1C1A1E0000000000000009 /* Debug */,
+				5A1C1A1E000000000000000A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		5A1C1A1E000000000000000B /* XCLocalSwiftPackageReference "Packages/UncialCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/UncialCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		5A1C1A1E000000000000000C /* UncialCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = UncialCore;
+		};
+		5A1C1A1E000000000000000D /* UncialCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = UncialCore;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 22DDDE06304C354F00A461AF /* Project object */;
 }

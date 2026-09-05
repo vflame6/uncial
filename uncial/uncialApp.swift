@@ -1,43 +1,20 @@
-//
-//  uncialApp.swift
-//  uncial
-//
-//  Created by Maksim Radaev on 05.09.2026.
-//
-
 import SwiftUI
-import SwiftData
-import UniformTypeIdentifiers
 
 @main
-struct uncialApp: App {
+struct UncialApp: App {
+    @FocusedValue(\.reloadDocument) private var reloadDocument
+
     var body: some Scene {
-        DocumentGroup(editing: .itemDocument, migrationPlan: uncialMigrationPlan.self) {
-            ContentView()
+        DocumentGroup(viewing: MarkdownDocument.self) { configuration in
+            DocumentView(document: configuration.document, fileURL: configuration.fileURL)
+        }
+        .defaultSize(width: 900, height: 760)
+        .commands {
+            CommandGroup(after: .toolbar) {
+                Button("Reload") { reloadDocument?.run() }
+                    .keyboardShortcut("r", modifiers: .command)
+                    .disabled(reloadDocument == nil)
+            }
         }
     }
-}
-
-extension UTType {
-    static var itemDocument: UTType {
-        UTType(importedAs: "com.example.item-document")
-    }
-}
-
-struct uncialMigrationPlan: SchemaMigrationPlan {
-    static var schemas: [VersionedSchema.Type] = [
-        uncialVersionedSchema.self,
-    ]
-
-    static var stages: [MigrationStage] = [
-        // Stages of migration between VersionedSchema, if required.
-    ]
-}
-
-struct uncialVersionedSchema: VersionedSchema {
-    static var versionIdentifier = Schema.Version(1, 0, 0)
-
-    static var models: [any PersistentModel.Type] = [
-        Item.self,
-    ]
 }

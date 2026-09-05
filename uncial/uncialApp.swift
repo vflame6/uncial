@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct UncialApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @FocusedValue(\.reloadDocument) private var reloadDocument
 
     var body: some Scene {
@@ -15,6 +16,10 @@ struct UncialApp: App {
                     .keyboardShortcut("r", modifiers: .command)
                     .disabled(reloadDocument == nil)
             }
+        }
+
+        Settings {
+            SettingsView()
         }
     }
 }

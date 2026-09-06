@@ -11,8 +11,10 @@ enum GFMRenderer {
         cmark_gfm_core_extensions_ensure_registered()
     }()
 
-    static func render(_ markdown: String) -> String {
+    /// - Parameter sourcePositions: adds `data-sourcepos` attributes to block elements.
+    static func render(_ markdown: String, sourcePositions: Bool = false) -> String {
         _ = registerExtensions
+        let options = sourcePositions ? self.options | CMARK_OPT_SOURCEPOS : self.options
         guard let parser = cmark_parser_new(options) else { return "" }
         defer { cmark_parser_free(parser) }
 

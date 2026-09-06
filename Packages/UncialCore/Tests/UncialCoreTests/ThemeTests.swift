@@ -45,4 +45,11 @@ import Testing
         #expect(html.contains("#fdf6e3"))
         #expect(HTMLDocument.wrap(body: "", title: "t").contains("data-theme=\"macos\""))
     }
+
+    @Test func paletteRoles() {
+        #expect(Theme.github.editorPalette?.light.code == 0x953800)
+        #expect(Theme.github.editorPalette?.dark.accent == 0x4493F8)
+        #expect(Theme.solarized.editorPalette?.light.muted == 0x93A1A1)
+        #expect(Theme.solarized.editorPalette?.dark.code == 0x2AA198)
+    }
 }

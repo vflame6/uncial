@@ -18,6 +18,16 @@ public enum FrontMatter {
         return (frontMatter, lines.joined(separator: "\n"))
     }
 
+    /// How many leading lines `split` removes: the delimiters plus the block, 0 without front matter.
+    public static func bodyLineOffset(of markdown: String) -> Int {
+        var text = Substring(markdown)
+        if text.hasPrefix("\u{FEFF}") { text = text.dropFirst() }
+        let lines = text.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" })
+        guard let first = lines.first, isDelimiter(first, allowDots: false),
+              let closing = lines.dropFirst().firstIndex(where: { isDelimiter($0, allowDots: true) }) else { return 0 }
+        return closing + 1
+    }
+
     static func renderBlock(_ frontMatter: String) -> String {
         let trimmed = frontMatter.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }

@@ -5,11 +5,15 @@ public struct MarkdownRenderer: Sendable {
 
     /// GitHub-flavored Markdown → HTML fragment. Front matter is shown as a block ahead of the body.
     /// With a `baseURL` (the document file or its directory), relative images become `data:` URIs.
-    public func renderBody(_ markdown: String, baseURL: URL? = nil) -> String {
+    /// With `sourcePositions`, block elements carry `data-sourcepos` line ranges of the full document.
+    public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false) -> String {
         let (frontMatter, body) = FrontMatter.split(markdown)
-        var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body))
+        var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
         html = HeadingAnchors.addIDs(to: html)
         if let frontMatter {
+            if sourcePositions {
+                html = SourcePositions.shift(html, by: FrontMatter.bodyLineOffset(of: markdown))
+            }
             html = FrontMatter.renderBlock(frontMatter) + html
         }
         if let baseURL {

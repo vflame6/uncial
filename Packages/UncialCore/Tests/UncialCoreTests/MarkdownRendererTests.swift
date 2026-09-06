@@ -85,4 +85,13 @@ import Testing
         #expect(html.contains("#0d1117"))
         #expect(renderer.renderDocument("# T", title: "t").contains("data-theme=\"macos\""))
     }
+
+    @Test func sourcePositionsAreOptInAndShiftedPastFrontMatter() {
+        #expect(!renderer.renderBody("# T").contains("data-sourcepos"))
+        #expect(renderer.renderBody("# T", sourcePositions: true).contains("<h1 id=\"t\" data-sourcepos=\"1:1-1:3\">"))
+        let html = renderer.renderBody("---\na: 1\n---\n# T\n\npara", sourcePositions: true)
+        #expect(html.contains("data-sourcepos=\"4:1-4:3\""))
+        #expect(html.contains("<p data-sourcepos=\"6:1-6:4\">para</p>"))
+        #expect(html.hasPrefix("<pre class=\"front-matter\">"))
+    }
 }

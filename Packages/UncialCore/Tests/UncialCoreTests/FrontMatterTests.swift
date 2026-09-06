@@ -33,4 +33,10 @@ import Testing
         #expect(FrontMatter.renderBlock("a: <b>") == "<pre class=\"front-matter\">a: &lt;b&gt;</pre>\n")
         #expect(FrontMatter.renderBlock("  \n") == "")
     }
+
+    @Test func bodyLineOffsetCountsRemovedLines() {
+        #expect(FrontMatter.bodyLineOffset(of: "---\na: 1\nb: 2\n---\n# T") == 4)
+        #expect(FrontMatter.bodyLineOffset(of: "# T") == 0)
+        #expect(FrontMatter.bodyLineOffset(of: "\u{FEFF}---\na: 1\n...\nBody") == 3)
+    }
 }

@@ -9,6 +9,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         AppSettings.shared.applyAppearance()
+        AppSettings.shared.publishTheme()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

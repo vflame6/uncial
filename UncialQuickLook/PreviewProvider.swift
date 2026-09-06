@@ -10,11 +10,12 @@ final class PreviewProvider: QLPreviewProvider, QLPreviewingController {
 
     func providePreview(for request: QLFilePreviewRequest) async throws -> QLPreviewReply {
         let fileURL = request.fileURL
-        Self.logger.info("Rendering preview for \(fileURL.lastPathComponent, privacy: .public)")
+        let theme = SharedSettings.containerURL().flatMap(SharedSettings.readTheme(from:)) ?? .default
+        Self.logger.info("Rendering preview for \(fileURL.lastPathComponent, privacy: .public) with theme \(theme.rawValue, privacy: .public)")
         return QLPreviewReply(dataOfContentType: .html, contentSize: CGSize(width: 800, height: 900)) { reply in
             let data = try Data(contentsOf: fileURL)
             let markdown = MarkdownText.decode(data)
-            let html = MarkdownRenderer().renderDocument(markdown, title: fileURL.lastPathComponent, baseURL: fileURL)
+            let html = MarkdownRenderer().renderDocument(markdown, title: fileURL.lastPathComponent, baseURL: fileURL, theme: theme)
             reply.stringEncoding = .utf8
             reply.title = fileURL.lastPathComponent
             return Data(html.utf8)

@@ -24,7 +24,10 @@ final class AppSettings {
     }
 
     var theme: Theme {
-        didSet { defaults.set(theme.rawValue, forKey: Key.theme) }
+        didSet {
+            defaults.set(theme.rawValue, forKey: Key.theme)
+            publishTheme()
+        }
     }
 
     var defaultEditorMode: EditorMode {
@@ -51,6 +54,13 @@ final class AppSettings {
     func markFirstRunCompleted() {
         hasCompletedFirstRun = true
         defaults.set(true, forKey: Key.hasCompletedFirstRun)
+    }
+
+    /// Hands the theme to the Quick Look extension through the App Group container. Best effort;
+    /// only the real app instance does it (tests pass `applyAppearance: false`).
+    func publishTheme() {
+        guard appliesAppearance, let directory = SharedSettings.containerURL() else { return }
+        try? SharedSettings.write(theme: theme, to: directory)
     }
 
     /// Re-themes every window. WKWebView follows its effective appearance, so rendered

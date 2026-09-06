@@ -97,9 +97,6 @@ defaults delete com.maksimradaev.uncial hasCompletedFirstRun
 | `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with JavaScript disabled and reloads it when the watcher fires. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
 | `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. |
 
-Design notes live in `docs/superpowers/specs/2026-09-05-uncial-design.md` and the
-implementation plan in `docs/superpowers/plans/2026-09-05-uncial-plan.md`.
-
 ## Development
 
 ```sh

@@ -5,6 +5,7 @@ xcuserdata/
 *.xcuserstate
 *.xcscmblueprint
 *.xccheckout
+*.xcarchive
 
 # SwiftPM
 .build/
@@ -13,3 +14,6 @@ Packages/*/.build/
 
 # macOS
 .DS_Store
+
+# Local working notes (design specs, plans)
+docs/

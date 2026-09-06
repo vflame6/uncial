@@ -18,7 +18,10 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
   to the file automatically half a second after you stop typing.
 - Three document themes, each with light and dark variants: **macOS** (system
   fonts and colors, looks like a native document), **GitHub**, and **Solarized**.
-  The editor's colors follow the theme.
+  The editor's colors follow the theme, and so do Quick Look previews.
+- The source editor colors Markdown: headings, emphasis, code, links, list
+  markers, quotes, rules and front matter. In Live Preview the two panes scroll
+  together.
 - Light and dark appearance follow macOS without a restart, or can be forced.
 - Images referenced by relative or absolute path are embedded, so READMEs look
   like they do on GitHub. Remote images load in the app.
@@ -97,7 +100,14 @@ closes, and on quit; ⌘S writes immediately. If another program changes the fil
 while you are not editing, the editor and the preview pick up the new contents;
 if it happens while you have unsaved keystrokes, yours win. The editor uses
 SF Mono, wraps long lines, keeps smart quotes and dashes off (they break
-Markdown), and has the standard find bar (⌘F) and undo.
+Markdown), and has the standard find bar (⌘F) and undo. Markdown syntax is
+colored in place: headings and links in the theme's accent, code in its code
+color, quotes, rules, URLs and front matter muted. Emphasis is italic, strong
+text bold; the font size never changes, so nothing jumps while you type.
+
+In Live Preview the panes follow each other: scroll the source and the
+rendered page moves to the same block, scroll the page and the source follows.
+Switch it off in Settings ▸ Editor if you prefer independent scrolling.
 
 ## Settings
 
@@ -110,7 +120,8 @@ dismisses it for good.
 - **Appearance**: System, Light, or Dark. Windows, the editor and the rendered
   document switch immediately, no reload needed.
 - **Theme**: macOS, GitHub, or Solarized. Each has a light and a dark variant that
-  follows the appearance. Open documents restyle in place.
+  follows the appearance. Open documents restyle in place; Quick Look previews
+  use the same theme (they always follow the system appearance).
 - **Quick Look extension**: *Install* registers the extension bundled in this copy
   of Uncial and enables it. *Remove* disables it, the same switch as System
   Settings ▸ Extensions ▸ Quick Look.
@@ -118,7 +129,9 @@ dismisses it for good.
   *Remove* hands the role back to the app that had it before, or TextEdit if that
   is unknown. macOS takes a few seconds to apply either change.
 
-**Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor).
+**Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor)
+and whether Live Preview keeps the source and the rendered page scrolled to
+the same place.
 
 **Shortcuts**: a reference list of every keyboard shortcut.
 
@@ -136,7 +149,7 @@ defaults delete com.maksimradaev.uncial hasCompletedFirstRun
 |---|---|
 | `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, image inlining, and the three themes as CSS. Also the file watcher. |
 | `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model writes edits through to the file and reconciles changes that arrive from other programs. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
-| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML (macOS theme) through `QLPreviewReply`, so Finder renders it. |
+| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme from the App Group container the app writes to. |
 
 ## Development
 
@@ -154,13 +167,13 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 
 ## Known limitations
 
-- No syntax highlighting inside code blocks, nor in the editor.
+- No syntax highlighting inside code blocks (the editor colors the Markdown
+  itself, not the languages inside fences).
 - No Mermaid diagrams or math.
-- The editor and the preview do not scroll in sync.
 - The app itself is not sandboxed. That is what lets it read images next to any
   document you open. The Quick Look extension is sandboxed, as macOS requires,
   and the sandbox only lets it read the previewed file: images do not appear in
-  Quick Look previews, and they always use the macOS theme.
+  Quick Look previews.
 - Links inside a Quick Look preview are not clickable. Open the file in Uncial
   for that.
 - Files stored as UTF-16 or with a byte-order mark are rewritten as plain UTF-8

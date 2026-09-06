@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Uncial is a native macOS Markdown reader and editor (SwiftUI document app) with a bundled
 Quick Look Preview Extension. One Swift package renders Markdown to a self-contained HTML page
 in one of three themes; the app shows it in a `WKWebView`, offers an `NSTextView` editor beside
-it (Read Only / Live Preview / Raw Editor), writes edits through to the file, and re-renders on
-disk changes; the extension returns the same HTML (macOS theme) to Quick Look. Design specs and implementation plans (with execution notes) are local
+it (Read Only / Live Preview / Raw Editor) with Markdown coloring and scroll sync, writes edits
+through to the file, and re-renders on disk changes; the extension returns the same HTML, in
+the theme the app published to the App Group container, to Quick Look. Design specs and implementation plans (with execution notes) are local
 working notes under `docs/superpowers/`, which is gitignored; they exist only on this machine.
 
 ## Toolchain rule
@@ -52,7 +53,7 @@ Three build products, one rendering pipeline:
 
 | Part | Target / path | Notes |
 |---|---|---|
-| `UncialCore` | `Packages/UncialCore` (local SwiftPM, Swift 6 mode, Foundation only, no AppKit) | Rendering pipeline, `Theme` + `Stylesheet`, `FileWatcher`, `QuickLookElection` parser. Depends on `swiftlang/swift-cmark` branch `gfm`. |
+| `UncialCore` | `Packages/UncialCore` (local SwiftPM, Swift 6 mode, Foundation only, no AppKit) | Rendering pipeline, `Theme` + `Stylesheet`, `SourcePositions`, `SharedSettings`, `FileWatcher`, `QuickLookElection` parser. Depends on `swiftlang/swift-cmark` branch `gfm`. |
 | `Uncial.app` | target `uncial`, sources in `uncial/` | SwiftUI `DocumentGroup(viewing:)`; editing is owned by `DocumentViewModel`, not by NSDocument (see App flow). |
 | `UncialQuickLook.appex` | target `UncialQuickLook`, sources in `UncialQuickLook/` | Data-based `QLPreviewProvider` returning HTML via `QLPreviewReply`. |
 
@@ -62,9 +63,11 @@ Three build products, one rendering pipeline:
 unterminated `aria-label` on the first footnote back-reference) → `HeadingAnchors.addIDs`
 (GitHub slug rules, `-1`/`-2` dedupe) → front-matter block prepended → `ImageInliner`
 (local `<img src>` of image MIME types → `data:` URIs, resolved against the document's
-directory). `renderDocument(_:title:baseURL:theme:)` wraps that fragment with
-`HTMLDocument.wrap(body:title:theme:)`, which inlines `Stylesheet.css(for:)` and stamps
-`<html data-theme="…">`.
+directory). With `sourcePositions: true` (the app's editor) cmark adds `data-sourcepos`
+line ranges to block elements, shifted by `FrontMatter.bodyLineOffset` so they match the
+editor's lines (`SourcePositions.shift`); Quick Look leaves it off. `renderDocument(_:title:baseURL:theme:)`
+wraps that fragment with `HTMLDocument.wrap(body:title:theme:)`, which inlines
+`Stylesheet.css(for:)` and stamps `<html data-theme="…">`.
 
 **Themes** (`Theme`: `macOS` default, `github`, `solarized`; `Stylesheet`): one base sheet of
 layout/element rules written against custom properties (`--bg --fg --heading --muted --border
@@ -76,17 +79,21 @@ overrides. The macOS theme uses WebKit's `-apple-system-*` keywords (`-label`,
 `-secondary-label`, `-text-background`, `-separator`, `-grid`, `-blue`,
 `-odd-alternating-content-background`, `-find-highlight-background`), which resolve per the
 view's effective appearance; custom properties cannot carry parse-time fallbacks, so there are
-none. `Theme.editorPalette` (0xRRGGBB, nil for macOS = system text colors) colors the editor.
+none. `Theme.editorPalette` (0xRRGGBB `background/foreground/accent/muted/code`, nil for macOS =
+system colors via `EditorStyle`) colors the editor and its Markdown highlighting.
 
 **No page JavaScript.** Quick Look executes no scripts in HTML previews and the app's
 `WKWebView` has `allowsContentJavaScript = false` (Markdown is untrusted input). The HTML
-contains no scripts; any post-processing happens in Swift on the HTML string. The app itself
-runs exactly two scripts through `evaluateJavaScript`: reading/restoring `window.scrollY`
-around a full reload, and replacing `article.markdown-body`'s `innerHTML` (string literal
-built by `JavaScriptLiteral`) so the live preview updates without a reload. The CSS is a Swift
-string literal on purpose: no resource bundle to ship into the extension. Light/dark is pure
-CSS (`prefers-color-scheme`); the app's Appearance setting works by setting `NSApp.appearance`,
-which `WKWebView` and `ThemedTextView` follow without reloading.
+contains no scripts; any post-processing happens in Swift on the HTML string. Only
+app-authored scripts run, and `allowsContentJavaScript = false` does not stop them: through
+`evaluateJavaScript`, reading/restoring `window.scrollY` around a full reload, replacing
+`article.markdown-body`'s `innerHTML` (string literal built by `JavaScriptLiteral`) and
+`PreviewScripts.scrollToLine`; and one `WKUserScript`, `PreviewScripts.observer`, which posts
+the source line at the viewport top to the `uncialScroll` message handler on every scroll
+(verified on macOS 26). Page content cannot run scripts, so it cannot touch the observer. The
+CSS is a Swift string literal on purpose: no resource bundle to ship into the extension.
+Light/dark is pure CSS (`prefers-color-scheme`); the app's Appearance setting works by setting
+`NSApp.appearance`, which `WKWebView` and `ThemedTextView` follow without reloading.
 
 **App flow:** `DocumentGroup(viewing:)` → `DocumentView` (per-window `EditorMode` state;
 `HSplitView` of `MarkdownTextView` and/or the preview; toolbar segmented picker; focused values
@@ -102,16 +109,28 @@ As/Duplicate/Rename/Revert items are replaced in `uncialApp` (Close, Close All, 
 `AppDelegate` hides the disabled stock "New" next to File ▸ New… (`NewDocumentCommand`: save
 panel, empty file, open). `WebView` reloads only when title/theme/baseURL change (scroll kept)
 and otherwise swaps the body in place; a body arriving mid-load is applied in `didFinish`.
-`MarkdownTextView` wraps `ThemedTextView` (TextKit 2, SF Mono 13, soft wrap, smart
+`MarkdownTextView` wraps `ThemedTextView` (TextKit 1 on purpose: `NSLayoutManager` does the
+glyph ↔ point ↔ line math; `allowsNonContiguousLayout` on; SF Mono 13, soft wrap, smart
 substitutions off, spell check on, find bar, undo); `updateNSView` replaces the string only
-when it differs from the model and then clears undo. Link policy in `WebView` is unchanged:
-same-document fragments allowed, everything else cancelled and routed through `LinkOpener`.
-Keyboard shortcuts live in one table, `AppShortcut` (menus bind from it; the Shortcuts tab
-lists it).
+when it differs from the model and then clears undo. After every edit `rehighlight()` resets
+the base attributes and applies `MarkdownHighlighter.spans(in:)` (pure, tested: fence and
+front-matter state, inline code masked before emphasis/links) with `EditorStyle` attributes;
+attribute-only, so undo is untouched; skipped above 200 000 characters. **Scroll sync** (Live
+Preview only, `AppSettings.syncScrolling`): `ScrollSyncController` (pure, tested) turns
+"editor scrolled to line L" into a `ScrollTarget` for the preview and vice versa, ignoring the
+driven pane's echo for 300 ms; lines are 1-based fractional document lines, cmark's
+`data-sourcepos` unit (`ThemedTextView.visibleTopLine()` is 0-based, `MarkdownTextView`
+converts). The editor reports through the clip view's bounds-changed notification (skipped
+while `isProgrammaticScroll`), the preview through the observer user script; `WebView`
+re-applies its last target after every body swap so typing keeps the panes aligned. Link
+policy in `WebView` is unchanged: same-document fragments allowed, everything else cancelled
+and routed through `LinkOpener`. Keyboard shortcuts live in one table, `AppShortcut` (menus
+bind from it; the Shortcuts tab lists it).
 
 **Settings / first run:** `AppSettings` (`appearance` System/Light/Dark → `NSApp.appearance`,
-`theme`, `defaultEditorMode`, `hasCompletedFirstRun`; UserDefaults keys of the same names,
-injectable for tests; a legacy `theme` value of system/light/dark migrates to `appearance`),
+`theme`, `defaultEditorMode`, `syncScrolling`, `hasCompletedFirstRun`; UserDefaults keys of the
+same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
+`appearance`; `publishTheme()` writes the theme for Quick Look, see Sandbox),
 `QuickLookExtensionManager` (drives `/usr/bin/pluginkit` through `ShellCommand`; Install =
 `-a` + `-e use`, Remove = `-e ignore`), `DefaultAppManager` (`NSWorkspace` behind the
 `DefaultAppWorkspace` protocol so tests use a fake; remembers the previous handler, restores it
@@ -137,13 +156,19 @@ case-insensitive and git tracks the lowercase name). Bundle ids: `com.maksimrada
 `com.maksimradaev.uncial.QuickLook`; UTI `net.daringfireball.markdown` (system-declared),
 `CFBundleTypeRole` Editor.
 
-**Sandbox:** the app is deliberately unsandboxed (relative images next to any opened document
-must be readable); the extension is sandboxed via `ENABLE_APP_SANDBOX` /
-`ENABLE_USER_SELECTED_FILES` build settings, no `.entitlements` files. Hardened Runtime on both.
-Probed 2026-09-06: the appex can read only the previewed file (`Operation not permitted` on
-siblings and on listing the directory; home is the container), so Quick Look previews have no
-images and always use the macOS theme. A `temporary-exception.files.absolute-path.read-only`
-entitlement does merge with the build-setting sandbox, but the owner chose not to ship one.
+**Sandbox and App Group:** the app is deliberately unsandboxed (relative images next to any
+opened document must be readable); the extension is sandboxed via `ENABLE_APP_SANDBOX` /
+`ENABLE_USER_SELECTED_FILES` build settings. Both targets have a `.entitlements` file
+(`CODE_SIGN_ENTITLEMENTS`) that adds only the App Group `XWTLHG45H7.com.maksimradaev.uncial`
+(Team-ID prefix: no provisioning profile, no consent prompt); the build-setting entitlements
+merge into it. Hardened Runtime on both. `SharedSettings` writes `settings.plist` (key `theme`)
+into `FileManager.containerURL(forSecurityApplicationGroupIdentifier:)` from the app (launch
+and every change) and the extension reads it; `UserDefaults(suiteName:)` is avoided because an
+unsandboxed app does not resolve it to the group container. Probed 2026-09-06: the appex can
+read only the previewed file (`Operation not permitted` on siblings and on listing the
+directory; home is the container), so Quick Look previews have no images. A
+`temporary-exception.files.absolute-path.read-only` entitlement does merge with the
+build-setting sandbox, but the owner chose not to ship one.
 
 ## Verifying things that have no UI test
 

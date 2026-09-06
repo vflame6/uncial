@@ -68,4 +68,21 @@ import Testing
         let html = renderer.renderDocument("![a](a.gif)", title: "t", baseURL: directory.appendingPathComponent("doc.md"))
         #expect(html.contains("<img src=\"data:image/gif;base64,R0lG\" alt=\"a\" />"))
     }
+
+    @Test func bodyInlinesImagesWhenGivenBaseURL() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("uncial-body-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        try Data([0x47, 0x49, 0x46]).write(to: directory.appendingPathComponent("a.gif"))
+        let body = renderer.renderBody("![a](a.gif)", baseURL: directory.appendingPathComponent("doc.md"))
+        #expect(body.contains("<img src=\"data:image/gif;base64,R0lG\" alt=\"a\" />"))
+        #expect(renderer.renderBody("![a](a.gif)").contains("<img src=\"a.gif\""))
+    }
+
+    @Test func documentUsesRequestedTheme() {
+        let html = renderer.renderDocument("# T", title: "t", theme: .github)
+        #expect(html.contains("data-theme=\"github\""))
+        #expect(html.contains("#0d1117"))
+        #expect(renderer.renderDocument("# T", title: "t").contains("data-theme=\"macos\""))
+    }
 }

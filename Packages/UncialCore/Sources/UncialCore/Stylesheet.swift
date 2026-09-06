@@ -1,59 +1,48 @@
-/// GitHub-like styling. Light palette on `:root`, dark palette under `prefers-color-scheme: dark`.
+/// Shared layout and element rules. Every color, font and size comes from a custom property
+/// that each theme sets (light values on `:root`, dark ones under `prefers-color-scheme: dark`).
 public enum Stylesheet {
-    public static let css = #"""
-    :root {
-      color-scheme: light dark;
-      --bg: #ffffff;
-      --fg: #1f2328;
-      --muted: #59636e;
-      --border: #d1d9e0;
-      --border-muted: #d8dee4;
-      --accent: #0969da;
-      --code-bg: #f6f8fa;
-      --row-alt: #f6f8fa;
-      --mark: #fff8c5;
+    /// The base sheet followed by the theme's variables and overrides.
+    public static func css(for theme: Theme) -> String {
+        base + "\n" + themeBlock(for: theme)
     }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0d1117;
-        --fg: #f0f6fc;
-        --muted: #9198a1;
-        --border: #3d444d;
-        --border-muted: #30363d;
-        --accent: #4493f8;
-        --code-bg: #151b23;
-        --row-alt: #151b23;
-        --mark: #3a2d00;
-      }
+
+    static func themeBlock(for theme: Theme) -> String {
+        switch theme {
+        case .macOS: macOS
+        case .github: github
+        case .solarized: solarized
+        }
     }
+
+    static let base = #"""
     html, body { margin: 0; padding: 0; background: var(--bg); color: var(--fg); }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Helvetica, Arial, sans-serif, "Apple Color Emoji";
-      font-size: 16px;
-      line-height: 1.5;
+      font-family: var(--font-body);
+      font-size: var(--font-size);
+      line-height: var(--line-height);
       -webkit-text-size-adjust: 100%;
       word-wrap: break-word;
     }
-    .markdown-body { max-width: 860px; margin: 0 auto; padding: 32px 40px 64px; box-sizing: border-box; }
+    .markdown-body { max-width: var(--content-width); margin: 0 auto; padding: 32px 40px 64px; box-sizing: border-box; }
     @media (max-width: 640px) { .markdown-body { padding: 16px; } }
     .markdown-body > :first-child { margin-top: 0; }
     .markdown-body > :last-child { margin-bottom: 0; }
-    h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; font-weight: 600; line-height: 1.25; }
-    h1 { font-size: 2em; padding-bottom: .3em; border-bottom: 1px solid var(--border-muted); }
-    h2 { font-size: 1.5em; padding-bottom: .3em; border-bottom: 1px solid var(--border-muted); }
-    h3 { font-size: 1.25em; }
-    h4 { font-size: 1em; }
-    h5 { font-size: .875em; }
-    h6 { font-size: .85em; color: var(--muted); }
+    h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; font-weight: var(--heading-weight); line-height: 1.25; color: var(--heading); }
+    h1 { font-size: var(--h1-size); padding-bottom: .3em; border-bottom: var(--h1-border); }
+    h2 { font-size: var(--h2-size); padding-bottom: .3em; border-bottom: var(--h2-border); }
+    h3 { font-size: var(--h3-size); }
+    h4 { font-size: var(--h4-size); }
+    h5 { font-size: var(--h5-size); }
+    h6 { font-size: var(--h6-size); color: var(--muted); }
     p, blockquote, ul, ol, dl, table, pre, details { margin-top: 0; margin-bottom: 16px; }
     a { color: var(--accent); text-decoration: none; }
     a:hover { text-decoration: underline; }
     img { max-width: 100%; box-sizing: content-box; }
-    code, pre, kbd, samp { font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace; }
-    code { padding: .2em .4em; margin: 0; font-size: 85%; background: var(--code-bg); border-radius: 6px; white-space: break-spaces; }
-    pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; background: var(--code-bg); border-radius: 6px; }
-    pre code { padding: 0; margin: 0; font-size: 100%; background: transparent; border: 0; white-space: pre; word-break: normal; }
-    blockquote { margin: 0 0 16px; padding: 0 1em; color: var(--muted); border-left: .25em solid var(--border); }
+    code, pre, kbd, samp { font-family: var(--font-mono); }
+    code { padding: .2em .4em; margin: 0; font-size: 85%; color: var(--code-fg); background: var(--code-bg); border-radius: var(--radius); white-space: break-spaces; }
+    pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; color: var(--code-fg); background: var(--code-bg); border-radius: var(--radius); }
+    pre code { padding: 0; margin: 0; font-size: 100%; color: inherit; background: transparent; border: 0; white-space: pre; word-break: normal; }
+    blockquote { margin: 0 0 16px; padding: 0 1em; color: var(--muted); border-left: .25em solid var(--quote-border); }
     blockquote > :first-child { margin-top: 0; }
     blockquote > :last-child { margin-bottom: 0; }
     ul, ol { padding-left: 2em; }
@@ -72,10 +61,10 @@ public enum Stylesheet {
     mark { background: var(--mark); color: inherit; }
     kbd {
       display: inline-block; padding: 3px 5px; font-size: 11px; line-height: 10px; vertical-align: middle;
-      background: var(--code-bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: inset 0 -1px 0 var(--border);
+      background: var(--code-bg); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: inset 0 -1px 0 var(--border);
     }
     sup.footnote-ref { font-size: 75%; }
-    a.footnote-backref { font-family: Menlo, "DejaVu Sans Mono", monospace; text-decoration: none; }
+    a.footnote-backref { font-family: var(--font-mono); text-decoration: none; }
     section.footnotes { margin-top: 32px; padding-top: 8px; font-size: 85%; color: var(--muted); border-top: 1px solid var(--border); }
     section.footnotes p { margin-bottom: 8px; }
     pre.front-matter { color: var(--muted); font-size: 80%; background: transparent; border: 1px dashed var(--border); }

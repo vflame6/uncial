@@ -33,4 +33,12 @@ import Testing
         let output = inliner.inline("<img src=\"img/dot.png?raw=true#gh-light-mode-only\">")
         #expect(output.hasPrefix("<img src=\"data:image/png;base64,"))
     }
+
+    @Test func leavesNonImageFilesAlone() throws {
+        let directory = try fixtureDirectory()
+        try Data("secret".utf8).write(to: directory.appendingPathComponent("notes.txt"))
+        let inliner = ImageInliner(baseURL: directory.appendingPathComponent("README.md"))
+        let html = "<img src=\"notes.txt\">"
+        #expect(inliner.inline(html) == html)
+    }
 }

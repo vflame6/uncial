@@ -1,7 +1,7 @@
 import Foundation
 import UniformTypeIdentifiers
 
-/// Rewrites relative `<img src>` references to `data:` URIs so previews work without file access.
+/// Rewrites local `<img src>` references to image files as `data:` URIs so previews work without file access.
 public struct ImageInliner: Sendable {
     public let directoryURL: URL
     public let maxBytes: Int
@@ -39,7 +39,7 @@ public struct ImageInliner: Sendable {
     func dataURI(for source: String) -> String? {
         guard let fileURL = localFileURL(for: source),
               let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maxBytes,
-              let mime = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType,
+              let mime = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType, mime.hasPrefix("image/"),
               let data = try? Data(contentsOf: fileURL) else { return nil }
         return "data:\(mime);base64,\(data.base64EncodedString())"
     }

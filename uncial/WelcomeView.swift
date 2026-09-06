@@ -20,7 +20,7 @@ struct WelcomeView: View {
             .padding(.top, 24)
             .padding(.horizontal, 32)
 
-            SettingsForm(settings: AppSettings.shared, quickLook: .shared, defaultApp: .shared)
+            GeneralSettingsView(settings: .shared, quickLook: .shared, defaultApp: .shared)
                 .scrollDisabled(true)
 
             HStack {
@@ -32,6 +32,6 @@ struct WelcomeView: View {
             }
             .padding([.horizontal, .bottom], 20)
         }
-        .frame(width: 520, height: 600)
+        .frame(width: 520, height: 640)
     }
 }

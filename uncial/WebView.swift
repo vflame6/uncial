@@ -1,9 +1,13 @@
 import SwiftUI
+import UncialCore
 import WebKit
 
-/// Shows rendered HTML. Content JavaScript is off; the document is untrusted input.
+/// Shows the rendered document. Page JavaScript is off (Markdown is untrusted input); the app
+/// itself runs two scripts: reading/restoring the scroll position and swapping the article body.
 struct WebView: NSViewRepresentable {
-    let html: String
+    let body: String
+    let title: String
+    let theme: Theme
     let baseURL: URL?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
@@ -20,37 +24,86 @@ struct WebView: NSViewRepresentable {
         webView.isInspectable = true
         #endif
         context.coordinator.webView = webView
-        context.coordinator.show(html: html, baseURL: baseURL)
+        context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
         return webView
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        context.coordinator.show(html: html, baseURL: baseURL)
+        context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
     }
 
     final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+        private struct Page: Equatable {
+            let title: String
+            let theme: Theme
+            let baseURL: URL?
+        }
+
         weak var webView: WKWebView?
-        private var currentHTML: String?
+        private var page: Page?
+        private var currentBody: String?
+        private var isLoading = false
+        private var pendingBody: String?
         private var pendingScrollY: Double?
 
-        func show(html: String, baseURL: URL?) {
-            guard html != currentHTML, let webView else { return }
-            let isFirstLoad = currentHTML == nil
-            currentHTML = html
-            if isFirstLoad {
-                webView.loadHTMLString(html, baseURL: baseURL)
+        func show(body: String, title: String, theme: Theme, baseURL: URL?) {
+            guard let webView else { return }
+            let newPage = Page(title: title, theme: theme, baseURL: baseURL)
+            if page != newPage {
+                let isFirstLoad = page == nil
+                page = newPage
+                currentBody = body
+                pendingBody = nil
+                isLoading = true
+                if isFirstLoad {
+                    loadPage(in: webView)
+                } else {
+                    webView.evaluateJavaScript("window.scrollY") { [weak self] value, _ in
+                        guard let self else { return }
+                        self.pendingScrollY = value as? Double
+                        self.loadPage(in: webView)
+                    }
+                }
                 return
             }
-            webView.evaluateJavaScript("window.scrollY") { [weak self] value, _ in
-                self?.pendingScrollY = value as? Double
-                webView.loadHTMLString(html, baseURL: baseURL)
+            guard body != currentBody else { return }
+            currentBody = body
+            if isLoading {
+                pendingBody = body
+            } else {
+                replaceBody(body, in: webView)
             }
         }
 
+        private func loadPage(in webView: WKWebView) {
+            guard let page else { return }
+            let html = HTMLDocument.wrap(body: currentBody ?? "", title: page.title, theme: page.theme)
+            webView.loadHTMLString(html, baseURL: page.baseURL)
+        }
+
+        private func replaceBody(_ body: String, in webView: WKWebView) {
+            let script = "document.querySelector('article.markdown-body').innerHTML = \(JavaScriptLiteral.string(body));"
+            webView.evaluateJavaScript(script, completionHandler: nil)
+        }
+
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-            guard let scrollY = pendingScrollY else { return }
-            pendingScrollY = nil
-            webView.evaluateJavaScript("window.scrollTo(0, \(scrollY));", completionHandler: nil)
+            isLoading = false
+            if let scrollY = pendingScrollY {
+                pendingScrollY = nil
+                webView.evaluateJavaScript("window.scrollTo(0, \(scrollY));", completionHandler: nil)
+            }
+            if let pendingBody {
+                self.pendingBody = nil
+                replaceBody(pendingBody, in: webView)
+            }
+        }
+
+        func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+            isLoading = false
+        }
+
+        func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            isLoading = false
         }
 
         func webView(

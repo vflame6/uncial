@@ -1,6 +1,7 @@
 import AppKit
 
-enum Theme: String, CaseIterable, Identifiable {
+/// System / Light / Dark. Drives `NSApp.appearance`; rendered pages follow through `prefers-color-scheme`.
+enum Appearance: String, CaseIterable, Identifiable {
     case system, light, dark
 
     var id: String { rawValue }

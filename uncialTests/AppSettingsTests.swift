@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import UncialCore
 @testable import Uncial
 
 @MainActor
@@ -11,25 +12,45 @@ import Testing
         return defaults
     }
 
-    @Test func defaultsToSystemThemeAndFirstRunPending() {
+    @Test func defaults() {
         let settings = AppSettings(defaults: freshDefaults(), applyAppearance: false)
-        #expect(settings.theme == .system)
+        #expect(settings.appearance == .system)
+        #expect(settings.theme == .macOS)
+        #expect(settings.defaultEditorMode == .livePreview)
         #expect(settings.hasCompletedFirstRun == false)
     }
 
-    @Test func persistsThemeAndFirstRun() {
+    @Test func persistsEverything() {
         let defaults = freshDefaults()
         let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.theme = .dark
+        settings.appearance = .dark
+        settings.theme = .solarized
+        settings.defaultEditorMode = .rawEditor
         settings.markFirstRunCompleted()
         let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
-        #expect(reloaded.theme == .dark)
+        #expect(reloaded.appearance == .dark)
+        #expect(reloaded.theme == .solarized)
+        #expect(reloaded.defaultEditorMode == .rawEditor)
         #expect(reloaded.hasCompletedFirstRun == true)
     }
 
-    @Test func themeAppearanceMapping() {
-        #expect(Theme.system.appearance == nil)
-        #expect(Theme.light.appearance?.name == .aqua)
-        #expect(Theme.dark.appearance?.name == .darkAqua)
+    @Test func migratesLegacyThemeKeyToAppearance() {
+        let defaults = freshDefaults()
+        defaults.set("dark", forKey: "theme")
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        #expect(settings.appearance == .dark)
+        #expect(settings.theme == .macOS)
+        #expect(defaults.string(forKey: "appearance") == "dark")
+        #expect(defaults.string(forKey: "theme") == nil)
+        settings.theme = .github
+        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
+        #expect(reloaded.appearance == .dark)
+        #expect(reloaded.theme == .github)
+    }
+
+    @Test func appearanceMapping() {
+        #expect(Appearance.system.appearance == nil)
+        #expect(Appearance.light.appearance?.name == .aqua)
+        #expect(Appearance.dark.appearance?.name == .darkAqua)
     }
 }

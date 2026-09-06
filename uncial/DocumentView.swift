@@ -1,24 +1,73 @@
 import SwiftUI
+import UncialCore
 
 struct DocumentView: View {
     @State private var model: DocumentViewModel
+    @State private var mode: EditorMode
+    private let settings: AppSettings
 
-    init(document: MarkdownDocument, fileURL: URL?) {
+    init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
         _model = State(initialValue: DocumentViewModel(fileURL: fileURL, initialText: document.text))
+        let preferred = settings.defaultEditorMode
+        // An empty read-only window is useless: new documents open with the editor visible.
+        _mode = State(initialValue: document.text.isEmpty && preferred == .readOnly ? .livePreview : preferred)
+        self.settings = settings
     }
 
     var body: some View {
-        content
-            .frame(minWidth: 480, minHeight: 320)
-            .focusedSceneValue(\.reloadDocument, ReloadAction { model.reload() })
+        HSplitView {
+            if mode.showsEditor {
+                editor.frame(minWidth: 280)
+            }
+            if mode.showsPreview {
+                preview.frame(minWidth: 280)
+            }
+        }
+        .frame(minWidth: mode == .livePreview ? 600 : 480, minHeight: 320)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Picker("Editor Mode", selection: $mode) {
+                    ForEach(EditorMode.allCases) { mode in
+                        Label(mode.title, systemImage: mode.systemImage).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelStyle(.iconOnly)
+                .help("Editor mode: \(EditorMode.allCases.map { "\($0.title) \($0.shortcut.display)" }.joined(separator: ", "))")
+            }
+        }
+        .focusedSceneValue(\.reloadDocument, ReloadAction { model.reload() })
+        .focusedSceneValue(\.saveDocument, SaveAction { model.saveNow() })
+        .focusedSceneValue(\.editorMode, $mode)
+        .onChange(of: mode) { old, new in
+            if old.showsEditor, !new.showsEditor {
+                model.saveNow()
+            }
+        }
+        .onDisappear { model.saveNow() }
+    }
+
+    private var editor: some View {
+        VStack(spacing: 0) {
+            MarkdownTextView(text: model.text, palette: settings.theme.editorPalette) { model.updateText($0) }
+            if let saveError = model.saveError {
+                Text("Couldn't save: \(saveError)")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
+            }
+        }
     }
 
     @ViewBuilder
-    private var content: some View {
-        if let error = model.error, model.html.isEmpty {
+    private var preview: some View {
+        if let error = model.loadError, model.body.isEmpty {
             ContentUnavailableView("Can't Read Document", systemImage: "doc.text.magnifyingglass", description: Text(error))
         } else {
-            WebView(html: model.html, baseURL: model.fileURL?.deletingLastPathComponent())
+            WebView(body: model.body, title: model.title, theme: settings.theme, baseURL: model.fileURL?.deletingLastPathComponent())
         }
     }
 }

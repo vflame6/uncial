@@ -1,8 +1,8 @@
 import SwiftUI
 import UncialCore
 
-/// The three settings rows, shared by the Settings window and the Welcome window.
-struct SettingsForm: View {
+/// General tab: appearance, theme, Quick Look extension, default app. Also shown in the Welcome window.
+struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
     var quickLook: QuickLookExtensionManager
     var defaultApp: DefaultAppManager
@@ -10,12 +10,17 @@ struct SettingsForm: View {
     var body: some View {
         Form {
             Section("Appearance") {
+                Picker("Appearance", selection: $settings.appearance) {
+                    ForEach(Appearance.allCases) { appearance in
+                        Text(appearance.title).tag(appearance)
+                    }
+                }
+                .pickerStyle(.segmented)
                 Picker("Theme", selection: $settings.theme) {
                     ForEach(Theme.allCases) { theme in
                         Text(theme.title).tag(theme)
                     }
                 }
-                .pickerStyle(.segmented)
             }
 
             Section {

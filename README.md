@@ -1,10 +1,11 @@
 # Uncial
 
-Uncial is a small native macOS Markdown reader. Open a `.md` file and it renders
-GitHub-flavored Markdown right away, follows the system light or dark appearance,
-and re-renders whenever the file changes on disk. It ships with a Quick Look
-extension, so pressing Space on a Markdown file in Finder shows the rendered
-document instead of raw text.
+Uncial is a small native macOS Markdown reader and editor. Open a `.md` file and
+it renders GitHub-flavored Markdown right away, follows the system light or dark
+appearance, and re-renders whenever the file changes on disk. Switch to Live
+Preview to edit the source next to the rendered page; changes are written back
+to the file as you type. It ships with a Quick Look extension, so pressing Space
+on a Markdown file in Finder shows the rendered document instead of raw text.
 
 ## Features
 
@@ -12,9 +13,15 @@ document instead of raw text.
   autolinks, footnotes, fenced code, raw HTML (dangerous tags are filtered).
 - Automatic re-rendering when the file changes, including atomic saves from
   editors such as VS Code, Vim, or TextEdit. Scroll position is kept.
-- Light and dark appearance follow macOS without a restart.
-- Images referenced by relative path are embedded, so READMEs look like they do
-  on GitHub.
+- Three editor modes per window: **Read Only**, **Live Preview** (source beside
+  the rendered page, updating as you type) and **Raw Editor**. Edits are saved
+  to the file automatically half a second after you stop typing.
+- Three document themes, each with light and dark variants: **macOS** (system
+  fonts and colors, looks like a native document), **GitHub**, and **Solarized**.
+  The editor's colors follow the theme.
+- Light and dark appearance follow macOS without a restart, or can be forced.
+- Images referenced by relative or absolute path are embedded, so READMEs look
+  like they do on GitHub. Remote images load in the app.
 - Heading anchors: `[Setup](#setup)` style links work.
 - External links open in the default browser. Local `.md` links open in a new
   Uncial window.
@@ -22,8 +29,8 @@ document instead of raw text.
 - Quick Look preview (Space in Finder, Quick Look in Spotlight, Mail attachments)
   with the same rendering.
 - ⌘R reloads on demand. Pinch to zoom.
-- Settings (⌘,) for theme, the Quick Look extension, and the default Markdown app;
-  offered once in a Welcome window on first launch.
+- Settings (⌘,) with General, Editor, Shortcuts and About tabs; the General
+  controls are offered once in a Welcome window on first launch.
 
 ## Requirements
 
@@ -66,22 +73,56 @@ settings pane or macOS may keep using it.
 
 - Right-click a Markdown file ▸ Open With ▸ Uncial, drop it on the Dock icon, or
   run `open -a Uncial README.md`.
-- File ▸ Open (⌘O) and Open Recent work as in any document app.
+- File ▸ Open (⌘O) and Open Recent work as in any document app. File ▸ New… (⌘N)
+  asks where to create an empty Markdown file and opens it.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.
+
+### Editing
+
+Every document window has a mode, chosen with the segmented control in the
+toolbar, the View menu, or the keyboard:
+
+| Mode | Shows | Shortcut |
+|---|---|---|
+| Read Only | The rendered document | ⌥⌘1 |
+| Live Preview | Markdown source on the left, rendered document on the right | ⌥⌘2 |
+| Raw Editor | Markdown source only | ⌥⌘3 |
+
+⇧⌘E cycles through the three. New windows start in the mode chosen in
+Settings ▸ Editor (Live Preview by default).
+
+The file on disk is the source of truth. Whatever you type is written to it
+half a second after you pause, when you leave an editing mode, when the window
+closes, and on quit; ⌘S writes immediately. If another program changes the file
+while you are not editing, the editor and the preview pick up the new contents;
+if it happens while you have unsaved keystrokes, yours win. The editor uses
+SF Mono, wraps long lines, keeps smart quotes and dashes off (they break
+Markdown), and has the standard find bar (⌘F) and undo.
 
 ## Settings
 
-Open Settings with ⌘, (Uncial ▸ Settings…). On the first launch the same controls
-appear in a Welcome window with **Skip** and **Done**; either one dismisses it for good.
+Open Settings with ⌘, (Uncial ▸ Settings…). On the first launch the General
+controls appear in a Welcome window with **Skip** and **Done**; either one
+dismisses it for good.
 
-- **Theme**: System, Light, or Dark. Windows and the rendered document switch
-  immediately, no reload needed.
+**General**
+
+- **Appearance**: System, Light, or Dark. Windows, the editor and the rendered
+  document switch immediately, no reload needed.
+- **Theme**: macOS, GitHub, or Solarized. Each has a light and a dark variant that
+  follows the appearance. Open documents restyle in place.
 - **Quick Look extension**: *Install* registers the extension bundled in this copy
   of Uncial and enables it. *Remove* disables it, the same switch as System
   Settings ▸ Extensions ▸ Quick Look.
 - **Default app**: *Make Default* makes Uncial the handler for Markdown files.
   *Remove* hands the role back to the app that had it before, or TextEdit if that
   is unknown. macOS takes a few seconds to apply either change.
+
+**Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor).
+
+**Shortcuts**: a reference list of every keyboard shortcut.
+
+**About**: version, what renders the Markdown, and a link to this repository.
 
 To see the Welcome window again:
 
@@ -93,9 +134,9 @@ defaults delete com.maksimradaev.uncial hasCompletedFirstRun
 
 | Part | What it does |
 |---|---|
-| `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, image inlining, GitHub-like CSS. Also the file watcher. |
-| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with JavaScript disabled and reloads it when the watcher fires. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
-| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. |
+| `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, image inlining, and the three themes as CSS. Also the file watcher. |
+| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model writes edits through to the file and reconciles changes that arrive from other programs. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
+| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML (macOS theme) through `QLPreviewReply`, so Finder renders it. |
 
 ## Development
 
@@ -113,9 +154,14 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 
 ## Known limitations
 
-- No syntax highlighting inside code blocks yet.
+- No syntax highlighting inside code blocks, nor in the editor.
 - No Mermaid diagrams or math.
+- The editor and the preview do not scroll in sync.
 - The app itself is not sandboxed. That is what lets it read images next to any
-  document you open. The Quick Look extension is sandboxed, as macOS requires.
+  document you open. The Quick Look extension is sandboxed, as macOS requires,
+  and the sandbox only lets it read the previewed file: images do not appear in
+  Quick Look previews, and they always use the macOS theme.
 - Links inside a Quick Look preview are not clickable. Open the file in Uncial
   for that.
+- Files stored as UTF-16 or with a byte-order mark are rewritten as plain UTF-8
+  the first time you edit them.

@@ -21,10 +21,10 @@ import Testing
         let file = try temporaryFile("# Hi")
         let model = DocumentViewModel(fileURL: file, initialText: "# Hi", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
         try await Task.sleep(for: .milliseconds(300))
-        #expect(model.body.contains("<h1 id=\"hi\">Hi</h1>"))
+        #expect(model.body.contains("<h1 id=\"hi\" data-sourcepos=\"1:1-1:4\">Hi</h1>"))
         model.updateText("# Yo")
         try await Task.sleep(for: .milliseconds(300))
-        #expect(model.body.contains("<h1 id=\"yo\">Yo</h1>"))
+        #expect(model.body.contains("<h1 id=\"yo\" data-sourcepos=\"1:1-1:4\">Yo</h1>"))
         #expect(model.hasUnsavedChanges == true)
     }
 

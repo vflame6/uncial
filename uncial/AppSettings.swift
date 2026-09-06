@@ -10,6 +10,7 @@ final class AppSettings {
         static let appearance = "appearance"
         static let theme = "theme"
         static let defaultEditorMode = "defaultEditorMode"
+        static let syncScrolling = "syncScrolling"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
     }
 
@@ -34,6 +35,10 @@ final class AppSettings {
         didSet { defaults.set(defaultEditorMode.rawValue, forKey: Key.defaultEditorMode) }
     }
 
+    var syncScrolling: Bool {
+        didSet { defaults.set(syncScrolling, forKey: Key.syncScrolling) }
+    }
+
     private(set) var hasCompletedFirstRun: Bool
 
     init(defaults: UserDefaults, applyAppearance: Bool) {
@@ -48,6 +53,7 @@ final class AppSettings {
         appearance = Appearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
         theme = Theme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .default
         defaultEditorMode = EditorMode(rawValue: defaults.string(forKey: Key.defaultEditorMode) ?? "") ?? .livePreview
+        syncScrolling = defaults.object(forKey: Key.syncScrolling) == nil ? true : defaults.bool(forKey: Key.syncScrolling)
         hasCompletedFirstRun = defaults.bool(forKey: Key.hasCompletedFirstRun)
     }
 

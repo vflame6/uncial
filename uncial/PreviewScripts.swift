@@ -4,6 +4,8 @@ nonisolated enum PreviewScripts {
     static let messageHandlerName = "uncialScroll"
 
     /// Reports the 1-based source line at the top of the viewport whenever the page scrolls.
+    /// Throttled with `setTimeout`, not `requestAnimationFrame`: animation frames stop for a
+    /// window that is not frontmost, timers do not.
     static let observer = #"""
     (function () {
       if (window.__uncialObserver) { return; }
@@ -33,7 +35,7 @@ nonisolated enum PreviewScripts {
         window.webkit.messageHandlers.uncialScroll.postMessage({ line: line, y: window.scrollY });
       }
       window.addEventListener('scroll', function () {
-        if (!ticking) { ticking = true; window.requestAnimationFrame(report); }
+        if (!ticking) { ticking = true; setTimeout(report, 40); }
       }, { passive: true });
     })();
     """#

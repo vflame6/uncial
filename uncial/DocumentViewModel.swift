@@ -141,7 +141,7 @@ final class DocumentViewModel {
         let text = text
         let baseURL = fileURL
         Task.detached(priority: .userInitiated) {
-            let body = renderer.renderBody(text, baseURL: baseURL)
+            let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true)
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }
                 self.body = body

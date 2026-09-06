@@ -22,6 +22,10 @@ struct EditorSettingsView: View {
             } footer: {
                 Text("Applies to documents you open next. Switch any window with \(AppShortcut.readOnly.display), \(AppShortcut.livePreview.display), \(AppShortcut.rawEditor.display), or cycle with \(AppShortcut.toggleEditorMode.display). Changes are saved to the file as you type.")
             }
+
+            Section("Live Preview") {
+                Toggle("Sync scrolling between source and preview", isOn: $settings.syncScrolling)
+            }
         }
         .formStyle(.grouped)
     }

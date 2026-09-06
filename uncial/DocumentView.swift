@@ -4,6 +4,7 @@ import UncialCore
 struct DocumentView: View {
     @State private var model: DocumentViewModel
     @State private var mode: EditorMode
+    @State private var sync = ScrollSyncController()
     private let settings: AppSettings
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
@@ -43,13 +44,26 @@ struct DocumentView: View {
             if old.showsEditor, !new.showsEditor {
                 model.saveNow()
             }
+            updateSync()
         }
+        .onChange(of: settings.syncScrolling) { updateSync() }
+        .onAppear { updateSync() }
         .onDisappear { model.saveNow() }
+    }
+
+    private func updateSync() {
+        sync.isEnabled = mode == .livePreview && settings.syncScrolling
     }
 
     private var editor: some View {
         VStack(spacing: 0) {
-            MarkdownTextView(text: model.text, palette: settings.theme.editorPalette) { model.updateText($0) }
+            MarkdownTextView(
+                text: model.text,
+                palette: settings.theme.editorPalette,
+                scrollTarget: sync.editorTarget,
+                onChange: { model.updateText($0) },
+                onScroll: { sync.editorDidScroll(toLine: $0) }
+            )
             if let saveError = model.saveError {
                 Text("Couldn't save: \(saveError)")
                     .font(.caption)
@@ -67,7 +81,14 @@ struct DocumentView: View {
         if let error = model.loadError, model.body.isEmpty {
             ContentUnavailableView("Can't Read Document", systemImage: "doc.text.magnifyingglass", description: Text(error))
         } else {
-            WebView(body: model.body, title: model.title, theme: settings.theme, baseURL: model.fileURL?.deletingLastPathComponent())
+            WebView(
+                body: model.body,
+                title: model.title,
+                theme: settings.theme,
+                baseURL: model.fileURL?.deletingLastPathComponent(),
+                scrollTarget: sync.previewTarget,
+                onScroll: { sync.previewDidScroll(toLine: $0) }
+            )
         }
     }
 }

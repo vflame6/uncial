@@ -17,7 +17,15 @@ import UncialCore
         #expect(settings.appearance == .system)
         #expect(settings.theme == .macOS)
         #expect(settings.defaultEditorMode == .livePreview)
+        #expect(settings.syncScrolling == true)
         #expect(settings.hasCompletedFirstRun == false)
+    }
+
+    @Test func persistsSyncScrollingOff() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.syncScrolling = false
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).syncScrolling == false)
     }
 
     @Test func persistsEverything() {

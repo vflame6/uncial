@@ -18,7 +18,19 @@ import UncialCore
         #expect(settings.theme == .macOS)
         #expect(settings.defaultEditorMode == .livePreview)
         #expect(settings.syncScrolling == true)
+        #expect(settings.showLineNumbers == false)
+        #expect(settings.autoPairing == true)
         #expect(settings.hasCompletedFirstRun == false)
+    }
+
+    @Test func persistsEditorConveniences() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.showLineNumbers = true
+        settings.autoPairing = false
+        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
+        #expect(reloaded.showLineNumbers == true)
+        #expect(reloaded.autoPairing == false)
     }
 
     @Test func persistsSyncScrollingOff() {

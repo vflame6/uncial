@@ -19,4 +19,13 @@ import Testing
         #expect(AppShortcut.sections == ["File", "View", "Edit", "Uncial"])
         #expect(AppShortcut.shortcuts(in: "View").first == .readOnly)
     }
+
+    @Test func findShortcutsMatchTheStandardEditMenu() {
+        #expect(AppShortcut.find.display == "⌘F")
+        #expect(AppShortcut.findAndReplace.display == "⌥⌘F")
+        #expect(AppShortcut.findNext.display == "⌘G")
+        #expect(AppShortcut.findPrevious.display == "⇧⌘G")
+        #expect(AppShortcut.useSelectionForFind.display == "⌘E")
+        #expect(AppShortcut.shortcuts(in: "Edit") == [.find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind])
+    }
 }

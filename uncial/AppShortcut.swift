@@ -5,7 +5,7 @@ import SwiftUI
 enum AppShortcut: CaseIterable, Identifiable {
     case newDocument, open, save, close, closeAll
     case readOnly, livePreview, rawEditor, toggleEditorMode, reload
-    case find
+    case find, findAndReplace, findNext, findPrevious, useSelectionForFind
     case settings, quit
 
     var id: Self { self }
@@ -22,7 +22,11 @@ enum AppShortcut: CaseIterable, Identifiable {
         case .rawEditor: "Raw Editor"
         case .toggleEditorMode: "Toggle Editor Mode"
         case .reload: "Reload"
-        case .find: "Find in Source"
+        case .find: "Find…"
+        case .findAndReplace: "Find and Replace…"
+        case .findNext: "Find Next"
+        case .findPrevious: "Find Previous"
+        case .useSelectionForFind: "Use Selection for Find"
         case .settings: "Settings…"
         case .quit: "Quit Uncial"
         }
@@ -32,7 +36,7 @@ enum AppShortcut: CaseIterable, Identifiable {
         switch self {
         case .newDocument, .open, .save, .close, .closeAll: "File"
         case .readOnly, .livePreview, .rawEditor, .toggleEditorMode, .reload: "View"
-        case .find: "Edit"
+        case .find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind: "Edit"
         case .settings, .quit: "Uncial"
         }
     }
@@ -49,7 +53,9 @@ enum AppShortcut: CaseIterable, Identifiable {
         case .rawEditor: "3"
         case .toggleEditorMode: "e"
         case .reload: "r"
-        case .find: "f"
+        case .find, .findAndReplace: "f"
+        case .findNext, .findPrevious: "g"
+        case .useSelectionForFind: "e"
         case .settings: ","
         case .quit: "q"
         }
@@ -58,8 +64,8 @@ enum AppShortcut: CaseIterable, Identifiable {
     var modifiers: EventModifiers {
         switch self {
         case .readOnly, .livePreview, .rawEditor: [.command, .option]
-        case .toggleEditorMode: [.command, .shift]
-        case .closeAll: [.command, .option]
+        case .toggleEditorMode, .findPrevious: [.command, .shift]
+        case .closeAll, .findAndReplace: [.command, .option]
         default: .command
         }
     }

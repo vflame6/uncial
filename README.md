@@ -22,6 +22,8 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
 - The source editor colors Markdown: headings, emphasis, code, links, list
   markers, quotes, rules and front matter. In Live Preview the two panes scroll
   together.
+- Editor conveniences: optional line numbers, brackets and Markdown markers
+  that close themselves as you type, and Edit ▸ Find with find and replace.
 - Light and dark appearance follow macOS without a restart, or can be forced.
 - Images referenced by relative or absolute path are embedded, so READMEs look
   like they do on GitHub. Remote images load in the app.
@@ -100,7 +102,7 @@ closes, and on quit; ⌘S writes immediately. If another program changes the fil
 while you are not editing, the editor and the preview pick up the new contents;
 if it happens while you have unsaved keystrokes, yours win. The editor uses
 SF Mono, wraps long lines, keeps smart quotes and dashes off (they break
-Markdown), and has the standard find bar (⌘F) and undo. Markdown syntax is
+Markdown), and has undo. Markdown syntax is
 colored in place: headings and links in the theme's accent, code in its code
 color, quotes, rules, URLs and front matter muted. Emphasis is italic, strong
 text bold; the font size never changes, so nothing jumps while you type.
@@ -108,6 +110,29 @@ text bold; the font size never changes, so nothing jumps while you type.
 In Live Preview the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
 Switch it off in Settings ▸ Editor if you prefer independent scrolling.
+
+**Line numbers.** Settings ▸ Editor ▸ *Show line numbers* adds a gutter with
+one number per line of the file; wrapped continuation rows stay unnumbered,
+and the number of the line with the cursor is highlighted.
+
+**Auto-pairing.** Typing `(`, `[`, `{`, `` ` ``, `*`, `_` or `"` inserts the
+matching closer after the cursor; typing that closer again skips over it, and
+Backspace inside an empty pair removes both characters. `*`, `_` and `` ` ``
+grow into runs: type `*` twice for `**|**`, three backticks for
+```` ```|``` ````, then press Return to get a fenced code block (an info string
+such as ```` ```swift ```` typed before Return is kept). A space or Return
+right after a lone `*` or `_` drops the closer, so `* item` and `***` keep
+working. With text selected, any of those characters (and `<`, `~`, `'`) wraps
+the selection instead; press `*` twice to make it bold. Pairs are only
+inserted in front of whitespace, punctuation or another closer, and `*`/`_`
+never inside a word (`snake_case` stays as typed). Switch it off in
+Settings ▸ Editor.
+
+**Find and replace.** Edit ▸ Find (⌘F) opens the find bar above the source;
+Edit ▸ Find and Replace… (⌥⌘F) adds the replace field with Replace, All and
+Replace & Find. ⌘G and ⇧⌘G step through matches, ⌘E searches for the
+selection, Esc closes the bar. Find works on the Markdown source, so a
+Read Only window has to switch to Live Preview or Raw Editor first.
 
 ## Settings
 
@@ -129,9 +154,10 @@ dismisses it for good.
   *Remove* hands the role back to the app that had it before, or TextEdit if that
   is unknown. macOS takes a few seconds to apply either change.
 
-**Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor)
-and whether Live Preview keeps the source and the rendered page scrolled to
-the same place.
+**Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor),
+line numbers, automatic closing of brackets, quotes and Markdown markers, and
+whether Live Preview keeps the source and the rendered page scrolled to the
+same place.
 
 **Shortcuts**: a reference list of every keyboard shortcut.
 

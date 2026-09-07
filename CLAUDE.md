@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Uncial is a native macOS Markdown reader and editor (SwiftUI document app) with a bundled
 Quick Look Preview Extension. One Swift package renders Markdown to a self-contained HTML page
 in one of three themes; the app shows it in a `WKWebView`, offers an `NSTextView` editor beside
-it (Read Only / Live Preview / Raw Editor) with Markdown coloring and scroll sync, writes edits
-through to the file, and re-renders on disk changes; the extension returns the same HTML, in
+it (Read Only / Live Preview / Raw Editor) with Markdown coloring, scroll sync, optional line
+numbers, auto-closing pairs and a find/replace bar, writes edits through to the file, and
+re-renders on disk changes; the extension returns the same HTML, in
 the theme the app published to the App Group container, to Quick Look. Design specs and implementation plans (with execution notes) are local
 working notes under `docs/superpowers/`, which is gitignored; they exist only on this machine.
 
@@ -127,9 +128,32 @@ policy in `WebView` is unchanged: same-document fragments allowed, everything el
 and routed through `LinkOpener`. Keyboard shortcuts live in one table, `AppShortcut` (menus
 bind from it; the Shortcuts tab lists it).
 
+**Editor conveniences.** *Line numbers* (`AppSettings.showLineNumbers`): `LineNumberRulerView`,
+an `NSRulerView` installed once per editor as the scroll view's vertical ruler (`rulersVisible`
+follows the setting), numbers the first line fragment of every logical line from the layout
+manager (`ThemedTextView.lineIndex`), caret line in the foreground color, the rest muted, width
+from `GutterMetrics` (pure); `rehighlight()` calls its `invalidate()`. *Auto-pairing*
+(`AppSettings.autoPairing`): `AutoPairing` (pure, tested) turns a keystroke into an `Edit` —
+close `( [ { ` * _ "` in front of whitespace, punctuation or a closer (markers only at word
+boundaries), skip a tracked closer, grow `*|*` → `**|**` up to three, wrap a selection (also
+`< ~ '`), drop the closer of an empty `*`/`_` pair before a space or Return, Return inside
+```` ```|``` ```` makes a fence, Backspace removes one layer of an empty pair — and tracks the
+pairs it inserted. `ThemedTextView` overrides `insertText(_:replacementRange:)`,
+`insertNewline`, `deleteBackward`, applies an `Edit` through `insertText(_:replacementRange:)`
+(undoable) with `isApplyingPairEdit` set, maps tracked positions in
+`shouldChangeText(in:replacementString:)` (exact range, fires for typing, paste, undo and the
+find bar; NSTextView nests a one-range `shouldChangeText(inRanges:)` inside it, so only calls
+with several ranges reset the pairs) and prunes on `setSelectedRanges`. The text storage
+delegate is deliberately not used: its `editedRange` is widened by attribute fix-ups (probed
+2026-09-07). *Find*: SwiftUI's generated Edit menu has no Find items at all (probed
+2026-09-07), so `uncialApp` adds Edit ▸ Find (`CommandGroup(after: .pasteboard)`, five items
+from `AppShortcut`) driving focused value `findInSource` → `EditorHandle.performFind`, which
+makes the text view first responder and calls `performTextFinderAction` with the action's tag;
+the native bar carries the replace row. The preview has no find.
+
 **Settings / first run:** `AppSettings` (`appearance` System/Light/Dark → `NSApp.appearance`,
-`theme`, `defaultEditorMode`, `syncScrolling`, `hasCompletedFirstRun`; UserDefaults keys of the
-same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
+`theme`, `defaultEditorMode`, `syncScrolling`, `showLineNumbers`, `autoPairing`,
+`hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
 `appearance`; `publishTheme()` writes the theme for Quick Look, see Sandbox),
 `QuickLookExtensionManager` (drives `/usr/bin/pluginkit` through `ShellCommand`; Install =
 `-a` + `-e use`, Remove = `-e ignore`), `DefaultAppManager` (`NSWorkspace` behind the
@@ -187,6 +211,12 @@ build-setting sandbox, but the owner chose not to ship one.
   path form: `defaults read /Users/flame/Library/Preferences/com.maksimradaev.uncial`.
   Reset first run with `defaults delete <that path> hasCompletedFirstRun`.
 - Windows without Accessibility: a CGWindowList script lists an app's window titles and sizes.
+- To see AppKit chrome (gutter, find bar, controls), a temporary probe can render the window's
+  content view offscreen (`bitmapImageRepForCachingDisplay` + `cacheDisplay`, write a PNG into
+  the scratchpad) and the file can be viewed; the text view's glyphs and the web view come out
+  blank. Typing can be simulated with `insertText(_:replacementRange:)` (`NSNotFound` range),
+  `insertNewline(nil)` and `deleteBackward(nil)` on the text view. `NSLog` from the app does not
+  reach `log show`; write probe output to a file.
 - `xcodebuild test` re-signs the Debug app with test-host entitlements; run a plain `build` before
   inspecting entitlements with `codesign -d --entitlements :-`.
 - Leave the machine as found after experiments: default Markdown app (currently Xcode),

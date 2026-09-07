@@ -88,10 +88,17 @@ import Testing
 
     @Test func sourcePositionsAreOptInAndShiftedPastFrontMatter() {
         #expect(!renderer.renderBody("# T").contains("data-sourcepos"))
-        #expect(renderer.renderBody("# T", sourcePositions: true).contains("<h1 id=\"t\" data-sourcepos=\"1:1-1:3\">"))
+        #expect(renderer.renderBody("# T", sourcePositions: true).contains("<h1 id=\"t\" data-line=\"1\" data-sourcepos=\"1:1-1:3\">"))
         let html = renderer.renderBody("---\na: 1\n---\n# T\n\npara", sourcePositions: true)
         #expect(html.contains("data-sourcepos=\"4:1-4:3\""))
-        #expect(html.contains("<p data-sourcepos=\"6:1-6:4\">para</p>"))
+        #expect(html.contains("<p data-line=\"6\" data-sourcepos=\"6:1-6:4\">para</p>"))
         #expect(html.hasPrefix("<pre class=\"front-matter\">"))
+    }
+
+    @Test func sourcePositionsBringLineLabels() {
+        let html = renderer.renderBody("# T\n\ntext", sourcePositions: true)
+        #expect(html.contains("data-line=\"1\""))
+        #expect(html.contains("<p data-line=\"3\" data-sourcepos=\"3:1-3:4\">text</p>"))
+        #expect(!renderer.renderBody("# T\n\ntext").contains("data-line"))
     }
 }

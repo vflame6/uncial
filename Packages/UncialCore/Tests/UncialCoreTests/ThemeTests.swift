@@ -52,4 +52,9 @@ import Testing
         #expect(Theme.solarized.editorPalette?.light.muted == 0x93A1A1)
         #expect(Theme.solarized.editorPalette?.dark.code == 0x2AA198)
     }
+
+    @Test func lineNumbersClassIsOptIn() {
+        #expect(HTMLDocument.wrap(body: "", title: "t").contains("<html data-theme=\"macos\">"))
+        #expect(HTMLDocument.wrap(body: "", title: "t", lineNumbers: true).contains("<html data-theme=\"macos\" class=\"line-numbers\">"))
+    }
 }

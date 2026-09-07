@@ -1,9 +1,10 @@
 public enum HTMLDocument {
     /// A complete page: the theme's CSS inlined, the rendered fragment inside `article.markdown-body`.
-    public static func wrap(body: String, title: String, theme: Theme = .default) -> String {
+    /// `lineNumbers` turns on the source-line gutter (needs `data-line` labels from `SourcePositions.annotate`).
+    public static func wrap(body: String, title: String, theme: Theme = .default, lineNumbers: Bool = false) -> String {
         """
         <!DOCTYPE html>
-        <html data-theme="\(theme.rawValue)">
+        <html data-theme="\(theme.rawValue)"\(lineNumbers ? " class=\"line-numbers\"" : "")>
         <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">

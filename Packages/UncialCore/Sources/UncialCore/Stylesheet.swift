@@ -27,6 +27,9 @@ public enum Stylesheet {
     @media (max-width: 640px) { .markdown-body { padding: 16px; } }
     .markdown-body > :first-child { margin-top: 0; }
     .markdown-body > :last-child { margin-bottom: 0; }
+    html.line-numbers .markdown-body { position: relative; padding-left: 4.5em; }
+    html.line-numbers .markdown-body [data-line]::before { content: attr(data-line); position: absolute; left: 0; width: 3.5em; text-align: right; font-family: var(--font-mono); font-size: calc(var(--font-size) * .85); line-height: calc(var(--line-height) / .85); color: var(--muted); user-select: none; pointer-events: none; }
+    html.line-numbers .markdown-body .line::before { font-size: inherit; line-height: inherit; }
     h1, h2, h3, h4, h5, h6 { margin-top: 24px; margin-bottom: 16px; font-weight: var(--heading-weight); line-height: 1.25; color: var(--heading); }
     h1 { font-size: var(--h1-size); padding-bottom: .3em; border-bottom: var(--h1-border); }
     h2 { font-size: var(--h2-size); padding-bottom: .3em; border-bottom: var(--h2-border); }

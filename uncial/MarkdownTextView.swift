@@ -194,6 +194,30 @@ final class ThemedTextView: NSTextView {
         lineNumberView?.invalidate()
     }
 
+    // MARK: Undo
+
+    /// The editor's own undo manager. Registering edits with the window's (NSDocument's) manager made
+    /// the document count changes, autosave its stale copy and complain about the model's own writes.
+    private let editorUndoManager = UndoManager()
+
+    override var undoManager: UndoManager? { editorUndoManager }
+
+    @objc func undo(_ sender: Any?) {
+        editorUndoManager.undo()
+    }
+
+    @objc func redo(_ sender: Any?) {
+        editorUndoManager.redo()
+    }
+
+    override func validateUserInterfaceItem(_ item: NSValidatedUserInterfaceItem) -> Bool {
+        switch item.action {
+        case #selector(undo(_:)): editorUndoManager.canUndo
+        case #selector(redo(_:)): editorUndoManager.canRedo
+        default: super.validateUserInterfaceItem(item)
+        }
+    }
+
     // MARK: Auto-pairing
 
     var autoPairingEnabled = true

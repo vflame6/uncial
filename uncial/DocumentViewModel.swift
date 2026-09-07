@@ -73,6 +73,7 @@ final class DocumentViewModel {
             try Data(textToSave.utf8).write(to: fileURL, options: .atomic)
             diskText = textToSave
             saveError = nil
+            syncDocumentModificationDate(for: fileURL)
         } catch {
             saveError = error.localizedDescription
         }
@@ -89,6 +90,15 @@ final class DocumentViewModel {
     }
 
     // MARK: - Private
+
+    /// NSDocument compares the file's modification date with the one it recorded before an autosave
+    /// and reports "changed by another application" when they differ; after the model's own write
+    /// they always do. Keep its record current.
+    private func syncDocumentModificationDate(for fileURL: URL) {
+        guard let document = NSDocumentController.shared.document(for: fileURL),
+              let date = try? FileManager.default.attributesOfItem(atPath: fileURL.path)[.modificationDate] as? Date else { return }
+        document.fileModificationDate = date
+    }
 
     private func syncFromDisk() {
         guard let fileURL, let data = try? Data(contentsOf: fileURL) else { return }

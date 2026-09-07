@@ -3,10 +3,11 @@ import SwiftUI
 import UncialCore
 
 /// Plain-text Markdown editor: SF Mono, soft wrap, no smart substitutions, native find bar and undo,
-/// Markdown-aware coloring, and scroll reporting for Live Preview sync.
+/// Markdown-aware coloring, optional line numbers, and scroll reporting for Live Preview sync.
 struct MarkdownTextView: NSViewRepresentable {
     let text: String
     let palette: EditorPalette?
+    let showsLineNumbers: Bool
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     let onChange: (String) -> Void
@@ -53,6 +54,9 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.string = text
         textView.palette = palette
         scrollView.documentView = textView
+        scrollView.hasVerticalRuler = true
+        scrollView.verticalRulerView = LineNumberRulerView(textView: textView, scrollView: scrollView)
+        scrollView.rulersVisible = showsLineNumbers
         context.coordinator.textView = textView
         context.coordinator.observeScrolling(of: scrollView)
         DispatchQueue.main.async {
@@ -67,6 +71,9 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.onScroll = onScroll
         if textView.palette != palette {
             textView.palette = palette
+        }
+        if scrollView.rulersVisible != showsLineNumbers {
+            scrollView.rulersVisible = showsLineNumbers
         }
         if textView.string != text {
             // External change (reload, another editor): replace the text, keep the caret in range, drop undo history.
@@ -135,7 +142,8 @@ final class ThemedTextView: NSTextView {
     /// Set while `scroll(toLine:)` moves the view so the bounds change is not reported as user scrolling.
     private(set) var isProgrammaticScroll = false
     private(set) var style = EditorStyle(palette: nil, isDark: false)
-    private var lineIndex = LineIndex(text: "")
+    private(set) var lineIndex = LineIndex(text: "")
+    private var lineNumberView: LineNumberRulerView? { enclosingScrollView?.verticalRulerView as? LineNumberRulerView }
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -171,6 +179,7 @@ final class ThemedTextView: NSTextView {
         }
         textStorage.endEditing()
         typingAttributes = style.baseAttributes
+        lineNumberView?.invalidate()
     }
 
     /// 0-based logical line at the top of the visible area plus the fraction scrolled into it.

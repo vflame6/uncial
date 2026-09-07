@@ -60,6 +60,7 @@ struct DocumentView: View {
             MarkdownTextView(
                 text: model.text,
                 palette: settings.theme.editorPalette,
+                showsLineNumbers: settings.showLineNumbers,
                 scrollTarget: sync.editorTarget,
                 onChange: { model.updateText($0) },
                 onScroll: { sync.editorDidScroll(toLine: $0) }

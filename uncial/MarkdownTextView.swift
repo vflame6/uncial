@@ -54,7 +54,6 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.importsGraphics = false
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.delegate = context.coordinator
-        textView.textStorage?.delegate = textView
         textView.autoPairingEnabled = autoPairing
         textView.string = text
         textView.palette = palette
@@ -132,7 +131,7 @@ struct MarkdownTextView: NSViewRepresentable {
 
 /// NSTextView that colors Markdown from the theme's palette, follows light/dark switches, closes
 /// pairs as you type, and converts between scroll positions and document lines.
-final class ThemedTextView: NSTextView, NSTextStorageDelegate {
+final class ThemedTextView: NSTextView {
     static let highlightingLimit = 200_000
 
     var palette: EditorPalette? {
@@ -200,6 +199,7 @@ final class ThemedTextView: NSTextView, NSTextStorageDelegate {
     var autoPairingEnabled = true
     private var pairing = AutoPairing()
     private var isApplyingPairEdit = false
+    private var isMultiRangeChange = false
 
     /// The storage's own string, without copying it into a Swift String.
     private var currentText: NSString { textStorage?.mutableString ?? NSMutableString() }
@@ -237,9 +237,30 @@ final class ThemedTextView: NSTextView, NSTextStorageDelegate {
         }
     }
 
-    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
-        guard editedMask.contains(.editedCharacters), !isApplyingPairEdit else { return }
-        pairing.textChanged(in: NSRange(location: editedRange.location, length: editedRange.length - delta), replacementLength: editedRange.length)
+    /// Every character change NSTextView makes for the user (typing, paste, delete, drag, undo, find
+    /// bar replace) announces its exact range here first; the text storage delegate only sees ranges
+    /// widened by attribute fix-ups, which is why it is not used.
+    override func shouldChangeText(in affectedCharRange: NSRange, replacementString: String?) -> Bool {
+        let allowed = super.shouldChangeText(in: affectedCharRange, replacementString: replacementString)
+        if allowed, !isApplyingPairEdit, !isMultiRangeChange, let replacement = replacementString {
+            pairing.textChanged(in: affectedCharRange, replacementLength: (replacement as NSString).length)
+        }
+        return allowed
+    }
+
+    /// A one-range call is the ordinary edit above (NSTextView nests the two); several ranges at
+    /// once (Replace All) make every tracked position unreliable, so the pairs are forgotten.
+    override func shouldChangeText(inRanges affectedRanges: [NSValue], replacementStrings: [String]?) -> Bool {
+        guard affectedRanges.count > 1 else {
+            return super.shouldChangeText(inRanges: affectedRanges, replacementStrings: replacementStrings)
+        }
+        isMultiRangeChange = true
+        defer { isMultiRangeChange = false }
+        let allowed = super.shouldChangeText(inRanges: affectedRanges, replacementStrings: replacementStrings)
+        if allowed {
+            pairing.reset()
+        }
+        return allowed
     }
 
     /// Runs one decision through the normal, undoable insertion path with our own mapping switched off.

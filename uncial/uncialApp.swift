@@ -6,6 +6,7 @@ struct UncialApp: App {
     @FocusedValue(\.reloadDocument) private var reloadDocument
     @FocusedValue(\.saveDocument) private var saveDocument
     @FocusedValue(\.editorMode) private var editorMode
+    @FocusedValue(\.findInSource) private var findInSource
 
     var body: some Scene {
         DocumentGroup(viewing: MarkdownDocument.self) { configuration in
@@ -33,6 +34,16 @@ struct UncialApp: App {
                     .keyboardShortcut(.save)
                     .disabled(saveDocument == nil)
             }
+            // SwiftUI's Edit menu has no Find items; these drive the editor's find bar (replace row included).
+            CommandGroup(after: .pasteboard) {
+                Menu("Find") {
+                    findItem(.find, .showFindInterface)
+                    findItem(.findAndReplace, .showReplaceInterface)
+                    findItem(.findNext, .nextMatch)
+                    findItem(.findPrevious, .previousMatch)
+                    findItem(.useSelectionForFind, .setSearchString)
+                }
+            }
             CommandGroup(after: .toolbar) {
                 ForEach(EditorMode.allCases) { mode in
                     Toggle(mode.title, isOn: Binding(
@@ -59,5 +70,11 @@ struct UncialApp: App {
         Settings {
             SettingsView()
         }
+    }
+
+    private func findItem(_ shortcut: AppShortcut, _ action: NSTextFinder.Action) -> some View {
+        Button(shortcut.title) { findInSource?.perform(action) }
+            .keyboardShortcut(shortcut)
+            .disabled(findInSource == nil)
     }
 }

@@ -5,6 +5,7 @@ struct DocumentView: View {
     @State private var model: DocumentViewModel
     @State private var mode: EditorMode
     @State private var sync = ScrollSyncController()
+    @State private var editorHandle = EditorHandle()
     private let settings: AppSettings
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
@@ -40,6 +41,7 @@ struct DocumentView: View {
         .focusedSceneValue(\.reloadDocument, ReloadAction { model.reload() })
         .focusedSceneValue(\.saveDocument, SaveAction { model.saveNow() })
         .focusedSceneValue(\.editorMode, $mode)
+        .focusedSceneValue(\.findInSource, mode.showsEditor ? FindAction { editorHandle.performFind($0) } : nil)
         .onChange(of: mode) { old, new in
             if old.showsEditor, !new.showsEditor {
                 model.saveNow()
@@ -63,6 +65,7 @@ struct DocumentView: View {
                 showsLineNumbers: settings.showLineNumbers,
                 autoPairing: settings.autoPairing,
                 scrollTarget: sync.editorTarget,
+                handle: editorHandle,
                 onChange: { model.updateText($0) },
                 onScroll: { sync.editorDidScroll(toLine: $0) }
             )

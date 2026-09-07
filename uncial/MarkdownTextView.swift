@@ -11,6 +11,8 @@ struct MarkdownTextView: NSViewRepresentable {
     let autoPairing: Bool
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
+    /// Receives the text view so menu commands (Edit ▸ Find) can address it.
+    let handle: EditorHandle
     let onChange: (String) -> Void
     /// Called with the 1-based fractional line at the top of the visible area when the user scrolls.
     var onScroll: ((Double) -> Void)?
@@ -62,6 +64,7 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.rulersVisible = showsLineNumbers
         context.coordinator.textView = textView
         context.coordinator.observeScrolling(of: scrollView)
+        handle.textView = textView
         DispatchQueue.main.async {
             textView.window?.makeFirstResponder(textView)
         }

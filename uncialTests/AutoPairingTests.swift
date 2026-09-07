@@ -153,4 +153,12 @@ import Testing
         #expect(pairing.typed("", in: "", selection: NSRange(location: 0, length: 0)) == nil)
         #expect(pairing.tracked.isEmpty)
     }
+
+    @Test func tildesPairOnlyAtLineStart() {
+        #expect(type("~", into: "about ") == "about ~|")
+        #expect(type("~~gone~~") == "~~gone~~|")
+        #expect(type("~~~\n") == "~~~\n|\n~~~")
+        #expect(type("~ ") == "~ |")
+        #expect(type("~", into: "x\n") == "x\n~|~")
+    }
 }

@@ -9,11 +9,14 @@ nonisolated struct AutoPairing: Equatable {
         let close: unichar
         /// Longest run a symmetric marker may grow to by typing it inside an empty pair (`**|**`).
         let growth: Int
+        /// Only closes at the start of a line (`~`: a fence or leading strikethrough, never "~5 min").
+        let lineStartOnly: Bool
 
-        init(_ open: Character, _ close: Character, growth: Int = 1) {
+        init(_ open: Character, _ close: Character, growth: Int = 1, lineStartOnly: Bool = false) {
             self.open = open.utf16.first!
             self.close = close.utf16.first!
             self.growth = growth
+            self.lineStartOnly = lineStartOnly
         }
 
         var isSymmetric: Bool { open == close }
@@ -38,12 +41,13 @@ nonisolated struct AutoPairing: Equatable {
     static let autoClosing: [Pair] = [
         Pair("(", ")"), Pair("[", "]"), Pair("{", "}"),
         Pair("`", "`", growth: 3), Pair("*", "*", growth: 3), Pair("_", "_", growth: 3), Pair("\"", "\""),
+        Pair("~", "~", growth: 3, lineStartOnly: true),
     ]
-    static let wrapOnly: [Pair] = [Pair("<", ">"), Pair("~", "~"), Pair("'", "'")]
+    static let wrapOnly: [Pair] = [Pair("<", ">"), Pair("'", "'")]
     /// Characters an opener may be typed in front of and still get its partner (besides whitespace and the end).
     static let closeBefore = Set(")]}>.,;:!?*_~`\"".utf16)
-    private static let emphasis = Set("*_".utf16)
-    private static let backtick: unichar = 0x60
+    private static let emphasis = Set("*_~".utf16)
+    private static let fences: Set<unichar> = Set("`~".utf16)
     private static let space: unichar = 0x20
 
     private(set) var tracked: [Tracked] = []
@@ -65,6 +69,7 @@ nonisolated struct AutoPairing: Equatable {
             return closer(string, at: caret, entry: index)
         }
         guard let pair = Self.autoClosing.first(where: { $0.open == c }) else { return nil }
+        if pair.lineStartOnly, !Self.startsLine(caret, in: text) { return nil }
         let next: unichar? = caret < text.length ? text.character(at: caret) : nil
         if let next, !Self.isWhitespace(next), !Self.closeBefore.contains(next) { return nil }
         if pair.isSymmetric {
@@ -77,18 +82,19 @@ nonisolated struct AutoPairing: Equatable {
         return Edit(range: NSRange(location: caret, length: 0), replacement: pair.opener + pair.closer, selection: NSRange(location: caret + 1, length: 0))
     }
 
-    /// Return: drops the closer of an empty `*`/`_` pair, or turns ```` ```|``` ```` into a fenced block.
+    /// Return: drops the closer of an empty `*`/`_`/`~` pair, or turns ```` ```|``` ```` (or `~~~|~~~`) into a fenced block.
     mutating func newline(in text: NSString, selection: NSRange) -> Edit? {
         guard selection.length == 0 else { return nil }
         prune(in: text)
         let caret = selection.location
-        if let edit = whitespace("\n", at: caret) { return edit }
-        guard let index = tracked.firstIndex(where: {
-            $0.close.location == caret && $0.pair.open == Self.backtick && $0.open.length == 3 && Self.startsLine($0.open.location, in: text)
-        }) else { return nil }
-        tracked.remove(at: index)
-        map(NSRange(location: caret, length: 0), replacementLength: 2)
-        return Edit(range: NSRange(location: caret, length: 0), replacement: "\n\n", selection: NSRange(location: caret + 1, length: 0))
+        if let index = tracked.firstIndex(where: {
+            $0.close.location == caret && Self.fences.contains($0.pair.open) && $0.open.length == 3 && Self.startsLine($0.open.location, in: text)
+        }) {
+            tracked.remove(at: index)
+            map(NSRange(location: caret, length: 0), replacementLength: 2)
+            return Edit(range: NSRange(location: caret, length: 0), replacement: "\n\n", selection: NSRange(location: caret + 1, length: 0))
+        }
+        return whitespace("\n", at: caret)
     }
 
     /// Backspace inside an empty pair removes one character from each side.
@@ -128,7 +134,7 @@ nonisolated struct AutoPairing: Equatable {
         return Edit(range: selection, replacement: replacement, selection: NSRange(location: selection.location + 1, length: selection.length))
     }
 
-    /// Whitespace right after an empty `*`/`_` pair: it can never become emphasis, so the closer goes.
+    /// Whitespace right after an empty `*`/`_`/`~` pair: it can never become emphasis, so the closer goes.
     private mutating func whitespace(_ string: String, at caret: Int) -> Edit? {
         guard let index = tracked.firstIndex(where: {
             $0.close.location == caret && NSMaxRange($0.open) == caret && Self.emphasis.contains($0.pair.open)

@@ -72,6 +72,7 @@ struct DocumentView: View {
                 palette: settings.theme.editorPalette,
                 showsLineNumbers: settings.showLineNumbers,
                 autoPairing: settings.autoPairing,
+                continueLists: settings.continueLists,
                 scrollTarget: sync.editorTarget,
                 handle: editorHandle,
                 onChange: { model.updateText($0) },

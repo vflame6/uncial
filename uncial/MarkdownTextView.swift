@@ -9,6 +9,7 @@ struct MarkdownTextView: NSViewRepresentable {
     let palette: EditorPalette?
     let showsLineNumbers: Bool
     let autoPairing: Bool
+    let continueLists: Bool
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     /// Receives the text view so menu commands (Edit ▸ Find) can address it.
@@ -55,6 +56,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.delegate = context.coordinator
         textView.autoPairingEnabled = autoPairing
+        textView.continuesLists = continueLists
         textView.string = text
         textView.palette = palette
         scrollView.documentView = textView
@@ -81,6 +83,7 @@ struct MarkdownTextView: NSViewRepresentable {
             scrollView.rulersVisible = showsLineNumbers
         }
         textView.autoPairingEnabled = autoPairing
+        textView.continuesLists = continueLists
         if textView.string != text {
             textView.replaceText(with: text)
         }
@@ -221,6 +224,7 @@ final class ThemedTextView: NSTextView {
     // MARK: Auto-pairing
 
     var autoPairingEnabled = true
+    var continuesLists = true
     private var pairing = AutoPairing()
     private var isApplyingPairEdit = false
     private var isMultiRangeChange = false
@@ -239,7 +243,14 @@ final class ThemedTextView: NSTextView {
     }
 
     override func insertNewline(_ sender: Any?) {
-        if autoPairingEnabled, !hasMarkedText(), let edit = pairing.newline(in: currentText, selection: selectedRange()) {
+        guard !hasMarkedText(), selectedRange().length == 0 else {
+            super.insertNewline(sender)
+            return
+        }
+        if autoPairingEnabled, let edit = pairing.newline(in: currentText, selection: selectedRange()) {
+            apply(edit)
+        } else if continuesLists, let edit = ListContinuation.edit(in: currentText, at: selectedRange().location) {
+            pairing.textChanged(in: edit.range, replacementLength: (edit.replacement as NSString).length)
             apply(edit)
         } else {
             super.insertNewline(sender)

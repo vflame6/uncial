@@ -13,6 +13,7 @@ final class AppSettings {
         static let syncScrolling = "syncScrolling"
         static let showLineNumbers = "showLineNumbers"
         static let autoPairing = "autoPairing"
+        static let continueLists = "continueLists"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
     }
 
@@ -49,6 +50,10 @@ final class AppSettings {
         didSet { defaults.set(autoPairing, forKey: Key.autoPairing) }
     }
 
+    var continueLists: Bool {
+        didSet { defaults.set(continueLists, forKey: Key.continueLists) }
+    }
+
     private(set) var hasCompletedFirstRun: Bool
 
     init(defaults: UserDefaults, applyAppearance: Bool) {
@@ -66,6 +71,7 @@ final class AppSettings {
         syncScrolling = defaults.object(forKey: Key.syncScrolling) == nil ? true : defaults.bool(forKey: Key.syncScrolling)
         showLineNumbers = defaults.bool(forKey: Key.showLineNumbers)
         autoPairing = defaults.object(forKey: Key.autoPairing) == nil ? true : defaults.bool(forKey: Key.autoPairing)
+        continueLists = defaults.object(forKey: Key.continueLists) == nil ? true : defaults.bool(forKey: Key.continueLists)
         hasCompletedFirstRun = defaults.bool(forKey: Key.hasCompletedFirstRun)
     }
 

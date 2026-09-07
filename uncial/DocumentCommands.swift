@@ -11,8 +11,10 @@ struct SaveAction {
     let run: @MainActor () -> Void
 }
 
-/// Drives the focused editor's find bar (Edit ▸ Find).
+/// Drives the focused window's find bar (Edit ▸ Find): the source editor's when one is visible,
+/// otherwise the rendered page's, which cannot replace.
 struct FindAction {
+    let supportsReplace: Bool
     let perform: @MainActor (NSTextFinder.Action) -> Void
 }
 
@@ -28,7 +30,7 @@ private struct EditorModeKey: FocusedValueKey {
     typealias Value = Binding<EditorMode>
 }
 
-private struct FindInSourceKey: FocusedValueKey {
+private struct FindInDocumentKey: FocusedValueKey {
     typealias Value = FindAction
 }
 
@@ -48,8 +50,8 @@ extension FocusedValues {
         set { self[EditorModeKey.self] = newValue }
     }
 
-    var findInSource: FindAction? {
-        get { self[FindInSourceKey.self] }
-        set { self[FindInSourceKey.self] = newValue }
+    var findInDocument: FindAction? {
+        get { self[FindInDocumentKey.self] }
+        set { self[FindInDocumentKey.self] = newValue }
     }
 }

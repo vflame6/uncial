@@ -12,6 +12,8 @@ struct WebView: NSViewRepresentable {
     /// Shows the source-line gutter (`data-line` labels from the renderer).
     let lineNumbers: Bool
     let baseURL: URL?
+    /// Receives the web view so the find bar and menu commands can address it.
+    let handle: PreviewHandle
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     /// Called with the 1-based fractional line at the top of the viewport when the page scrolls.
@@ -35,6 +37,7 @@ struct WebView: NSViewRepresentable {
         webView.isInspectable = true
         #endif
         context.coordinator.webView = webView
+        handle.webView = webView
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)

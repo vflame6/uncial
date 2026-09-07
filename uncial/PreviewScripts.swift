@@ -60,4 +60,21 @@ nonisolated enum PreviewScripts {
         })(\#(line));
         """#
     }
+
+    /// Number of case-insensitive occurrences of `query` in the page's visible text (the find bar's count).
+    static func countMatches(_ query: String) -> String {
+        """
+        (function() {
+          var q = \(JavaScriptLiteral.string(query)).toLowerCase();
+          if (!q) { return 0; }
+          var t = document.body.innerText.toLowerCase();
+          var n = 0, i = 0;
+          while ((i = t.indexOf(q, i)) !== -1) { n += 1; i += q.length; }
+          return n;
+        })()
+        """
+    }
+
+    /// The page's current text selection (Use Selection for Find).
+    static let selectedText = "window.getSelection().toString()"
 }

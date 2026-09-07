@@ -6,6 +6,7 @@ struct DocumentView: View {
     @State private var mode: EditorMode
     @State private var sync = ScrollSyncController()
     @State private var editorHandle = EditorHandle()
+    @State private var previewFind = PreviewFindController()
     private let settings: AppSettings
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
@@ -41,11 +42,18 @@ struct DocumentView: View {
         .focusedSceneValue(\.reloadDocument, ReloadAction { model.reload() })
         .focusedSceneValue(\.saveDocument, SaveAction { model.saveNow() })
         .focusedSceneValue(\.editorMode, $mode)
-        .focusedSceneValue(\.findInSource, mode.showsEditor ? FindAction { editorHandle.performFind($0) } : nil)
+        .focusedSceneValue(\.findInDocument, FindAction(supportsReplace: mode.showsEditor) { action in
+            if mode.showsEditor {
+                editorHandle.performFind(action)
+            } else {
+                previewFind.perform(action)
+            }
+        })
         .onChange(of: mode) { old, new in
             if old.showsEditor, !new.showsEditor {
                 model.saveNow()
             }
+            previewFind.hide()
             updateSync()
         }
         .onChange(of: settings.syncScrolling) { updateSync() }
@@ -81,8 +89,17 @@ struct DocumentView: View {
         }
     }
 
-    @ViewBuilder
     private var preview: some View {
+        VStack(spacing: 0) {
+            if previewFind.isVisible, !mode.showsEditor {
+                PreviewFindBar(controller: previewFind)
+            }
+            previewContent
+        }
+    }
+
+    @ViewBuilder
+    private var previewContent: some View {
         if let error = model.loadError, model.body.isEmpty {
             ContentUnavailableView("Can't Read Document", systemImage: "doc.text.magnifyingglass", description: Text(error))
         } else {
@@ -92,6 +109,7 @@ struct DocumentView: View {
                 theme: settings.theme,
                 lineNumbers: settings.showLineNumbers,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
+                handle: previewFind.handle,
                 scrollTarget: sync.previewTarget,
                 onScroll: { sync.previewDidScroll(toLine: $0) }
             )

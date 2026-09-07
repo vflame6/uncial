@@ -90,6 +90,7 @@ struct DocumentView: View {
                 body: model.body,
                 title: model.title,
                 theme: settings.theme,
+                lineNumbers: settings.showLineNumbers,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
                 scrollTarget: sync.previewTarget,
                 onScroll: { sync.previewDidScroll(toLine: $0) }

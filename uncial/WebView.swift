@@ -9,6 +9,8 @@ struct WebView: NSViewRepresentable {
     let body: String
     let title: String
     let theme: Theme
+    /// Shows the source-line gutter (`data-line` labels from the renderer).
+    let lineNumbers: Bool
     let baseURL: URL?
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
@@ -34,6 +36,7 @@ struct WebView: NSViewRepresentable {
         #endif
         context.coordinator.webView = webView
         context.coordinator.onScroll = onScroll
+        context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
         context.coordinator.apply(scrollTarget)
         return webView
@@ -41,6 +44,7 @@ struct WebView: NSViewRepresentable {
 
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onScroll = onScroll
+        context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
         context.coordinator.apply(scrollTarget)
     }
@@ -74,6 +78,20 @@ struct WebView: NSViewRepresentable {
         private var pendingScrollY: Double?
         private var appliedToken = 0
         private var lastScrollTarget: ScrollTarget?
+        private var lineNumbers = false
+
+        /// Turns the source-line gutter on or off in place; body swaps keep the class.
+        func setLineNumbers(_ flag: Bool) {
+            guard flag != lineNumbers else { return }
+            lineNumbers = flag
+            if !isLoading, let webView {
+                applyLineNumbers(in: webView)
+            }
+        }
+
+        private func applyLineNumbers(in webView: WKWebView) {
+            webView.evaluateJavaScript("document.documentElement.classList.toggle('line-numbers', \(lineNumbers));", completionHandler: nil)
+        }
 
         /// Performs a new scroll request now, or once the page has loaded; nil forgets the last one.
         func apply(_ target: ScrollTarget?) {
@@ -130,7 +148,7 @@ struct WebView: NSViewRepresentable {
 
         private func loadPage(in webView: WKWebView) {
             guard let page else { return }
-            let html = HTMLDocument.wrap(body: currentBody ?? "", title: page.title, theme: page.theme)
+            let html = HTMLDocument.wrap(body: currentBody ?? "", title: page.title, theme: page.theme, lineNumbers: lineNumbers)
             webView.loadHTMLString(html, baseURL: page.baseURL)
         }
 
@@ -143,6 +161,7 @@ struct WebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoading = false
+            applyLineNumbers(in: webView)
             if let scrollY = pendingScrollY {
                 pendingScrollY = nil
                 webView.evaluateJavaScript("window.scrollTo(0, \(scrollY));", completionHandler: nil)

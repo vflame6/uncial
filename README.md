@@ -22,8 +22,10 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
 - The source editor colors Markdown: headings, emphasis, code, links, list
   markers, quotes, rules and front matter. In Live Preview the two panes scroll
   together.
-- Editor conveniences: optional line numbers, brackets and Markdown markers
-  that close themselves as you type, and Edit ▸ Find with find and replace.
+- Editor conveniences: optional line numbers (also as source lines in the
+  rendered page), brackets and Markdown markers that close themselves as you
+  type, lists and quotes that continue on Return, and Edit ▸ Find with find
+  and replace.
 - Light and dark appearance follow macOS without a restart, or can be forced.
 - Images referenced by relative or absolute path are embedded, so READMEs look
   like they do on GitHub. Remote images load in the app.
@@ -113,7 +115,11 @@ Switch it off in Settings ▸ Editor if you prefer independent scrolling.
 
 **Line numbers.** Settings ▸ Editor ▸ *Show line numbers* adds a gutter with
 one number per line of the file; wrapped continuation rows stay unnumbered,
-and the number of the line with the cursor is highlighted.
+and the number of the line with the cursor is highlighted. The rendered page
+gets the same numbers: each heading, paragraph, list item or quote is labeled
+with the source line it starts on, and code blocks number every line, so a
+Read Only window can still point at "line 42" and Live Preview's two panes
+carry matching numbers.
 
 **Auto-pairing.** Typing `(`, `[`, `{`, `` ` ``, `*`, `_` or `"` inserts the
 matching closer after the cursor; typing that closer again skips over it, and
@@ -122,17 +128,27 @@ grow into runs: type `*` twice for `**|**`, three backticks for
 ```` ```|``` ````, then press Return to get a fenced code block (an info string
 such as ```` ```swift ```` typed before Return is kept). A space or Return
 right after a lone `*` or `_` drops the closer, so `* item` and `***` keep
-working. With text selected, any of those characters (and `<`, `~`, `'`) wraps
-the selection instead; press `*` twice to make it bold. Pairs are only
-inserted in front of whitespace, punctuation or another closer, and `*`/`_`
-never inside a word (`snake_case` stays as typed). Switch it off in
-Settings ▸ Editor.
+working. `~` pairs only at the start of a line, where it can open `~~text~~`
+or a `~~~` fence (three tildes plus Return), so `~5 min` stays as typed. With
+text selected, any of those characters (and `<`, `'`) wraps the selection
+instead; press `*` twice to make it bold. Pairs are only inserted in front of
+whitespace, punctuation or another closer, and `*`/`_` never inside a word
+(`snake_case` stays as typed). Switch it off in Settings ▸ Editor.
+
+**Lists and quotes.** Return inside a list item starts the next one: `- `,
+`* ` and `+ ` repeat, numbered items count up (`1.` → `2.`, `1)` → `2)`),
+task items get an empty box, quotes keep their `> ` prefix (nested ones too),
+indentation and spacing are kept, and any text after the cursor moves to the
+new item. Return on an empty item removes its marker, so pressing Return twice
+ends the list. Switch it off in Settings ▸ Editor.
 
 **Find and replace.** Edit ▸ Find (⌘F) opens the find bar above the source;
 Edit ▸ Find and Replace… (⌥⌘F) adds the replace field with Replace, All and
 Replace & Find. ⌘G and ⇧⌘G step through matches, ⌘E searches for the
-selection, Esc closes the bar. Find works on the Markdown source, so a
-Read Only window has to switch to Live Preview or Raw Editor first.
+selection, Esc closes the bar. In Read Only mode ⌘F opens a find bar above
+the rendered page instead: matches are selected and scrolled into view with a
+count of how many there are. Replacing needs the source, so Find and Replace…
+is available in Live Preview and Raw Editor only.
 
 ## Settings
 
@@ -155,9 +171,9 @@ dismisses it for good.
   is unknown. macOS takes a few seconds to apply either change.
 
 **Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor),
-line numbers, automatic closing of brackets, quotes and Markdown markers, and
-whether Live Preview keeps the source and the rendered page scrolled to the
-same place.
+line numbers, automatic closing of brackets, quotes and Markdown markers,
+list and quote continuation on Return, and whether Live Preview keeps the
+source and the rendered page scrolled to the same place.
 
 **Shortcuts**: a reference list of every keyboard shortcut.
 

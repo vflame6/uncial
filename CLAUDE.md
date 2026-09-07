@@ -66,7 +66,11 @@ unterminated `aria-label` on the first footnote back-reference) → `HeadingAnch
 (local `<img src>` of image MIME types → `data:` URIs, resolved against the document's
 directory). With `sourcePositions: true` (the app's editor) cmark adds `data-sourcepos`
 line ranges to block elements, shifted by `FrontMatter.bodyLineOffset` so they match the
-editor's lines (`SourcePositions.shift`); Quick Look leaves it off. `renderDocument(_:title:baseURL:theme:)`
+editor's lines (`SourcePositions.shift`), and `SourcePositions.annotate` then adds `data-line`
+(the first source line) to every block that starts a new line — never `pre`, `tr`, `td`, `th`,
+one label per distinct line in document order — and wraps each code-block line in
+`<span class="line" data-line="N">` (fenced blocks start after the fence; only their range spans
+more lines than they have code lines). Quick Look leaves it off. `renderDocument(_:title:baseURL:theme:)`
 wraps that fragment with `HTMLDocument.wrap(body:title:theme:)`, which inlines
 `Stylesheet.css(for:)` and stamps `<html data-theme="…">`.
 
@@ -108,7 +112,12 @@ saves after 500 ms (atomic write); `saveNow` runs on ⌘S, when leaving an editi
 `reload()` (⌘R) always adopts the disk text. NSDocument never writes: the stock Save/Save
 As/Duplicate/Rename/Revert items are replaced in `uncialApp` (Close, Close All, Save), and
 `AppDelegate` hides the disabled stock "New" next to File ▸ New… (`NewDocumentCommand`: save
-panel, empty file, open). `WebView` reloads only when title/theme/baseURL change (scroll kept)
+panel, empty file, open). NSDocument must also never *think* it has changes: `ThemedTextView`
+owns its `UndoManager` (overriding `undoManager`, handling `undo:`/`redo:` itself), because the
+window's manager is NSDocument's and every registered edit would count as a change, start an
+autosave and hit NSDocument's "changed by another application" check after the model's own
+write (probed 2026-09-08: error 67000); `DocumentViewModel.saveNow` also refreshes the
+NSDocument's `fileModificationDate` after each write so that check never trips. `WebView` reloads only when title/theme/baseURL change (scroll kept)
 and otherwise swaps the body in place; a body arriving mid-load is applied in `didFinish`.
 `MarkdownTextView` wraps `ThemedTextView` (TextKit 1 on purpose: `NSLayoutManager` does the
 glyph ↔ point ↔ line math; `allowsNonContiguousLayout` on; SF Mono 13, soft wrap, smart
@@ -132,13 +141,23 @@ bind from it; the Shortcuts tab lists it).
 an `NSRulerView` installed once per editor as the scroll view's vertical ruler (`rulersVisible`
 follows the setting), numbers the first line fragment of every logical line from the layout
 manager (`ThemedTextView.lineIndex`), caret line in the foreground color, the rest muted, width
-from `GutterMetrics` (pure); `rehighlight()` calls its `invalidate()`. *Auto-pairing*
-(`AppSettings.autoPairing`): `AutoPairing` (pure, tested) turns a keystroke into an `Edit` —
-close `( [ { ` * _ "` in front of whitespace, punctuation or a closer (markers only at word
-boundaries), skip a tracked closer, grow `*|*` → `**|**` up to three, wrap a selection (also
-`< ~ '`), drop the closer of an empty `*`/`_` pair before a space or Return, Return inside
-```` ```|``` ```` makes a fence, Backspace removes one layer of an empty pair — and tracks the
-pairs it inserted. `ThemedTextView` overrides `insertText(_:replacementRange:)`,
+from `GutterMetrics` (pure); `rehighlight()` calls its `invalidate()`. The rendered page shows
+the same numbers: `HTMLDocument.wrap(lineNumbers:)` sets `class="line-numbers"` on `<html>`,
+`WebView` toggles that class in place (`setLineNumbers`, re-applied in `didFinish`), and the
+base stylesheet draws `attr(data-line)` as an absolutely positioned `::before` in the
+article's left padding (`html.line-numbers .markdown-body`), 85% mono, one line box per label;
+code-line spans inherit the code line height. *Auto-pairing* (`AppSettings.autoPairing`):
+`AutoPairing` (pure, tested) turns a keystroke into an `Edit` — close `( [ { ` * _ "` in front
+of whitespace, punctuation or a closer (markers only at word boundaries; `~` only at a line
+start, `Pair.lineStartOnly`), skip a tracked closer, grow `*|*` → `**|**` up to three, wrap a
+selection (also `< '`), drop the closer of an empty `*`/`_`/`~` pair before a space or Return,
+Return inside ```` ```|``` ```` or `~~~|~~~` makes a fence (checked before the whitespace
+rule), Backspace removes one layer of an empty pair — and tracks the pairs it inserted.
+*List continuation* (`AppSettings.continueLists`): `ListContinuation.edit(in:at:)` (pure,
+tested; `NSString.lineRange`, one regex for quote prefixes + indentation + bullet/number +
+task box) runs in `insertNewline` after the pairing rules: it repeats the prefix on the next
+line (numbers incremented, boxes unchecked, text after the caret carried along) or, on an
+empty item, removes the marker; tracked pairs are mapped through the edit first. `ThemedTextView` overrides `insertText(_:replacementRange:)`,
 `insertNewline`, `deleteBackward`, applies an `Edit` through `insertText(_:replacementRange:)`
 (undoable) with `isApplyingPairEdit` set, maps tracked positions in
 `shouldChangeText(in:replacementString:)` (exact range, fires for typing, paste, undo and the
@@ -147,13 +166,19 @@ with several ranges reset the pairs) and prunes on `setSelectedRanges`. The text
 delegate is deliberately not used: its `editedRange` is widened by attribute fix-ups (probed
 2026-09-07). *Find*: SwiftUI's generated Edit menu has no Find items at all (probed
 2026-09-07), so `uncialApp` adds Edit ▸ Find (`CommandGroup(after: .pasteboard)`, five items
-from `AppShortcut`) driving focused value `findInSource` → `EditorHandle.performFind`, which
-makes the text view first responder and calls `performTextFinderAction` with the action's tag;
-the native bar carries the replace row. The preview has no find.
+from `AppShortcut`) driving focused value `findInDocument` (`FindAction`, with
+`supportsReplace`): with an editor pane visible it goes to `EditorHandle.performFind`, which
+makes the text view first responder and calls `performTextFinderAction` with the action's tag
+(the native bar carries the replace row); in Read Only it goes to `PreviewFindController`
+(`@Observable`; `PreviewHandle` holds the `WKWebView`), whose `PreviewFindBar` sits above the
+page and uses `WKWebView.find(_:configuration:)` (case-insensitive, wrapping; works with
+content JavaScript off) plus `PreviewScripts.countMatches` over `innerText` for the count.
+`WKWebView` is not an `NSTextFinderClient` (probed 2026-09-08). Find and Replace… is disabled
+without an editor pane.
 
 **Settings / first run:** `AppSettings` (`appearance` System/Light/Dark → `NSApp.appearance`,
 `theme`, `defaultEditorMode`, `syncScrolling`, `showLineNumbers`, `autoPairing`,
-`hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
+`continueLists`, `hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
 `appearance`; `publishTheme()` writes the theme for Quick Look, see Sandbox),
 `QuickLookExtensionManager` (drives `/usr/bin/pluginkit` through `ShellCommand`; Install =
 `-a` + `-e use`, Remove = `-e ignore`), `DefaultAppManager` (`NSWorkspace` behind the
@@ -216,7 +241,13 @@ build-setting sandbox, but the owner chose not to ship one.
   the scratchpad) and the file can be viewed; the text view's glyphs and the web view come out
   blank. Typing can be simulated with `insertText(_:replacementRange:)` (`NSNotFound` range),
   `insertNewline(nil)` and `deleteBackward(nil)` on the text view. `NSLog` from the app does not
-  reach `log show`; write probe output to a file.
+  reach `log show`; write probe output to a file. The web view's content is captured with
+  `WKWebView.takeSnapshot(with:)` (works for a non-key window); a SwiftUI view can be rendered on
+  its own through an offscreen `NSHostingView` + `cacheDisplay`.
+- Undo groups never close in a terminal-launched app (no events), so anything that depends on
+  `NSUndoManagerDidCloseUndoGroup` (NSDocument's change count) must be provoked with
+  `endUndoGrouping()` in a probe. Leave at least two seconds between killing one launch and
+  starting the next: `open -a` reaches an instance that is still terminating.
 - `xcodebuild test` re-signs the Debug app with test-host entitlements; run a plain `build` before
   inspecting entitlements with `codesign -d --entitlements :-`.
 - Leave the machine as found after experiments: default Markdown app (currently Xcode),

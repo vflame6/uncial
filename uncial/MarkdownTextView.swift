@@ -8,6 +8,7 @@ struct MarkdownTextView: NSViewRepresentable {
     let text: String
     let palette: EditorPalette?
     let showsLineNumbers: Bool
+    let autoPairing: Bool
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     let onChange: (String) -> Void
@@ -51,6 +52,8 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.importsGraphics = false
         textView.textContainerInset = NSSize(width: 16, height: 16)
         textView.delegate = context.coordinator
+        textView.textStorage?.delegate = textView
+        textView.autoPairingEnabled = autoPairing
         textView.string = text
         textView.palette = palette
         scrollView.documentView = textView
@@ -75,15 +78,9 @@ struct MarkdownTextView: NSViewRepresentable {
         if scrollView.rulersVisible != showsLineNumbers {
             scrollView.rulersVisible = showsLineNumbers
         }
+        textView.autoPairingEnabled = autoPairing
         if textView.string != text {
-            // External change (reload, another editor): replace the text, keep the caret in range, drop undo history.
-            let selection = textView.selectedRange()
-            textView.string = text
-            let length = (text as NSString).length
-            let location = min(selection.location, length)
-            textView.setSelectedRange(NSRange(location: location, length: min(selection.length, length - location)))
-            textView.undoManager?.removeAllActions()
-            textView.rehighlight()
+            textView.replaceText(with: text)
         }
         if let scrollTarget, scrollTarget.token != context.coordinator.appliedToken {
             context.coordinator.appliedToken = scrollTarget.token
@@ -130,9 +127,9 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 }
 
-/// NSTextView that colors Markdown from the theme's palette, follows light/dark switches, and
-/// converts between scroll positions and document lines.
-final class ThemedTextView: NSTextView {
+/// NSTextView that colors Markdown from the theme's palette, follows light/dark switches, closes
+/// pairs as you type, and converts between scroll positions and document lines.
+final class ThemedTextView: NSTextView, NSTextStorageDelegate {
     static let highlightingLimit = 200_000
 
     var palette: EditorPalette? {
@@ -164,6 +161,19 @@ final class ThemedTextView: NSTextView {
         rehighlight()
     }
 
+    /// Replaces the whole text after an external change (reload, another editor): caret kept in
+    /// range, undo history and tracked pairs dropped.
+    func replaceText(with text: String) {
+        let selection = selectedRange()
+        string = text
+        let length = (text as NSString).length
+        let location = min(selection.location, length)
+        setSelectedRange(NSRange(location: location, length: min(selection.length, length - location)))
+        undoManager?.removeAllActions()
+        pairing.reset()
+        rehighlight()
+    }
+
     /// Re-applies base attributes and Markdown coloring to the whole text. Attribute-only, so undo is untouched.
     func rehighlight() {
         guard let textStorage else { return }
@@ -181,6 +191,65 @@ final class ThemedTextView: NSTextView {
         typingAttributes = style.baseAttributes
         lineNumberView?.invalidate()
     }
+
+    // MARK: Auto-pairing
+
+    var autoPairingEnabled = true
+    private var pairing = AutoPairing()
+    private var isApplyingPairEdit = false
+
+    /// The storage's own string, without copying it into a Swift String.
+    private var currentText: NSString { textStorage?.mutableString ?? NSMutableString() }
+
+    override func insertText(_ string: Any, replacementRange: NSRange) {
+        guard autoPairingEnabled, replacementRange.location == NSNotFound, !hasMarkedText(),
+              let typed = (string as? String) ?? (string as? NSAttributedString)?.string,
+              let edit = pairing.typed(typed, in: currentText, selection: selectedRange()) else {
+            super.insertText(string, replacementRange: replacementRange)
+            return
+        }
+        apply(edit)
+    }
+
+    override func insertNewline(_ sender: Any?) {
+        if autoPairingEnabled, !hasMarkedText(), let edit = pairing.newline(in: currentText, selection: selectedRange()) {
+            apply(edit)
+        } else {
+            super.insertNewline(sender)
+        }
+    }
+
+    override func deleteBackward(_ sender: Any?) {
+        if autoPairingEnabled, !hasMarkedText(), let edit = pairing.deleteBackward(in: currentText, selection: selectedRange()) {
+            apply(edit)
+        } else {
+            super.deleteBackward(sender)
+        }
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelectingFlag)
+        if !isApplyingPairEdit, let range = ranges.first?.rangeValue {
+            pairing.selectionChanged(to: range)
+        }
+    }
+
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        guard editedMask.contains(.editedCharacters), !isApplyingPairEdit else { return }
+        pairing.textChanged(in: NSRange(location: editedRange.location, length: editedRange.length - delta), replacementLength: editedRange.length)
+    }
+
+    /// Runs one decision through the normal, undoable insertion path with our own mapping switched off.
+    private func apply(_ edit: AutoPairing.Edit) {
+        isApplyingPairEdit = true
+        defer { isApplyingPairEdit = false }
+        if edit.range.length > 0 || !edit.replacement.isEmpty {
+            insertText(edit.replacement, replacementRange: edit.range)
+        }
+        setSelectedRange(edit.selection)
+    }
+
+    // MARK: Scroll math
 
     /// 0-based logical line at the top of the visible area plus the fraction scrolled into it.
     func visibleTopLine() -> Double {

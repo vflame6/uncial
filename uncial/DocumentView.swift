@@ -61,6 +61,7 @@ struct DocumentView: View {
                 text: model.text,
                 palette: settings.theme.editorPalette,
                 showsLineNumbers: settings.showLineNumbers,
+                autoPairing: settings.autoPairing,
                 scrollTarget: sync.editorTarget,
                 onChange: { model.updateText($0) },
                 onScroll: { sync.editorDidScroll(toLine: $0) }

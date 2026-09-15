@@ -78,6 +78,8 @@ struct DocumentView: View {
                 showsLineNumbers: settings.showLineNumbers,
                 autoPairing: settings.autoPairing,
                 continueLists: settings.continueLists,
+                presentation: mode.presentation,
+                baseURL: model.fileURL?.deletingLastPathComponent(),
                 scrollTarget: sync.editorTarget,
                 handle: editorHandle,
                 onChange: { model.updateText($0) },

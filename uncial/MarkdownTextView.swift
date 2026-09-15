@@ -10,6 +10,9 @@ struct MarkdownTextView: NSViewRepresentable {
     let showsLineNumbers: Bool
     let autoPairing: Bool
     let continueLists: Bool
+    let presentation: EditorPresentation
+    /// The document's directory, for relative link destinations.
+    let baseURL: URL?
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     /// Receives the text view so menu commands (Edit ▸ Find) can address it.
@@ -28,9 +31,9 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
 
-        // TextKit 1: NSLayoutManager gives the glyph ↔ point ↔ line math the sync needs.
-        let textView = ThemedTextView(usingTextLayoutManager: false)
-        textView.layoutManager?.allowsNonContiguousLayout = true
+        // TextKit 1: NSLayoutManager gives the glyph ↔ point ↔ line math the sync needs and the
+        // glyph properties the inline presentation needs.
+        let textView = ThemedTextView.standalone()
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
         textView.isVerticallyResizable = true
@@ -57,6 +60,8 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.delegate = context.coordinator
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
+        textView.presentation = presentation
+        textView.baseURL = baseURL
         textView.string = text
         textView.palette = palette
         scrollView.documentView = textView
@@ -84,6 +89,10 @@ struct MarkdownTextView: NSViewRepresentable {
         }
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
+        textView.baseURL = baseURL
+        if textView.presentation != presentation {
+            textView.presentation = presentation
+        }
         if textView.string != text {
             textView.replaceText(with: text)
         }
@@ -132,10 +141,26 @@ struct MarkdownTextView: NSViewRepresentable {
     }
 }
 
-/// NSTextView that colors Markdown from the theme's palette, follows light/dark switches, closes
-/// pairs as you type, and converts between scroll positions and document lines.
+/// NSTextView that colors Markdown from the theme's palette (or renders it in place, see
+/// `presentation`), follows light/dark switches, closes pairs as you type, and converts between
+/// scroll positions and document lines.
 final class ThemedTextView: NSTextView {
     static let highlightingLimit = 200_000
+
+    /// The TextKit 1 stack the app uses: storage → `InlineLayoutManager` → container → view, with
+    /// the view as the layout manager's delegate (glyph hiding) and non-contiguous layout on.
+    static func standalone() -> ThemedTextView {
+        let storage = NSTextStorage()
+        let layoutManager = InlineLayoutManager()
+        layoutManager.allowsNonContiguousLayout = true
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layoutManager.addTextContainer(container)
+        let textView = ThemedTextView(frame: .zero, textContainer: container)
+        layoutManager.delegate = textView
+        return textView
+    }
 
     var palette: EditorPalette? {
         didSet { if palette != oldValue { applyStyle() } }
@@ -163,6 +188,11 @@ final class ThemedTextView: NSTextView {
         backgroundColor = style.background
         insertionPointColor = style.foreground
         enclosingScrollView?.backgroundColor = style.background
+        linkTextAttributes = [.foregroundColor: style.accent, .cursor: NSCursor.iBeam]
+        if let layoutManager = layoutManager as? InlineLayoutManager {
+            layoutManager.codeBackground = InlineStyle(style: style).codeBackground
+            layoutManager.lineColor = style.muted
+        }
         rehighlight()
     }
 
@@ -179,22 +209,89 @@ final class ThemedTextView: NSTextView {
         rehighlight()
     }
 
-    /// Re-applies base attributes and Markdown coloring to the whole text. Attribute-only, so undo is untouched.
+    /// Re-applies base attributes and, per presentation, the Markdown coloring or the inline
+    /// rendering. Attribute-only, so undo is untouched. Inline: every glyph is invalidated so markers
+    /// that appeared or vanished anywhere are hidden or shown correctly (regenerated lazily).
     func rehighlight() {
         guard let textStorage else { return }
         let text = string
         lineIndex = LineIndex(text: text)
         let full = NSRange(location: 0, length: textStorage.length)
+        let hadMarkers = markers != .empty
         textStorage.beginEditing()
         textStorage.setAttributes(style.baseAttributes, range: full)
         if textStorage.length <= Self.highlightingLimit {
-            for span in MarkdownHighlighter.spans(in: text) where NSMaxRange(span.range) <= textStorage.length {
-                textStorage.addAttributes(style.attributes(for: span.kind), range: span.range)
+            let tokens = MarkdownHighlighter.tokens(in: text)
+            switch presentation {
+            case .source:
+                for span in MarkdownHighlighter.spans(from: tokens) where NSMaxRange(span.range) <= textStorage.length {
+                    textStorage.addAttributes(style.attributes(for: span.kind), range: span.range)
+                }
+                markers = .empty
+            case .inline:
+                InlineStyle(style: style).apply(tokens, to: textStorage)
+                markers = MarkerIndex(tokens: tokens)
             }
+        } else {
+            markers = .empty
         }
         textStorage.endEditing()
         typingAttributes = style.baseAttributes
+        if hadMarkers || markers != .empty {
+            revealed = markers.revealedRange(for: selectedRange(), in: currentText)
+            layoutManager?.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
+            layoutManager?.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
+        }
         lineNumberView?.invalidate()
+    }
+
+    // MARK: Inline presentation
+
+    /// `.inline` renders Markdown in place and hides the markers of every line but the caret's.
+    var presentation: EditorPresentation = .source {
+        didSet { if presentation != oldValue { rehighlight() } }
+    }
+    /// The document's directory; relative link destinations resolve against it.
+    var baseURL: URL?
+    private(set) var markers = MarkerIndex.empty
+    /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
+    private(set) var revealed = NSRange(location: 0, length: 0)
+    private var bulletCache: (font: NSFont, glyph: CGGlyph?)?
+
+    private func updateReveal() {
+        guard presentation == .inline, markers != .empty, let layoutManager else { return }
+        let next = markers.revealedRange(for: selectedRange(), in: currentText)
+        guard next != revealed else { return }
+        let previous = revealed
+        revealed = next
+        let whole = NSRange(location: 0, length: currentText.length)
+        for range in [previous, next] {
+            let clamped = NSIntersectionRange(range, whole)
+            guard clamped.length > 0 else { continue }
+            layoutManager.invalidateGlyphs(forCharacterRange: clamped, changeInLength: 0, actualCharacterRange: nil)
+            layoutManager.invalidateLayout(forCharacterRange: clamped, actualCharacterRange: nil)
+        }
+    }
+
+    /// The bullet glyph of `font`, if it has one.
+    private func bulletGlyph(for font: NSFont) -> CGGlyph? {
+        if let bulletCache, bulletCache.font == font { return bulletCache.glyph }
+        var character: UniChar = 0x2022
+        var glyph = CGGlyph(0)
+        let found = CTFontGetGlyphsForCharacters(font as CTFont, &character, &glyph, 1)
+        bulletCache = (font, found ? glyph : nil)
+        return bulletCache?.glyph
+    }
+
+    /// Plain click: put the caret there, which reveals the line. ⌘-click: open the destination.
+    override func clicked(onLink link: Any, at charIndex: Int) {
+        let destination = (link as? String) ?? (link as? URL)?.absoluteString ?? ""
+        if NSApp.currentEvent?.modifierFlags.contains(.command) == true, !destination.hasPrefix("#"),
+           let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL {
+            LinkOpener.open(url)
+        } else {
+            setSelectedRange(NSRange(location: charIndex, length: 0))
+        }
     }
 
     // MARK: Undo
@@ -270,6 +367,7 @@ final class ThemedTextView: NSTextView {
         if !isApplyingPairEdit, let range = ranges.first?.rangeValue {
             pairing.selectionChanged(to: range)
         }
+        updateReveal()
     }
 
     /// Every character change NSTextView makes for the user (typing, paste, delete, drag, undo, find
@@ -351,5 +449,32 @@ final class ThemedTextView: NSTextView {
         }
         let glyphs = layoutManager.glyphRange(forCharacterRange: characters, actualCharacterRange: nil)
         return layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer)
+    }
+}
+
+extension ThemedTextView: NSLayoutManagerDelegate {
+    /// Hides markers outside the revealed range (zero-width `.null` glyphs) and re-glyphs list
+    /// bullets. Works only from the arrays it is handed: any glyph-tree query here throws
+    /// "reentrant glyph generation problem" (probed 2026-09-15).
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>, properties: UnsafePointer<NSLayoutManager.GlyphProperty>, characterIndexes: UnsafePointer<Int>, font: NSFont, forGlyphRange glyphRange: NSRange) -> Int {
+        guard presentation == .inline, glyphRange.length > 0 else { return 0 }
+        let count = glyphRange.length
+        let first = characterIndexes[0]
+        let span = NSRange(location: first, length: characterIndexes[count - 1] - first + 1)
+        let wantsBullet = markers.bullets.contains { NSLocationInRange($0, span) }
+        guard markers.hasHidden(in: span) || wantsBullet else { return 0 }
+        let bullet = wantsBullet ? bulletGlyph(for: font) : nil
+        var newGlyphs = Array(UnsafeBufferPointer(start: glyphs, count: count))
+        var newProperties = Array(UnsafeBufferPointer(start: properties, count: count))
+        for index in 0..<count {
+            let character = characterIndexes[index]
+            if markers.isHidden(character), !NSLocationInRange(character, revealed) {
+                newProperties[index] = .null
+            } else if let bullet, markers.bullets.contains(character) {
+                newGlyphs[index] = bullet
+            }
+        }
+        layoutManager.setGlyphs(newGlyphs, properties: newProperties, characterIndexes: characterIndexes, font: font, forGlyphRange: glyphRange)
+        return count
     }
 }

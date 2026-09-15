@@ -5,6 +5,19 @@ extension NSAttributedString.Key {
     static let blockDecoration = NSAttributedString.Key("uncialBlockDecoration")
     /// A task box `[ ]`/`[x]` drawn by `InlineLayoutManager`: "unchecked" or "checked".
     static let taskBox = NSAttributedString.Key("uncialTaskBox")
+    /// An `InlineImage` drawn by `InlineLayoutManager` in the paragraph's reserved spacing.
+    static let inlineImage = NSAttributedString.Key("uncialInlineImage")
+}
+
+/// A loaded image and the size it is drawn at under its paragraph.
+final class InlineImage: NSObject {
+    let image: NSImage
+    let size: NSSize
+
+    init(image: NSImage, size: NSSize) {
+        self.image = image
+        self.size = size
+    }
 }
 
 /// Attributes for the inline presentation: headings sized, markers muted, code on a background,
@@ -14,6 +27,8 @@ struct InlineStyle {
     static let headingSizes: [CGFloat] = [22, 19, 16, 14, 13, 13]
     static let quoteIndent: CGFloat = 16
     static let codeIndent: CGFloat = 12
+    static let maximumImageHeight: CGFloat = 480
+    static let imageGap: CGFloat = 8
 
     let style: EditorStyle
     let characterWidth: CGFloat
@@ -40,8 +55,11 @@ struct InlineStyle {
         NSFont.monospacedSystemFont(ofSize: Self.headingSizes[max(1, min(level, 6)) - 1], weight: .bold)
     }
 
-    /// `storage` must already carry the base attributes for its whole text.
-    func apply(_ tokens: [MarkdownHighlighter.Token], to storage: NSTextStorage) {
+    /// `storage` must already carry the base attributes for its whole text. `images` loads an
+    /// image token's destination (nil keeps it as source); `textWidth` is the room for text, which
+    /// bounds the drawn size. Returns the locations of the image tokens that got an image.
+    @discardableResult
+    func apply(_ tokens: [MarkdownHighlighter.Token], to storage: NSTextStorage, images: (String) -> NSImage? = { _ in nil }, textWidth: CGFloat = .greatestFiniteMagnitude) -> Set<Int> {
         let text = storage.string as NSString
         for token in tokens {
             let paragraph = text.paragraphRange(for: token.range)
@@ -90,6 +108,31 @@ struct InlineStyle {
                 storage.addAttribute(.foregroundColor, value: style.muted, range: marker)
             }
         }
+        return reserveImages(tokens, in: storage, images: images, textWidth: textWidth)
+    }
+
+    /// The first image of a paragraph that loads gets drawn under it: the paragraph's spacing
+    /// grows by the fitted height plus a gap, and the picture rides along as an attribute.
+    private func reserveImages(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, images: (String) -> NSImage?, textWidth: CGFloat) -> Set<Int> {
+        let text = storage.string as NSString
+        var resolved: Set<Int> = []
+        var decorated: Set<Int> = []
+        for token in tokens {
+            guard case .image(let destination) = token.kind else { continue }
+            let paragraph = text.paragraphRange(for: token.range)
+            guard !decorated.contains(paragraph.location), let image = images(destination),
+                  image.size.width > 0, image.size.height > 0 else { continue }
+            let existing = storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle
+            let available = max(40, textWidth - (existing?.headIndent ?? 0))
+            let scale = min(1, available / image.size.width, Self.maximumImageHeight / image.size.height)
+            let size = NSSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
+            let spaced = (existing?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+            spaced.paragraphSpacing = size.height + Self.imageGap
+            storage.addAttributes([.paragraphStyle: spaced, .inlineImage: InlineImage(image: image, size: size)], range: paragraph)
+            decorated.insert(paragraph.location)
+            resolved.insert(token.range.location)
+        }
+        return resolved
     }
 
     private func addTrait(_ trait: NSFontTraitMask, to storage: NSTextStorage, in range: NSRange) {

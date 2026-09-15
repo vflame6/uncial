@@ -230,12 +230,14 @@ final class ThemedTextView: NSTextView {
                 }
                 markers = .empty
             case .inline:
-                InlineStyle(style: style).apply(tokens, to: textStorage)
-                markers = MarkerIndex(tokens: tokens)
+                let textWidth = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
+                resolvedImages = InlineStyle(style: style).apply(tokens, to: textStorage, images: { self.image(for: $0) }, textWidth: textWidth)
+                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages)
             }
         } else {
             markers = .empty
         }
+        if presentation == .source { resolvedImages = [] }
         textStorage.endEditing()
         typingAttributes = style.baseAttributes
         if hadMarkers || markers != .empty {
@@ -252,9 +254,19 @@ final class ThemedTextView: NSTextView {
     var presentation: EditorPresentation = .source {
         didSet { if presentation != oldValue { rehighlight() } }
     }
-    /// The document's directory; relative link destinations resolve against it.
-    var baseURL: URL?
+    /// The document's directory; relative link and image destinations resolve against it.
+    var baseURL: URL? {
+        didSet {
+            guard baseURL != oldValue else { return }
+            imageCache.removeAll()
+            if presentation == .inline { rehighlight() }
+        }
+    }
     private(set) var markers = MarkerIndex.empty
+    /// Locations of the image tokens that loaded and are drawn under their paragraph.
+    private(set) var resolvedImages: Set<Int> = []
+    private var imageCache: [String: NSImage?] = [:]
+    private var layoutWidth: CGFloat = 0
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
     private(set) var revealed = NSRange(location: 0, length: 0)
     private var bulletCache: (font: NSFont, glyph: CGGlyph?)?
@@ -271,6 +283,29 @@ final class ThemedTextView: NSTextView {
             guard clamped.length > 0 else { continue }
             layoutManager.invalidateGlyphs(forCharacterRange: clamped, changeInLength: 0, actualCharacterRange: nil)
             layoutManager.invalidateLayout(forCharacterRange: clamped, actualCharacterRange: nil)
+        }
+    }
+
+    /// Local images only (a destination without scheme or with `file:`), cached per destination
+    /// including misses; remote and unreadable ones stay as source.
+    func image(for destination: String) -> NSImage? {
+        if let cached = imageCache[destination] { return cached }
+        var loaded: NSImage?
+        let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL ?? baseURL?.appendingPathComponent(destination)
+        if let url, url.isFileURL {
+            loaded = NSImage(contentsOf: url)
+        }
+        imageCache[destination] = loaded
+        return loaded
+    }
+
+    /// Images are fitted to the text width, so a width change re-fits them.
+    override func setFrameSize(_ newSize: NSSize) {
+        super.setFrameSize(newSize)
+        guard newSize.width != layoutWidth else { return }
+        layoutWidth = newSize.width
+        if presentation == .inline, !resolvedImages.isEmpty {
+            rehighlight()
         }
     }
 

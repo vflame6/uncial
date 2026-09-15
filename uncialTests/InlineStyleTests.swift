@@ -61,6 +61,54 @@ import UncialCore
         #expect(paragraph(text, 31)?.headIndent == inline.characterWidth * 4)
     }
 
+    @Test func imagesReserveSpaceAndHideMarkers() {
+        let picture = NSImage(size: NSSize(width: 200, height: 100))
+        func provider(_ destination: String) -> NSImage? { destination == "pic.png" ? picture : nil }
+        let text = "![a](pic.png)\n![b](missing.png)"
+        let wide = NSTextStorage(string: text, attributes: style.baseAttributes)
+        let resolved = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: wide, images: provider, textWidth: 400)
+        #expect(resolved == [0])
+        #expect(paragraph(wide, 0)?.paragraphSpacing == 108)
+        #expect((wide.attribute(.inlineImage, at: 0, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 200, height: 100))
+        #expect((paragraph(wide, 14)?.paragraphSpacing ?? 0) == 0)
+        #expect(wide.attribute(.inlineImage, at: 14, effectiveRange: nil) == nil)
+        let narrow = NSTextStorage(string: text, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: narrow, images: provider, textWidth: 100)
+        #expect((narrow.attribute(.inlineImage, at: 0, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 100, height: 50))
+        #expect(paragraph(narrow, 0)?.paragraphSpacing == 58)
+    }
+
+    @Test func layoutManagerDrawsImagesUnderTheirLine() {
+        let picture = NSImage(size: NSSize(width: 40, height: 20), flipped: false) { rect in
+            NSColor.red.setFill()
+            rect.fill()
+            return true
+        }
+        let text = "![a](pic.png)\nafter"
+        let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage, images: { _ in picture }, textWidth: 400)
+        let layoutManager = InlineLayoutManager()
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 400, height: 1000))
+        layoutManager.addTextContainer(container)
+        layoutManager.ensureLayout(for: container)
+        let first = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
+        #expect(abs(first.height - 44) < 0.5)
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let context = NSGraphicsContext(bitmapImageRep: rep)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 400, height: 100).fill()
+        context.cgContext.translateBy(x: 0, y: 100)
+        context.cgContext.scaleBy(x: 1, y: -1)
+        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
+        NSGraphicsContext.restoreGraphicsState()
+        func isRed(_ x: Int, _ y: Int) -> Bool { rep.colorAt(x: x, y: y).map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
+        #expect(isRed(20, 30) && isRed(40, 22) && isRed(20, 38))
+        #expect(!isRed(20, 8) && !isRed(20, 50) && !isRed(60, 30))
+    }
+
     @Test func layoutManagerDrawsTaskBoxesOnlyWhileHidden() {
         let view = ThemedTextView.standalone()
         view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)

@@ -26,7 +26,20 @@ final class InlineLayoutManager: NSLayoutManager {
                 self.draw(decoration, in: box, fragment: fragment, fragmentGlyphs: fragmentGlyphs, storage: storage, text: text)
             }
             self.drawTaskBoxes(in: fragment, lineRect: box, container: container, origin: origin, storage: storage)
+            self.drawImage(in: fragment, lineRect: box, container: container, storage: storage, text: text)
         }
+    }
+
+    /// The paragraph's image sits in the spacing below its last line fragment, left-aligned with the text.
+    private func drawImage(in fragment: NSRange, lineRect: NSRect, container: NSTextContainer, storage: NSTextStorage, text: NSString) {
+        guard let inline = storage.attribute(.inlineImage, at: fragment.location, effectiveRange: nil) as? InlineImage else { return }
+        let paragraph = text.paragraphRange(for: NSRange(location: fragment.location, length: 0))
+        guard NSMaxRange(fragment) >= NSMaxRange(paragraph) else { return }
+        let indent = (storage.attribute(.paragraphStyle, at: fragment.location, effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? 0
+        let target = NSRect(x: lineRect.minX + container.lineFragmentPadding + indent,
+                            y: lineRect.maxY - InlineStyle.imageGap / 2 - inline.size.height,
+                            width: inline.size.width, height: inline.size.height)
+        inline.image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
     }
 
     private func draw(_ decoration: String, in box: NSRect, fragment: NSRange, fragmentGlyphs: NSRange, storage: NSTextStorage, text: NSString) {

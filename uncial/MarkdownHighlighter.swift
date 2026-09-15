@@ -19,7 +19,7 @@ nonisolated enum MarkdownHighlighter {
             case heading(level: Int)
             case strong, emphasis, strikethrough, inlineCode
             case link(destination: String)
-            case image
+            case image(destination: String)
             case autolink(destination: String)
             /// `bullet` is the character index of a `-`, `*` or `+` marker (nil for numbered items);
             /// `box` the three characters of a task box `[ ]`/`[x]`, whose brackets are markers.
@@ -187,7 +187,7 @@ nonisolated enum MarkdownHighlighter {
                 .trimmingCharacters(in: .whitespaces)
             let destination = String(target.split(separator: " ", maxSplits: 1).first ?? "")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "<>"))
-            tokens.append(Token(range: shifted(match.range), kind: isImage ? .image : .link(destination: destination), markers: markers))
+            tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination), markers: markers))
             mask(close)
         }
         for match in strong.matches(in: scratch as String, range: region) {

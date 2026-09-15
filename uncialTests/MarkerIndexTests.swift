@@ -13,6 +13,8 @@ import Testing
         #expect(markers.hidden == [NSRange(location: 0, length: 3), NSRange(location: 5, length: 2), NSRange(location: 8, length: 2)])
         #expect(markers.isHidden(0) && markers.isHidden(2) && !markers.isHidden(3) && markers.isHidden(9) && !markers.isHidden(11))
         #expect(markers.hasHidden(in: NSRange(location: 4, length: 2)) && !markers.hasHidden(in: NSRange(location: 11, length: 12)))
+        let resolved = MarkerIndex(tokens: MarkdownHighlighter.tokens(in: text), resolvedImages: [11])
+        #expect(resolved.hidden.count == 5 && resolved.isHidden(11) && resolved.isHidden(16) && !resolved.isHidden(13))
     }
 
     @Test func collectsBulletsAndBlocks() {

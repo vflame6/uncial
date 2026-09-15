@@ -122,6 +122,29 @@ import Testing
         #expect(inline.taskBox(at: point) == nil)
     }
 
+    @Test func loadsLocalImagesOnly() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-inline-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let picture = NSImage(size: NSSize(width: 30, height: 10), flipped: false) { rect in
+            NSColor.blue.setFill()
+            rect.fill()
+            return true
+        }
+        let png = NSBitmapImageRep(data: picture.tiffRepresentation!)!.representation(using: .png, properties: [:])!
+        try png.write(to: directory.appendingPathComponent("file.png"))
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.baseURL = directory
+        inline.presentation = .inline
+        inline.replaceText(with: "![a](file.png)\n![r](https://x/y.png)\nend")
+        inline.setSelectedRange(NSRange(location: 40, length: 0))
+        layout(inline)
+        #expect(inline.markers.isHidden(0) && !inline.markers.isHidden(15))
+        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 18)
+        #expect(inline.textStorage!.attribute(.paragraphStyle, at: 15, effectiveRange: nil) == nil)
+    }
+
     @Test func plainClickOnALinkPlacesTheCaret() {
         let inline = editor("[text](https://example.com) after", presentation: .inline, caret: 30)
         inline.clicked(onLink: "https://example.com", at: 3)

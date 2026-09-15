@@ -96,7 +96,7 @@ import Testing
     @Test func inlineTokensListTheirDelimiters() {
         let text = "**b** *e* ~~s~~ ``c`` [t](https://x/y \"title\") ![a](i.png) <https://a.b>"
         let tokens = MarkdownHighlighter.tokens(in: text)
-        #expect(tokens.map(\.kind) == [.strong, .emphasis, .strikethrough, .inlineCode, .link(destination: "https://x/y"), .image, .autolink(destination: "https://a.b")])
+        #expect(tokens.map(\.kind) == [.strong, .emphasis, .strikethrough, .inlineCode, .link(destination: "https://x/y"), .image(destination: "i.png"), .autolink(destination: "https://a.b")])
         #expect(markers(tokens[0], in: text) == ["**", "**"])
         #expect(markers(tokens[1], in: text) == ["*", "*"])
         #expect(markers(tokens[2], in: text) == ["~~", "~~"])

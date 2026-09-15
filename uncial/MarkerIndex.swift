@@ -2,6 +2,7 @@ import Foundation
 
 /// What the inline presentation hides and reveals: the delimiter ranges of every construct, the
 /// bullets it re-draws, and the fenced blocks that reveal as a whole when the caret is inside.
+/// Image markers hide only for the images that loaded (`resolvedImages`: token locations).
 nonisolated struct MarkerIndex: Equatable {
     static let empty = MarkerIndex(tokens: [])
 
@@ -12,7 +13,7 @@ nonisolated struct MarkerIndex: Equatable {
     /// Fenced code blocks including both fence lines; an unclosed one runs to its last code line.
     let blocks: [NSRange]
 
-    init(tokens: [MarkdownHighlighter.Token]) {
+    init(tokens: [MarkdownHighlighter.Token], resolvedImages: Set<Int> = []) {
         var hidden: [NSRange] = []
         var bullets: Set<Int> = []
         var blocks: [NSRange] = []
@@ -20,7 +21,10 @@ nonisolated struct MarkerIndex: Equatable {
         var blockEnd = 0
         for token in tokens {
             switch token.kind {
-            case .image, .frontMatter:
+            case .frontMatter:
+                continue
+            case .image:
+                if resolvedImages.contains(token.range.location) { hidden += token.markers }
                 continue
             case .listItem(let bullet, _):
                 if let bullet { bullets.insert(bullet) }

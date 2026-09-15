@@ -49,7 +49,7 @@ import UncialCore
 
     @Test func listsHangQuotesIndentCodeDecorates() {
         let inline = InlineStyle(style: style)
-        let text = storage("- item\n> q\n```\nx\n```\n---")
+        let text = storage("- item\n> q\n```\nx\n```\n---\n- [x] done")
         #expect(paragraph(text, 3)?.headIndent == inline.characterWidth * 2 && paragraph(text, 3)?.firstLineHeadIndent == 0)
         #expect(color(text, 0) == style.accent)
         #expect(paragraph(text, 9)?.firstLineHeadIndent == InlineStyle.quoteIndent && decoration(text, 9) == "quote:1")
@@ -57,6 +57,50 @@ import UncialCore
         #expect(decoration(text, 11) == "code" && color(text, 11) == style.muted)
         #expect(paragraph(text, 15)?.headIndent == InlineStyle.codeIndent)
         #expect(decoration(text, 21) == "rule")
+        #expect(text.attribute(.taskBox, at: 28, effectiveRange: nil) as? String == "checked")
+        #expect(paragraph(text, 31)?.headIndent == inline.characterWidth * 4)
+    }
+
+    @Test func layoutManagerDrawsTaskBoxesOnlyWhileHidden() {
+        let view = ThemedTextView.standalone()
+        view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)
+        view.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        view.presentation = .inline
+        view.replaceText(with: "- [ ] a\n- [x] b\nend")
+        view.setSelectedRange(NSRange(location: 18, length: 0))
+        let layoutManager = view.layoutManager as! InlineLayoutManager
+        layoutManager.lineColor = .blue
+        layoutManager.accent = .green
+        func render() -> NSBitmapImageRep {
+            layoutManager.ensureLayout(for: view.textContainer!)
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            let context = NSGraphicsContext(bitmapImageRep: rep)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            NSColor.white.setFill()
+            NSRect(x: 0, y: 0, width: 400, height: 100).fill()
+            context.cgContext.translateBy(x: 0, y: 100)
+            context.cgContext.scaleBy(x: 1, y: -1)
+            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: view.textContainer!), at: view.textContainerOrigin)
+            NSGraphicsContext.restoreGraphicsState()
+            return rep
+        }
+        func hasBlue(_ rep: NSBitmapImageRep, y: Int) -> Bool {
+            (16...34).contains { x in rep.colorAt(x: x, y: y).map { $0.blueComponent > 0.6 && $0.redComponent < 0.6 } ?? false }
+        }
+        func isGreen(_ rep: NSBitmapImageRep, x: Int, y: Int) -> Bool {
+            rep.colorAt(x: x, y: y).map { $0.greenComponent > 0.9 && $0.redComponent < 0.1 } ?? false
+        }
+        let hidden = render()
+        let advance = InlineStyle(style: view.style).characterWidth
+        let middleX = Int(5 + 2.5 * advance)
+        #expect(hasBlue(hidden, y: 8))
+        #expect(isGreen(hidden, x: middleX, y: 20))
+        #expect(!isGreen(hidden, x: middleX, y: 8))
+        view.setSelectedRange(NSRange(location: 6, length: 0))
+        let revealed = render()
+        #expect(!hasBlue(revealed, y: 8))
+        #expect(isGreen(revealed, x: middleX, y: 20))
     }
 
     @Test func layoutManagerPaintsDecorationsBehindTheRightLines() {

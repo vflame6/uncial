@@ -22,7 +22,7 @@ nonisolated struct MarkerIndex: Equatable {
             switch token.kind {
             case .image, .frontMatter:
                 continue
-            case .listItem(let bullet):
+            case .listItem(let bullet, _):
                 if let bullet { bullets.insert(bullet) }
             case .fence:
                 if let start = blockStart {

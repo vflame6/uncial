@@ -104,6 +104,24 @@ import Testing
         #expect(!isBlue(pixel(3, 9)) && !isRed(pixel(100, 9)))
     }
 
+    @Test func clickingATaskBoxTogglesIt() {
+        let inline = editor("- [ ] task\nend", presentation: .inline, caret: 12)
+        let layoutManager = inline.layoutManager!
+        let middle = layoutManager.glyphIndexForCharacter(at: 3)
+        let cell = layoutManager.boundingRect(forGlyphRange: NSRange(location: middle, length: 1), in: inline.textContainer!)
+        let point = NSPoint(x: cell.midX + inline.textContainerOrigin.x, y: cell.midY + inline.textContainerOrigin.y)
+        #expect(inline.taskBox(at: point) == NSRange(location: 2, length: 3))
+        inline.toggle(taskBox: NSRange(location: 2, length: 3))
+        #expect(inline.string.hasPrefix("- [x] task"))
+        #expect(inline.selectedRange() == NSRange(location: 12, length: 0))
+        #expect(inline.undoManager?.canUndo == true)
+        inline.undoManager?.undo()
+        #expect(inline.string.hasPrefix("- [ ] task"))
+        inline.setSelectedRange(NSRange(location: 8, length: 0))
+        layout(inline)
+        #expect(inline.taskBox(at: point) == nil)
+    }
+
     @Test func plainClickOnALinkPlacesTheCaret() {
         let inline = editor("[text](https://example.com) after", presentation: .inline, caret: 30)
         inline.clicked(onLink: "https://example.com", at: 3)

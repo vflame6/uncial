@@ -3,6 +3,8 @@ import AppKit
 extension NSAttributedString.Key {
     /// Paragraph decoration drawn by `InlineLayoutManager`: "code", "quote:N" or "rule".
     static let blockDecoration = NSAttributedString.Key("uncialBlockDecoration")
+    /// A task box `[ ]`/`[x]` drawn by `InlineLayoutManager`: "unchecked" or "checked".
+    static let taskBox = NSAttributedString.Key("uncialTaskBox")
 }
 
 /// Attributes for the inline presentation: headings sized, markers muted, code on a background,
@@ -58,10 +60,15 @@ struct InlineStyle {
                 storage.addAttributes([.foregroundColor: style.accent, .link: destination], range: token.range)
             case .image:
                 storage.addAttribute(.foregroundColor, value: style.accent, range: token.range)
-            case .listItem:
+            case .listItem(_, let box):
                 storage.addAttribute(.foregroundColor, value: style.accent, range: token.range)
+                if let box {
+                    let checked = text.character(at: box.location + 1) != 0x20
+                    storage.addAttribute(.taskBox, value: checked ? "checked" : "unchecked", range: box)
+                }
+                // The box's brackets are hidden, so the visible prefix is two characters shorter.
                 let hanging = NSMutableParagraphStyle()
-                hanging.headIndent = characterWidth * CGFloat(token.range.length)
+                hanging.headIndent = characterWidth * CGFloat(token.range.length - (box == nil ? 0 : 2))
                 storage.addAttribute(.paragraphStyle, value: hanging, range: paragraph)
             case .quote(let depth):
                 let indented = NSMutableParagraphStyle()

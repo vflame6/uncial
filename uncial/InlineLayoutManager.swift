@@ -9,6 +9,7 @@ final class InlineLayoutManager: NSLayoutManager {
 
     var codeBackground: NSColor = .clear
     var lineColor: NSColor = .clear
+    var accent: NSColor = .clear
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
@@ -17,28 +18,65 @@ final class InlineLayoutManager: NSLayoutManager {
         // Per fragment, keyed by the paragraph of its first character: hidden (zero-width) markers
         // at a paragraph start are laid out at the end of the previous line's fragment, so the
         // glyph range of a paragraph is not a reliable way to find its fragments.
-        enumerateLineFragments(forGlyphRange: glyphsToShow) { rect, _, _, fragmentGlyphs, _ in
+        enumerateLineFragments(forGlyphRange: glyphsToShow) { rect, _, container, fragmentGlyphs, _ in
             let fragment = self.characterRange(forGlyphRange: fragmentGlyphs, actualGlyphRange: nil)
-            guard fragment.location < text.length,
-                  let decoration = storage.attribute(.blockDecoration, at: fragment.location, effectiveRange: nil) as? String else { return }
-            let paragraph = text.paragraphRange(for: NSRange(location: fragment.location, length: 0))
+            guard fragment.location < text.length else { return }
             let box = rect.offsetBy(dx: origin.x, dy: origin.y)
-            switch decoration {
-            case "code":
-                let before = paragraph.location > 0 ? storage.attribute(.blockDecoration, at: paragraph.location - 1, effectiveRange: nil) as? String : nil
-                let after = NSMaxRange(paragraph) < text.length ? storage.attribute(.blockDecoration, at: NSMaxRange(paragraph), effectiveRange: nil) as? String : nil
-                let isFirst = before != "code" && self.startsParagraph(fragmentGlyphs, paragraph: paragraph)
-                let isLast = after != "code" && NSMaxRange(fragment) >= NSMaxRange(paragraph)
-                self.fillCode(box, roundTop: isFirst, roundBottom: isLast)
-            case "rule":
-                self.lineColor.setFill()
-                NSRect(x: box.minX, y: floor(box.midY), width: box.width, height: 1).fill()
-            default:
-                guard decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) else { return }
-                self.lineColor.setFill()
-                for level in 0..<depth {
-                    NSRect(x: box.minX + InlineStyle.quoteIndent * CGFloat(level) + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
-                }
+            if let decoration = storage.attribute(.blockDecoration, at: fragment.location, effectiveRange: nil) as? String {
+                self.draw(decoration, in: box, fragment: fragment, fragmentGlyphs: fragmentGlyphs, storage: storage, text: text)
+            }
+            self.drawTaskBoxes(in: fragment, lineRect: box, container: container, origin: origin, storage: storage)
+        }
+    }
+
+    private func draw(_ decoration: String, in box: NSRect, fragment: NSRange, fragmentGlyphs: NSRange, storage: NSTextStorage, text: NSString) {
+        let paragraph = text.paragraphRange(for: NSRange(location: fragment.location, length: 0))
+        switch decoration {
+        case "code":
+            let before = paragraph.location > 0 ? storage.attribute(.blockDecoration, at: paragraph.location - 1, effectiveRange: nil) as? String : nil
+            let after = NSMaxRange(paragraph) < text.length ? storage.attribute(.blockDecoration, at: NSMaxRange(paragraph), effectiveRange: nil) as? String : nil
+            let isFirst = before != "code" && startsParagraph(fragmentGlyphs, paragraph: paragraph)
+            let isLast = after != "code" && NSMaxRange(fragment) >= NSMaxRange(paragraph)
+            fillCode(box, roundTop: isFirst, roundBottom: isLast)
+        case "rule":
+            lineColor.setFill()
+            NSRect(x: box.minX, y: floor(box.midY), width: box.width, height: 1).fill()
+        default:
+            guard decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) else { return }
+            lineColor.setFill()
+            for level in 0..<depth {
+                NSRect(x: box.minX + InlineStyle.quoteIndent * CGFloat(level) + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
+            }
+        }
+    }
+
+    /// A rounded square centered on the box's middle character, drawn only while the brackets
+    /// are hidden (a revealed line shows the raw `[ ]`).
+    private func drawTaskBoxes(in fragment: NSRange, lineRect: NSRect, container: NSTextContainer, origin: NSPoint, storage: NSTextStorage) {
+        storage.enumerateAttribute(.taskBox, in: fragment, options: []) { value, range, _ in
+            guard let state = value as? String, range.length == 3,
+                  propertyForGlyph(at: glyphIndexForCharacter(at: range.location)) == .null else { return }
+            let middle = glyphIndexForCharacter(at: range.location + 1)
+            let cell = boundingRect(forGlyphRange: NSRange(location: middle, length: 1), in: container).offsetBy(dx: origin.x, dy: origin.y)
+            let side = min(14, lineRect.height - 5)
+            let square = NSRect(x: cell.midX - side / 2, y: cell.midY - side / 2, width: side, height: side)
+            let outline = NSBezierPath(roundedRect: square.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2)
+            if state == "checked" {
+                accent.setFill()
+                outline.fill()
+                let check = NSBezierPath()
+                check.move(to: NSPoint(x: square.minX + side * 0.22, y: square.minY + side * 0.5))
+                check.line(to: NSPoint(x: square.minX + side * 0.42, y: square.minY + side * 0.72))
+                check.line(to: NSPoint(x: square.minX + side * 0.78, y: square.minY + side * 0.3))
+                check.lineWidth = 1.5
+                check.lineCapStyle = .round
+                check.lineJoinStyle = .round
+                NSColor.white.setStroke()
+                check.stroke()
+            } else {
+                lineColor.setStroke()
+                outline.lineWidth = 1
+                outline.stroke()
             }
         }
     }

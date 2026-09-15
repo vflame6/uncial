@@ -21,8 +21,9 @@ nonisolated enum MarkdownHighlighter {
             case link(destination: String)
             case image
             case autolink(destination: String)
-            /// `bullet` is the character index of a `-`, `*` or `+` marker; nil for numbered items.
-            case listItem(bullet: Int?)
+            /// `bullet` is the character index of a `-`, `*` or `+` marker (nil for numbered items);
+            /// `box` the three characters of a task box `[ ]`/`[x]`, whose brackets are markers.
+            case listItem(bullet: Int?, box: NSRange?)
             case quote(depth: Int)
             case rule
             case fence
@@ -46,7 +47,7 @@ nonisolated enum MarkdownHighlighter {
     private static let rule = regex(#"^\s{0,3}([-*_])(\s*\1){2,}\s*$"#)
     private static let heading = regex(#"^\s{0,3}(#{1,6})(?:[ \t]+|$)"#)
     private static let quote = regex(#"^(?:[ \t]{0,3}>[ \t]?)+"#)
-    private static let listMarker = regex(#"^\s*([-+*]|\d{1,9}[.)])\s+(?:\[[ xX]\]\s+)?"#)
+    private static let listMarker = regex(#"^\s*([-+*]|\d{1,9}[.)])\s+(?:(\[[ xX]\])\s+)?"#)
     private static let frontMatterOpen = regex(#"^---\s*$"#)
     private static let frontMatterClose = regex(#"^(---|\.\.\.)\s*$"#)
     private static let inlineCode = regex(#"(`+)[^`\n]+(`+)"#)
@@ -140,7 +141,9 @@ nonisolated enum MarkdownHighlighter {
             if let match = listMarker.firstMatch(in: line, range: whole) {
                 let marker = match.range(at: 1)
                 let isBullet = marker.length == 1 && "-+*".contains((line as NSString).substring(with: marker))
-                tokens.append(Token(range: shifted(match.range), kind: .listItem(bullet: isBullet ? lineStart + marker.location : nil), markers: []))
+                let box = match.range(at: 2).location == NSNotFound ? nil : shifted(match.range(at: 2))
+                let markers = box.map { [NSRange(location: $0.location, length: 1), NSRange(location: $0.location + 2, length: 1)] } ?? []
+                tokens.append(Token(range: shifted(match.range), kind: .listItem(bullet: isBullet ? lineStart + marker.location : nil, box: box), markers: markers))
                 tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length)
                 continue
             }

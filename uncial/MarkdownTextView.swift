@@ -192,6 +192,7 @@ final class ThemedTextView: NSTextView {
         if let layoutManager = layoutManager as? InlineLayoutManager {
             layoutManager.codeBackground = InlineStyle(style: style).codeBackground
             layoutManager.lineColor = style.muted
+            layoutManager.accent = style.accent
         }
         rehighlight()
     }
@@ -281,6 +282,38 @@ final class ThemedTextView: NSTextView {
         let found = CTFontGetGlyphsForCharacters(font as CTFont, &character, &glyph, 1)
         bulletCache = (font, found ? glyph : nil)
         return bulletCache?.glyph
+    }
+
+    /// A click on a drawn task box toggles it instead of moving the caret.
+    override func mouseDown(with event: NSEvent) {
+        if presentation == .inline, let box = taskBox(at: convert(event.locationInWindow, from: nil)) {
+            toggle(taskBox: box)
+            return
+        }
+        super.mouseDown(with: event)
+    }
+
+    /// The `[ ]` under `point` (view coordinates) while its brackets are hidden; nil on revealed lines.
+    func taskBox(at point: NSPoint) -> NSRange? {
+        guard presentation == .inline, let layoutManager, let textContainer, let textStorage, textStorage.length > 0 else { return nil }
+        let local = NSPoint(x: point.x - textContainerOrigin.x, y: point.y - textContainerOrigin.y)
+        let index = layoutManager.characterIndex(for: local, in: textContainer, fractionOfDistanceBetweenInsertionPoints: nil)
+        guard index < textStorage.length else { return nil }
+        var box = NSRange()
+        let whole = NSRange(location: 0, length: textStorage.length)
+        guard textStorage.attribute(.taskBox, at: index, longestEffectiveRange: &box, in: whole) != nil,
+              box.length == 3, !NSLocationInRange(box.location, revealed) else { return nil }
+        return box
+    }
+
+    /// Flips `[ ]`/`[x]` through the undoable change path; the caret stays where it is.
+    func toggle(taskBox box: NSRange) {
+        guard let textStorage, box.length == 3 else { return }
+        let middle = NSRange(location: box.location + 1, length: 1)
+        let replacement = currentText.character(at: middle.location) == 0x20 ? "x" : " "
+        guard shouldChangeText(in: middle, replacementString: replacement) else { return }
+        textStorage.replaceCharacters(in: middle, with: replacement)
+        didChangeText()
     }
 
     /// Plain click: put the caret there, which reveals the line. ⌘-click: open the destination.

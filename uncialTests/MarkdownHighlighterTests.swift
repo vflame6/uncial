@@ -107,8 +107,10 @@ import Testing
     }
 
     @Test func listItemsReportTheBullet() {
-        #expect(token("  - [ ] task").kind == .listItem(bullet: 2))
-        #expect(token("1. item").kind == .listItem(bullet: nil))
+        #expect(token("  - [ ] task").kind == .listItem(bullet: 2, box: NSRange(location: 4, length: 3)))
+        #expect(markers(token("  - [ ] task"), in: "  - [ ] task") == ["[", "]"])
+        #expect(token("1. item").kind == .listItem(bullet: nil, box: nil))
+        #expect(token("- plain").markers.isEmpty)
         #expect(("* item *em*" as NSString).substring(with: token("* item *em*", 1).range) == "*em*")
     }
 

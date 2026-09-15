@@ -1,6 +1,8 @@
 import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private let openPanels = OpenPanelPlacement()
+
     /// `DocumentGroup(viewing:)` still lists a disabled stock "New" next to File ▸ New…; hide it.
     private func hideStockNewItem() {
         let selector = #selector(NSDocumentController.newDocument(_:))
@@ -8,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
+        openPanels.start()
         AppSettings.shared.applyAppearance()
         AppSettings.shared.publishTheme()
     }

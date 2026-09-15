@@ -194,7 +194,8 @@ is available in every mode but Read Only.
 
 Open Settings with ⌘, (Uncial ▸ Settings…). On the first launch the General
 controls appear in a Welcome window with **Skip** and **Done**; either one
-dismisses it for good.
+dismisses it for good. The Welcome window and the Open panel both open in the
+middle of the screen.
 
 **General**
 

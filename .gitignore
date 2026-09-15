@@ -6,14 +6,41 @@ xcuserdata/
 *.xcscmblueprint
 *.xccheckout
 *.xcarchive
+*.xcresult
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM
+*.dSYM.zip
+timeline.xctimeline
+playground.xcworkspace
 
 # SwiftPM
 .build/
 .swiftpm/
-Packages/*/.build/
 
 # macOS
 .DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Editors and tools
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.orig
+*.rej
+*.log
+.claude/settings.local.json
+
+# Secrets
+.env
+.env.*
 
 # Local working notes (design specs, plans)
-docs/
+docs/superpowers/

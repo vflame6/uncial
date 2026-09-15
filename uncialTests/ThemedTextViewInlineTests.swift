@@ -92,8 +92,9 @@ import Testing
         layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
         NSGraphicsContext.restoreGraphicsState()
         let lineHeight = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+        let left = inline.textContainerOrigin.x
         func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
-            rep.colorAt(x: Int(x), y: Int(lineHeight * (CGFloat(line) + fraction)))
+            rep.colorAt(x: Int(left + x), y: Int(lineHeight * (CGFloat(line) + fraction)))
         }
         func isRed(_ color: NSColor?) -> Bool { color.map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
         func isBlue(_ color: NSColor?) -> Bool { color.map { $0.blueComponent > 0.9 && $0.redComponent < 0.1 } ?? false }
@@ -143,6 +144,19 @@ import Testing
         #expect(inline.markers.isHidden(0) && !inline.markers.isHidden(15))
         #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 18)
         #expect(inline.textStorage!.attribute(.paragraphStyle, at: 15, effectiveRange: nil) == nil)
+    }
+
+    @Test func centersAReadableColumn() {
+        let inline = editor(sample, presentation: .inline, caret: 32)
+        #expect(inline.textContainerInset.width == 16)
+        inline.setFrameSize(NSSize(width: 1000, height: 200))
+        #expect(inline.textContainerInset.width == 140)
+        inline.readableWidth = false
+        #expect(inline.textContainerInset.width == 16)
+        inline.readableWidth = true
+        #expect(inline.textContainerInset.width == 140)
+        inline.presentation = .source
+        #expect(inline.textContainerInset.width == 16)
     }
 
     @Test func plainClickOnALinkPlacesTheCaret() {

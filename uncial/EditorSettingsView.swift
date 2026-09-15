@@ -41,6 +41,14 @@ struct EditorSettingsView: View {
                 Text("Typing ( [ { ` * _ or \" inserts the closing character after the cursor; typing it again skips over it, Backspace inside an empty pair removes both, and a selection gets wrapped. Press Return between ``` and ``` to start a code block. Return inside a list item or quote starts the next one; Return on an empty item ends it. Line numbers show in the source and, as source lines, in the rendered page.")
             }
 
+            Section {
+                Toggle("Limit line width to a readable column", isOn: $settings.readableLineWidth)
+            } header: {
+                Text("Live Preview")
+            } footer: {
+                Text("Centers up to \(Int(InlineLayout.readableWidth)) points of text, like the rendered page. Split View and Raw Editor always use the full width.")
+            }
+
             Section("Split View") {
                 Toggle("Sync scrolling between source and preview", isOn: $settings.syncScrolling)
             }

@@ -133,15 +133,16 @@ import UncialCore
             NSGraphicsContext.restoreGraphicsState()
             return rep
         }
+        let left = Int(view.textContainerOrigin.x)
         func hasBlue(_ rep: NSBitmapImageRep, y: Int) -> Bool {
-            (16...34).contains { x in rep.colorAt(x: x, y: y).map { $0.blueComponent > 0.6 && $0.redComponent < 0.6 } ?? false }
+            (16...34).contains { x in rep.colorAt(x: left + x, y: y).map { $0.blueComponent > 0.6 && $0.redComponent < 0.6 } ?? false }
         }
         func isGreen(_ rep: NSBitmapImageRep, x: Int, y: Int) -> Bool {
             rep.colorAt(x: x, y: y).map { $0.greenComponent > 0.9 && $0.redComponent < 0.1 } ?? false
         }
         let hidden = render()
         let advance = InlineStyle(style: view.style).characterWidth
-        let middleX = Int(5 + 2.5 * advance)
+        let middleX = left + Int(5 + 2.5 * advance)
         #expect(hasBlue(hidden, y: 8))
         #expect(isGreen(hidden, x: middleX, y: 20))
         #expect(!isGreen(hidden, x: middleX, y: 8))

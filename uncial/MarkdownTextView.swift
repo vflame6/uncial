@@ -11,7 +11,9 @@ struct MarkdownTextView: NSViewRepresentable {
     let autoPairing: Bool
     let continueLists: Bool
     let presentation: EditorPresentation
-    /// The document's directory, for relative link destinations.
+    /// Center a readable column in the inline presentation.
+    let readableWidth: Bool
+    /// The document's directory, for relative link and image destinations.
     let baseURL: URL?
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
@@ -61,6 +63,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
         textView.presentation = presentation
+        textView.readableWidth = readableWidth
         textView.baseURL = baseURL
         textView.string = text
         textView.palette = palette
@@ -90,6 +93,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
         textView.baseURL = baseURL
+        textView.readableWidth = readableWidth
         if textView.presentation != presentation {
             textView.presentation = presentation
         }
@@ -252,7 +256,15 @@ final class ThemedTextView: NSTextView {
 
     /// `.inline` renders Markdown in place and hides the markers of every line but the caret's.
     var presentation: EditorPresentation = .source {
-        didSet { if presentation != oldValue { rehighlight() } }
+        didSet {
+            guard presentation != oldValue else { return }
+            updateInsets()
+            rehighlight()
+        }
+    }
+    /// In the inline presentation, center a column of at most `InlineLayout.readableWidth`.
+    var readableWidth = true {
+        didSet { if readableWidth != oldValue { updateInsets() } }
     }
     /// The document's directory; relative link and image destinations resolve against it.
     var baseURL: URL? {
@@ -299,13 +311,22 @@ final class ThemedTextView: NSTextView {
         return loaded
     }
 
-    /// Images are fitted to the text width, so a width change re-fits them.
+    /// The column follows the width, and images are fitted to the text width, so a width change
+    /// re-fits both.
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         guard newSize.width != layoutWidth else { return }
         layoutWidth = newSize.width
+        updateInsets()
         if presentation == .inline, !resolvedImages.isEmpty {
             rehighlight()
+        }
+    }
+
+    private func updateInsets() {
+        let inset = presentation == .inline && readableWidth ? InlineLayout.horizontalInset(viewWidth: bounds.width) : 16
+        if textContainerInset.width != inset {
+            textContainerInset = NSSize(width: inset, height: textContainerInset.height)
         }
     }
 

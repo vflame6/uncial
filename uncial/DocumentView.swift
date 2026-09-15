@@ -79,6 +79,7 @@ struct DocumentView: View {
                 autoPairing: settings.autoPairing,
                 continueLists: settings.continueLists,
                 presentation: mode.presentation,
+                readableWidth: settings.readableLineWidth,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
                 scrollTarget: sync.editorTarget,
                 handle: editorHandle,

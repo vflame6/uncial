@@ -11,13 +11,15 @@ import Testing
     @Test func formatsModifiersInMenuOrder() {
         #expect(AppShortcut.toggleEditorMode.display == "⇧⌘E")
         #expect(AppShortcut.livePreview.display == "⌥⌘2")
+        #expect(AppShortcut.splitView.display == "⌥⌘3")
+        #expect(AppShortcut.rawEditor.display == "⌥⌘4")
         #expect(AppShortcut.settings.display == "⌘,")
         #expect(AppShortcut.reload.display == "⌘R")
     }
 
     @Test func sectionsKeepDeclarationOrder() {
         #expect(AppShortcut.sections == ["File", "View", "Edit", "Uncial"])
-        #expect(AppShortcut.shortcuts(in: "View").first == .readOnly)
+        #expect(AppShortcut.shortcuts(in: "View") == [.readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload])
     }
 
     @Test func findShortcutsMatchTheStandardEditMenu() {

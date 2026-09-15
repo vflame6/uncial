@@ -16,7 +16,7 @@ import UncialCore
         let settings = AppSettings(defaults: freshDefaults(), applyAppearance: false)
         #expect(settings.appearance == .system)
         #expect(settings.theme == .macOS)
-        #expect(settings.defaultEditorMode == .livePreview)
+        #expect(settings.defaultEditorMode == .split)
         #expect(settings.syncScrolling == true)
         #expect(settings.showLineNumbers == false)
         #expect(settings.autoPairing == true)
@@ -58,6 +58,17 @@ import UncialCore
         #expect(reloaded.theme == .solarized)
         #expect(reloaded.defaultEditorMode == .rawEditor)
         #expect(reloaded.hasCompletedFirstRun == true)
+    }
+
+    @Test func migratesLegacyLivePreviewToSplit() {
+        let defaults = freshDefaults()
+        defaults.set("livePreview", forKey: "defaultEditorMode")
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        #expect(settings.defaultEditorMode == .split)
+        #expect(defaults.string(forKey: "defaultEditorMode") == "split")
+        settings.defaultEditorMode = .livePreview
+        #expect(defaults.string(forKey: "defaultEditorMode") == "inlinePreview")
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).defaultEditorMode == .livePreview)
     }
 
     @Test func migratesLegacyThemeKeyToAppearance() {

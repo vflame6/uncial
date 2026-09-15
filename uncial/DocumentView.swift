@@ -13,7 +13,7 @@ struct DocumentView: View {
         _model = State(initialValue: DocumentViewModel(fileURL: fileURL, initialText: document.text))
         let preferred = settings.defaultEditorMode
         // An empty read-only window is useless: new documents open with the editor visible.
-        _mode = State(initialValue: document.text.isEmpty && preferred == .readOnly ? .livePreview : preferred)
+        _mode = State(initialValue: document.text.isEmpty && preferred == .readOnly ? .split : preferred)
         self.settings = settings
     }
 
@@ -31,7 +31,7 @@ struct DocumentView: View {
                 StatusBarView(mode: mode, statistics: model.statistics)
             }
         }
-        .frame(minWidth: mode == .livePreview ? 600 : 480, minHeight: 320)
+        .frame(minWidth: mode == .split ? 600 : 480, minHeight: 320)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Picker("Editor Mode", selection: $mode) {
@@ -67,7 +67,7 @@ struct DocumentView: View {
     }
 
     private func updateSync() {
-        sync.isEnabled = mode == .livePreview && settings.syncScrolling
+        sync.isEnabled = mode == .split && settings.syncScrolling
     }
 
     private var editor: some View {

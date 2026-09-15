@@ -1,6 +1,6 @@
 import AppKit
 
-/// Lets menu commands reach the editor's text view directly: in Live Preview the responder chain may
+/// Lets menu commands reach the editor's text view directly: in Split View the responder chain may
 /// point at the preview, and `performTextFinderAction` only works on the text view itself.
 final class EditorHandle {
     weak var textView: ThemedTextView?

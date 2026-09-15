@@ -3,7 +3,7 @@ import SwiftUI
 import UncialCore
 
 /// Plain-text Markdown editor: SF Mono, soft wrap, no smart substitutions, native find bar and undo,
-/// Markdown-aware coloring, optional line numbers, and scroll reporting for Live Preview sync.
+/// Markdown-aware coloring, optional line numbers, and scroll reporting for Split View sync.
 struct MarkdownTextView: NSViewRepresentable {
     let text: String
     let palette: EditorPalette?

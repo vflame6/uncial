@@ -72,7 +72,11 @@ final class AppSettings {
         }
         appearance = Appearance(rawValue: defaults.string(forKey: Key.appearance) ?? "") ?? .system
         theme = Theme(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .default
-        defaultEditorMode = EditorMode(rawValue: defaults.string(forKey: Key.defaultEditorMode) ?? "") ?? .livePreview
+        // Before 2026-09-15 "livePreview" was the split mode; Live Preview now means the inline editor.
+        if defaults.string(forKey: Key.defaultEditorMode) == EditorMode.legacySplitRawValue {
+            defaults.set(EditorMode.split.rawValue, forKey: Key.defaultEditorMode)
+        }
+        defaultEditorMode = EditorMode(rawValue: defaults.string(forKey: Key.defaultEditorMode) ?? "") ?? .split
         syncScrolling = defaults.object(forKey: Key.syncScrolling) == nil ? true : defaults.bool(forKey: Key.syncScrolling)
         showLineNumbers = defaults.bool(forKey: Key.showLineNumbers)
         autoPairing = defaults.object(forKey: Key.autoPairing) == nil ? true : defaults.bool(forKey: Key.autoPairing)

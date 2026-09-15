@@ -7,7 +7,7 @@ struct ScrollTarget: Equatable {
     let token: Int
 }
 
-/// Keeps the editor and the preview at the same place in Live Preview.
+/// Keeps the editor and the preview at the same place in Split View.
 ///
 /// Lines are 1-based document lines with a fraction (12.4 = 40 % into line 12), the unit cmark's
 /// `data-sourcepos` uses. Whichever pane the user scrolls drives the other; the driven pane's

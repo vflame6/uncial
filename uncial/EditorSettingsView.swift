@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Editor tab: default mode, status bar, source editor conveniences, Live Preview scroll sync.
+/// Editor tab: default mode, status bar, source editor conveniences, Split View scroll sync.
 struct EditorSettingsView: View {
     @Bindable var settings: AppSettings
 
@@ -20,7 +20,7 @@ struct EditorSettingsView: View {
             } header: {
                 Text("Editing")
             } footer: {
-                Text("Applies to documents you open next. Switch any window with \(AppShortcut.readOnly.display), \(AppShortcut.livePreview.display), \(AppShortcut.rawEditor.display), or cycle with \(AppShortcut.toggleEditorMode.display). Changes are saved to the file as you type.")
+                Text("Applies to documents you open next. Switch any window with \(EditorMode.allCases.map { "\($0.title) \($0.shortcut.display)" }.joined(separator: ", ")), or cycle with \(AppShortcut.toggleEditorMode.display). Changes are saved to the file as you type.")
             }
 
             Section {
@@ -41,7 +41,7 @@ struct EditorSettingsView: View {
                 Text("Typing ( [ { ` * _ or \" inserts the closing character after the cursor; typing it again skips over it, Backspace inside an empty pair removes both, and a selection gets wrapped. Press Return between ``` and ``` to start a code block. Return inside a list item or quote starts the next one; Return on an empty item ends it. Line numbers show in the source and, as source lines, in the rendered page.")
             }
 
-            Section("Live Preview") {
+            Section("Split View") {
                 Toggle("Sync scrolling between source and preview", isOn: $settings.syncScrolling)
             }
         }

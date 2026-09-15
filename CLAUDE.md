@@ -172,7 +172,9 @@ opens the destination through `LinkOpener` only with ⌘ held (relative targets 
 `baseURL`, fragments ignored); a plain click places the caret, which reveals the line. Known
 quirks: hidden glyphs at a paragraph start belong to the previous line's fragment until
 revealed (so measure line widths from the line break; a fully hidden last line without a
-newline has no fragment of its own), and everything above `highlightingLimit` falls back to
+newline has no fragment of its own; never put `.backgroundColor` on a marker, because a hidden
+marker that starts a paragraph would fill the previous line to its edge, which is why inline
+code tints only its content), and everything above `highlightingLimit` falls back to
 source. Switching presentation is a `rehighlight()`; text, caret and undo survive.
 Phase 2 (2026-09-15): *task boxes* — the tokenizer's `listItem(bullet:box:)` names the `[ ]`
 range and lists its brackets as markers, `InlineStyle` stores `.taskBox` ("checked"/"unchecked")
@@ -297,6 +299,11 @@ directory; home is the container), so Quick Look previews have no images. A
 build-setting sandbox, but the owner chose not to ship one.
 
 ## Verifying things that have no UI test
+
+- `static/demo.md` (with `static/icon.png` next to it) is the standard document for visual
+  checks: every construct the app renders, one section each with an *Expect* line, plus manual
+  editing steps at the end. Open it in all four modes after a rendering change; probes and
+  screenshots should use it so results stay comparable. Keep its sections and order stable.
 
 - Quick Look: register the built appex (`pluginkit -a …/Uncial.app/Contents/PlugIns/UncialQuickLook.appex`),
   run `qlmanage -p file.md` in the background, and confirm `pgrep -fl UncialQuickLook` shows the

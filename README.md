@@ -244,6 +244,9 @@ make icon        # regenerate the app icon PNGs
 make clean
 ```
 
+`static/demo.md` exercises every rendering and editing feature with an *Expect* note
+per section; open it in each mode to check a change by eye.
+
 The Makefile exports `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`,
 so the commands work even when `xcode-select` points at the Command Line Tools.
 Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.

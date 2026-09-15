@@ -26,6 +26,8 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
   rendered page), brackets and Markdown markers that close themselves as you
   type, lists and quotes that continue on Return, and Edit ▸ Find with find
   and replace.
+- An optional status bar with the current mode and the document's line, word
+  and character counts.
 - Light and dark appearance follow macOS without a restart, or can be forced.
 - Images referenced by relative or absolute path are embedded, so READMEs look
   like they do on GitHub. Remote images load in the app.
@@ -142,6 +144,15 @@ indentation and spacing are kept, and any text after the cursor moves to the
 new item. Return on an empty item removes its marker, so pressing Return twice
 ends the list. Switch it off in Settings ▸ Editor.
 
+**Status bar.** Settings ▸ Editor ▸ *Show status bar* adds a footer to every
+window: the current mode on the left, the document's line, word and character
+counts on the right, updating as you type. Lines are counted as the gutter
+numbers them (an empty document has one). Words are runs of letters and
+digits, so Markdown markers such as `#`, `*` and `-` are not counted;
+`don't`, `well-known`, `3,857` and `e.g.` are one word each, and every
+Chinese, Japanese or Korean character counts as a word. Characters are
+counted as a person would, spaces and line breaks included.
+
 **Find and replace.** Edit ▸ Find (⌘F) opens the find bar above the source;
 Edit ▸ Find and Replace… (⌥⌘F) adds the replace field with Replace, All and
 Replace & Find. ⌘G and ⇧⌘G step through matches, ⌘E searches for the
@@ -171,7 +182,7 @@ dismisses it for good.
   is unknown. macOS takes a few seconds to apply either change.
 
 **Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor),
-line numbers, automatic closing of brackets, quotes and Markdown markers,
+the status bar, line numbers, automatic closing of brackets, quotes and Markdown markers,
 list and quote continuation on Return, and whether Live Preview keeps the
 source and the rendered page scrolled to the same place.
 

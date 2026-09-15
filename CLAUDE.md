@@ -8,7 +8,7 @@ Uncial is a native macOS Markdown reader and editor (SwiftUI document app) with 
 Quick Look Preview Extension. One Swift package renders Markdown to a self-contained HTML page
 in one of three themes; the app shows it in a `WKWebView`, offers an `NSTextView` editor beside
 it (Read Only / Live Preview / Raw Editor) with Markdown coloring, scroll sync, optional line
-numbers, auto-closing pairs and a find/replace bar, writes edits through to the file, and
+numbers, auto-closing pairs, a find/replace bar and an optional status bar, writes edits through to the file, and
 re-renders on disk changes; the extension returns the same HTML, in
 the theme the app published to the App Group container, to Quick Look. Design specs and implementation plans (with execution notes) are local
 working notes under `docs/superpowers/`, which is gitignored; they exist only on this machine.
@@ -174,11 +174,17 @@ makes the text view first responder and calls `performTextFinderAction` with the
 page and uses `WKWebView.find(_:configuration:)` (case-insensitive, wrapping; works with
 content JavaScript off) plus `PreviewScripts.countMatches` over `innerText` for the count.
 `WKWebView` is not an `NSTextFinderClient` (probed 2026-09-08). Find and Replace… is disabled
-without an editor pane.
+without an editor pane. *Status bar* (`AppSettings.showStatusBar`, off by default): `StatusBarView`
+sits under the `HSplitView` in `DocumentView` (mode label left, counts right, `.bar` material)
+and shows `DocumentViewModel.statistics`, a `DocumentStatistics` (pure, tested: lines = line
+breaks + 1 like the gutter; words = runs of letters, digits and marks, one internal `' ’ - _ . , :`
+allowed, CJK one per character, so Markdown markers never count; characters = grapheme clusters
+including whitespace) computed synchronously at init and then together with the body in
+`render()`'s detached task, so it lags typing by the render delay.
 
 **Settings / first run:** `AppSettings` (`appearance` System/Light/Dark → `NSApp.appearance`,
 `theme`, `defaultEditorMode`, `syncScrolling`, `showLineNumbers`, `autoPairing`,
-`continueLists`, `hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
+`continueLists`, `showStatusBar`, `hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
 `appearance`; `publishTheme()` writes the theme for Quick Look, see Sandbox),
 `QuickLookExtensionManager` (drives `/usr/bin/pluginkit` through `ShellCommand`; Install =
 `-a` + `-e use`, Remove = `-e ignore`), `DefaultAppManager` (`NSWorkspace` behind the

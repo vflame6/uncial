@@ -14,33 +14,41 @@ final class InlineLayoutManager: NSLayoutManager {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let storage = textStorage else { return }
         let text = storage.string as NSString
-        let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
-        storage.enumerateAttribute(.blockDecoration, in: characters, options: []) { value, range, _ in
-            guard let decoration = value as? String else { return }
-            let glyphs = glyphRange(forCharacterRange: range, actualCharacterRange: nil)
-            enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, fragmentGlyphs, _ in
-                let box = rect.offsetBy(dx: origin.x, dy: origin.y)
-                switch decoration {
-                case "code":
-                    let fragment = self.characterRange(forGlyphRange: fragmentGlyphs, actualGlyphRange: nil)
-                    let paragraph = text.paragraphRange(for: fragment)
-                    let before = paragraph.location > 0 ? storage.attribute(.blockDecoration, at: paragraph.location - 1, effectiveRange: nil) as? String : nil
-                    let after = NSMaxRange(paragraph) < text.length ? storage.attribute(.blockDecoration, at: NSMaxRange(paragraph), effectiveRange: nil) as? String : nil
-                    let isFirst = before != "code" && fragment.location == paragraph.location
-                    let isLast = after != "code" && NSMaxRange(fragment) >= NSMaxRange(paragraph)
-                    self.fillCode(box, roundTop: isFirst, roundBottom: isLast)
-                case "rule":
-                    self.lineColor.setFill()
-                    NSRect(x: box.minX, y: floor(box.midY), width: box.width, height: 1).fill()
-                default:
-                    guard decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) else { return }
-                    self.lineColor.setFill()
-                    for level in 0..<depth {
-                        NSRect(x: box.minX + InlineStyle.quoteIndent * CGFloat(level) + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
-                    }
+        // Per fragment, keyed by the paragraph of its first character: hidden (zero-width) markers
+        // at a paragraph start are laid out at the end of the previous line's fragment, so the
+        // glyph range of a paragraph is not a reliable way to find its fragments.
+        enumerateLineFragments(forGlyphRange: glyphsToShow) { rect, _, _, fragmentGlyphs, _ in
+            let fragment = self.characterRange(forGlyphRange: fragmentGlyphs, actualGlyphRange: nil)
+            guard fragment.location < text.length,
+                  let decoration = storage.attribute(.blockDecoration, at: fragment.location, effectiveRange: nil) as? String else { return }
+            let paragraph = text.paragraphRange(for: NSRange(location: fragment.location, length: 0))
+            let box = rect.offsetBy(dx: origin.x, dy: origin.y)
+            switch decoration {
+            case "code":
+                let before = paragraph.location > 0 ? storage.attribute(.blockDecoration, at: paragraph.location - 1, effectiveRange: nil) as? String : nil
+                let after = NSMaxRange(paragraph) < text.length ? storage.attribute(.blockDecoration, at: NSMaxRange(paragraph), effectiveRange: nil) as? String : nil
+                let isFirst = before != "code" && self.startsParagraph(fragmentGlyphs, paragraph: paragraph)
+                let isLast = after != "code" && NSMaxRange(fragment) >= NSMaxRange(paragraph)
+                self.fillCode(box, roundTop: isFirst, roundBottom: isLast)
+            case "rule":
+                self.lineColor.setFill()
+                NSRect(x: box.minX, y: floor(box.midY), width: box.width, height: 1).fill()
+            default:
+                guard decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) else { return }
+                self.lineColor.setFill()
+                for level in 0..<depth {
+                    NSRect(x: box.minX + InlineStyle.quoteIndent * CGFloat(level) + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
                 }
             }
         }
+    }
+
+    /// Whether the fragment is its paragraph's first: the previous fragment starts before the paragraph.
+    private func startsParagraph(_ fragmentGlyphs: NSRange, paragraph: NSRange) -> Bool {
+        guard fragmentGlyphs.location > 0 else { return true }
+        var previousGlyphs = NSRange()
+        _ = lineFragmentRect(forGlyphAt: fragmentGlyphs.location - 1, effectiveRange: &previousGlyphs)
+        return characterRange(forGlyphRange: previousGlyphs, actualGlyphRange: nil).location < paragraph.location
     }
 
     /// One rounded rectangle per block, painted piecewise: each fragment clips a rectangle that is

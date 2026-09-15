@@ -72,6 +72,38 @@ import Testing
         #expect(inline.markers == .empty)
     }
 
+    /// Hidden glyphs at a paragraph start belong to the previous line's fragment; decorations
+    /// must still land on their own lines only.
+    @Test func decorationsStayOnTheirOwnLinesWhenMarkersAreHidden() {
+        let text = "plain\n---\nafter\n\n```\ncode\n```\n> q\n> > n\nend"
+        let inline = editor(text, presentation: .inline, caret: (text as NSString).length)
+        let layoutManager = inline.layoutManager as! InlineLayoutManager
+        layoutManager.codeBackground = .red
+        layoutManager.lineColor = .blue
+        layout(inline)
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let context = NSGraphicsContext(bitmapImageRep: rep)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 400, height: 200).fill()
+        context.cgContext.translateBy(x: 0, y: 200)
+        context.cgContext.scaleBy(x: 1, y: -1)
+        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
+        NSGraphicsContext.restoreGraphicsState()
+        let lineHeight = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+        func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
+            rep.colorAt(x: Int(x), y: Int(lineHeight * (CGFloat(line) + fraction)))
+        }
+        func isRed(_ color: NSColor?) -> Bool { color.map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
+        func isBlue(_ color: NSColor?) -> Bool { color.map { $0.blueComponent > 0.9 && $0.redComponent < 0.1 } ?? false }
+        #expect(!isBlue(pixel(100, 0)) && isBlue(pixel(100, 1)) && !isBlue(pixel(100, 2)))
+        #expect(!isRed(pixel(100, 3)) && isRed(pixel(100, 4)) && isRed(pixel(100, 5)) && isRed(pixel(100, 6)) && !isRed(pixel(100, 7)))
+        #expect(isBlue(pixel(3, 7)) && !isBlue(pixel(19, 7)))
+        #expect(isBlue(pixel(3, 8)) && isBlue(pixel(19, 8)))
+        #expect(!isBlue(pixel(3, 9)) && !isRed(pixel(100, 9)))
+    }
+
     @Test func plainClickOnALinkPlacesTheCaret() {
         let inline = editor("[text](https://example.com) after", presentation: .inline, caret: 30)
         inline.clicked(onLink: "https://example.com", at: 3)

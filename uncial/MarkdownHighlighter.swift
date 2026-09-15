@@ -78,8 +78,10 @@ nonisolated enum MarkdownHighlighter {
     private static let tableDelimiter = regex(#"^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$"#)
     private static let pipe = regex(#"(?<!\\)\|"#)
     private static let inlineCode = regex(#"(`+)[^`\n]+(`+)"#)
-    private static let strong = regex(#"\*\*[^*\n]+\*\*|__[^_\n]+__"#)
-    private static let emphasis = regex(#"(?<![\w*])\*[^*\n]+\*(?![\w*])|(?<![\w_])_[^_\n]+_(?![\w_])"#)
+    // Emphasis needs text right inside its markers (`* 3 *` is arithmetic) and no backslash before them.
+    private static let boldItalic = regex(#"(?<![\w*\\])\*\*\*(?!\s)[^*\n]+(?<![\s\\])\*\*\*(?![\w*])"#)
+    private static let strong = regex(#"(?<!\\)\*\*(?!\s)[^*\n]+(?<![\s\\])\*\*|(?<!\\)__(?!\s)[^_\n]+(?<![\s\\])__"#)
+    private static let emphasis = regex(#"(?<![\w*\\])\*(?!\s)[^*\n]+(?<![\s\\])\*(?![\w*])|(?<![\w_\\])_(?!\s)[^_\n]+(?<![\s\\])_(?![\w_])"#)
     private static let strikethrough = regex(#"~~[^~\n]+~~"#)
     private static let link = regex(#"(!?\[[^\]\n]*\])(\([^)\n]*\))"#)
     private static let autolink = regex(#"<(?:https?|mailto):[^>\s]+>"#)
@@ -365,6 +367,12 @@ nonisolated enum MarkdownHighlighter {
         }
         for match in footnoteReference.matches(in: scratch as String, range: region) {
             tokens.append(Token(range: shifted(match.range), kind: .footnoteReference, markers: edges(match.range, open: 2, close: 1)))
+            mask(match.range)
+        }
+        for match in boldItalic.matches(in: scratch as String, range: region) {
+            // `***text***`: strong over the whole with three-character markers, emphasis on the text itself.
+            tokens.append(Token(range: shifted(match.range), kind: .strong, markers: edges(match.range, open: 3, close: 3)))
+            tokens.append(Token(range: shifted(NSRange(location: match.range.location + 3, length: match.range.length - 6)), kind: .emphasis, markers: []))
             mask(match.range)
         }
         for match in strong.matches(in: scratch as String, range: region) {

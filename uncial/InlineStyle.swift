@@ -73,7 +73,13 @@ struct InlineStyle {
             case .strikethrough:
                 storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: token.range)
             case .inlineCode:
-                storage.addAttributes([.foregroundColor: style.code, .backgroundColor: codeBackground], range: token.range)
+                // The tint stays off the backticks: a hidden marker at a paragraph start is laid out at
+                // the end of the previous line, and a background there would fill that line to its edge.
+                storage.addAttribute(.foregroundColor, value: style.code, range: token.range)
+                let open = token.markers.first?.length ?? 0
+                let close = token.markers.last?.length ?? 0
+                let content = NSRange(location: token.range.location + open, length: max(0, token.range.length - open - close))
+                storage.addAttribute(.backgroundColor, value: codeBackground, range: content)
             case .link(let destination), .autolink(let destination):
                 storage.addAttributes([.foregroundColor: style.accent, .link: destination], range: token.range)
             case .image:

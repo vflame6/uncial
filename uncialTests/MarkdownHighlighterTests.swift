@@ -46,6 +46,23 @@ import Testing
         #expect(!has(text, .emphasis, "*bold*"))
     }
 
+    @Test func emphasisNeedsFlankingTextAndNoEscape() {
+        #expect(!has("2 * 3 * 4", .emphasis, "* 3 *"))
+        #expect(!has("a ** b ** c", .strong, "** b **"))
+        #expect(!has("\\*not italic\\*", .emphasis, "*not italic*"))
+        #expect(!has("\\**not bold\\**", .strong, "**not bold**"))
+        #expect(has("a *b* c", .emphasis, "*b*") && has("a _b_ c", .emphasis, "_b_"))
+        #expect(has("a **b** c", .strong, "**b**") && has("(*x*)", .emphasis, "*x*"))
+    }
+
+    @Test func tripleAsterisksAreBoldItalic() {
+        let text = "a ***bold italic*** c"
+        #expect(has(text, .strong, "***bold italic***") && has(text, .emphasis, "bold italic"))
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.strong, .emphasis])
+        #expect(markers(tokens[0], in: text) == ["***", "***"] && tokens[1].markers.isEmpty)
+    }
+
     @Test func linksAndImages() {
         #expect(has("[text](http://x)", .link, "[text]"))
         #expect(has("[text](http://x)", .url, "(http://x)"))

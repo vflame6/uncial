@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Editor tab: default mode, source editor conveniences, Live Preview scroll sync.
+/// Editor tab: default mode, status bar, source editor conveniences, Live Preview scroll sync.
 struct EditorSettingsView: View {
     @Bindable var settings: AppSettings
 
@@ -21,6 +21,14 @@ struct EditorSettingsView: View {
                 Text("Editing")
             } footer: {
                 Text("Applies to documents you open next. Switch any window with \(AppShortcut.readOnly.display), \(AppShortcut.livePreview.display), \(AppShortcut.rawEditor.display), or cycle with \(AppShortcut.toggleEditorMode.display). Changes are saved to the file as you type.")
+            }
+
+            Section {
+                Toggle("Show status bar", isOn: $settings.showStatusBar)
+            } header: {
+                Text("Window")
+            } footer: {
+                Text("A footer with the current mode and the document's line, word and character counts. Markdown markers such as # and * are not words; spaces and line breaks count as characters.")
             }
 
             Section {

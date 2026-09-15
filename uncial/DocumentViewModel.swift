@@ -12,6 +12,7 @@ final class DocumentViewModel {
     let fileURL: URL?
     private(set) var text: String
     private(set) var body = ""
+    private(set) var statistics: DocumentStatistics
     private(set) var loadError: String?
     private(set) var saveError: String?
 
@@ -40,6 +41,7 @@ final class DocumentViewModel {
         self.saveDelay = saveDelay
         text = initialText
         diskText = initialText
+        statistics = DocumentStatistics(text: initialText)
         render()
         watch()
         terminationObserver = NotificationCenter.default.addObserver(
@@ -152,9 +154,11 @@ final class DocumentViewModel {
         let baseURL = fileURL
         Task.detached(priority: .userInitiated) {
             let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true)
+            let statistics = DocumentStatistics(text: text)
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }
                 self.body = body
+                self.statistics = statistics
             }
         }
     }

@@ -18,12 +18,17 @@ struct DocumentView: View {
     }
 
     var body: some View {
-        HSplitView {
-            if mode.showsEditor {
-                editor.frame(minWidth: 280)
+        VStack(spacing: 0) {
+            HSplitView {
+                if mode.showsEditor {
+                    editor.frame(minWidth: 280)
+                }
+                if mode.showsPreview {
+                    preview.frame(minWidth: 280)
+                }
             }
-            if mode.showsPreview {
-                preview.frame(minWidth: 280)
+            if settings.showStatusBar {
+                StatusBarView(mode: mode, statistics: model.statistics)
             }
         }
         .frame(minWidth: mode == .livePreview ? 600 : 480, minHeight: 320)

@@ -28,6 +28,15 @@ import Testing
         #expect(model.hasUnsavedChanges == true)
     }
 
+    @Test func keepsStatisticsCurrent() async throws {
+        let file = try temporaryFile("# Hi")
+        let model = DocumentViewModel(fileURL: file, initialText: "# Hi", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
+        #expect(model.statistics == DocumentStatistics(lines: 1, words: 1, characters: 4))
+        model.updateText("# Hi there\nmore")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.statistics == DocumentStatistics(lines: 2, words: 3, characters: 15))
+    }
+
     @Test func typingIsWrittenAfterThePause() async throws {
         let file = try temporaryFile("a")
         let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .milliseconds(50))

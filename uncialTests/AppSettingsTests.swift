@@ -21,6 +21,7 @@ import UncialCore
         #expect(settings.showLineNumbers == false)
         #expect(settings.autoPairing == true)
         #expect(settings.continueLists == true)
+        #expect(settings.showStatusBar == false)
         #expect(settings.hasCompletedFirstRun == false)
     }
 
@@ -30,10 +31,12 @@ import UncialCore
         settings.showLineNumbers = true
         settings.autoPairing = false
         settings.continueLists = false
+        settings.showStatusBar = true
         let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
         #expect(reloaded.showLineNumbers == true)
         #expect(reloaded.autoPairing == false)
         #expect(reloaded.continueLists == false)
+        #expect(reloaded.showStatusBar == true)
     }
 
     @Test func persistsSyncScrollingOff() {

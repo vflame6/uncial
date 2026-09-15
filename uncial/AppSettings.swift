@@ -14,6 +14,7 @@ final class AppSettings {
         static let showLineNumbers = "showLineNumbers"
         static let autoPairing = "autoPairing"
         static let continueLists = "continueLists"
+        static let showStatusBar = "showStatusBar"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
     }
 
@@ -54,6 +55,10 @@ final class AppSettings {
         didSet { defaults.set(continueLists, forKey: Key.continueLists) }
     }
 
+    var showStatusBar: Bool {
+        didSet { defaults.set(showStatusBar, forKey: Key.showStatusBar) }
+    }
+
     private(set) var hasCompletedFirstRun: Bool
 
     init(defaults: UserDefaults, applyAppearance: Bool) {
@@ -72,6 +77,7 @@ final class AppSettings {
         showLineNumbers = defaults.bool(forKey: Key.showLineNumbers)
         autoPairing = defaults.object(forKey: Key.autoPairing) == nil ? true : defaults.bool(forKey: Key.autoPairing)
         continueLists = defaults.object(forKey: Key.continueLists) == nil ? true : defaults.bool(forKey: Key.continueLists)
+        showStatusBar = defaults.bool(forKey: Key.showStatusBar)
         hasCompletedFirstRun = defaults.bool(forKey: Key.hasCompletedFirstRun)
     }
 

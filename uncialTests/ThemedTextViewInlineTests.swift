@@ -75,7 +75,7 @@ import Testing
     /// Hidden glyphs at a paragraph start belong to the previous line's fragment; decorations
     /// must still land on their own lines only.
     @Test func decorationsStayOnTheirOwnLinesWhenMarkersAreHidden() {
-        let text = "plain\n---\nafter\n\n```\ncode\n```\n> q\n> > n\nend"
+        let text = "- plain\n---\nafter\n\n```\ncode\n```\n> q\n> > n\nend"
         let inline = editor(text, presentation: .inline, caret: (text as NSString).length)
         let layoutManager = inline.layoutManager as! InlineLayoutManager
         layoutManager.codeBackground = .red
@@ -157,6 +157,16 @@ import Testing
         #expect(inline.textContainerInset.width == 140)
         inline.presentation = .source
         #expect(inline.textContainerInset.width == 16)
+    }
+
+    @Test func tableColumnsLineUpWhileHidden() {
+        let text = "| a | **b** |\n|:--|--:|\n| cc | d |\nend"
+        let inline = editor(text, presentation: .inline, caret: 36)
+        let layoutManager = inline.layoutManager!
+        func x(_ index: Int) -> CGFloat { layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: index)).x }
+        #expect(abs(x(4) - x(29)) < 0.5)
+        #expect(x(29) > x(28) && x(4) > x(3) + 1.5 * InlineStyle(style: inline.style).characterWidth)
+        #expect(width(inline, line: 1) < width(inline, line: 0) - 2 * InlineStyle(style: inline.style).characterWidth)
     }
 
     @Test func plainClickOnALinkPlacesTheCaret() {

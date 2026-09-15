@@ -109,6 +109,27 @@ import UncialCore
         #expect(!isRed(20, 8) && !isRed(20, 50) && !isRed(60, 30))
     }
 
+    @Test func tablesAlignByKerningAndStyleTheHeader() {
+        let inline = InlineStyle(style: style)
+        let text = storage("| a | **b** |\n|:--|--:|\n| cc | d |\n| e | ffff |")
+        func kern(_ index: Int) -> CGFloat? { text.attribute(.kern, at: index, effectiveRange: nil) as? CGFloat }
+        #expect(kern(3) == inline.characterWidth)
+        #expect(kern(5) == 3 * inline.characterWidth)
+        #expect(kern(28) == nil && kern(30) == 3 * inline.characterWidth)
+        #expect(kern(38) == inline.characterWidth && kern(45) == nil)
+        #expect(font(text, 2).fontDescriptor.symbolicTraits.contains(.bold) && !font(text, 26).fontDescriptor.symbolicTraits.contains(.bold))
+        #expect(color(text, 4) == style.muted && color(text, 0) == style.muted)
+        #expect(decoration(text, 14) == "rule" && color(text, 14) == style.muted)
+    }
+
+    @Test func footnotesAndHtmlAreStyled() {
+        let text = storage("see[^1] <b>x</b>\n[^1]: note")
+        #expect(font(text, 5).pointSize == 10 && text.attribute(.baselineOffset, at: 5, effectiveRange: nil) as? CGFloat == 4)
+        #expect(color(text, 5) == style.accent && color(text, 3) == style.muted)
+        #expect(color(text, 8) == style.muted && font(text, 11).pointSize == 13)
+        #expect(color(text, 17) == style.muted && color(text, 23) == style.foreground)
+    }
+
     @Test func layoutManagerDrawsTaskBoxesOnlyWhileHidden() {
         let view = ThemedTextView.standalone()
         view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)

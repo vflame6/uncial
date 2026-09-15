@@ -95,8 +95,18 @@ struct InlineStyle {
                 storage.addAttributes([.paragraphStyle: indented, .blockDecoration: "quote:\(depth)", .foregroundColor: style.muted], range: paragraph)
             case .rule, .headingUnderline, .tableDelimiter:
                 storage.addAttributes([.blockDecoration: "rule", .foregroundColor: style.muted], range: paragraph)
-            case .footnoteReference, .footnoteDefinition, .html, .tableRow:
-                break
+            case .footnoteReference:
+                let label = NSRange(location: token.range.location + 2, length: token.range.length - 3)
+                storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(4), .foregroundColor: style.accent], range: label)
+            case .footnoteDefinition, .html:
+                storage.addAttribute(.foregroundColor, value: style.muted, range: token.range)
+            case .tableRow(_, let isHeader, let pipes):
+                for pipe in pipes {
+                    storage.addAttribute(.foregroundColor, value: style.muted, range: NSRange(location: pipe, length: 1))
+                }
+                if isHeader {
+                    addTrait(.boldFontMask, to: storage, in: token.range)
+                }
             case .fence, .code:
                 let inset = NSMutableParagraphStyle()
                 inset.firstLineHeadIndent = Self.codeIndent
@@ -110,7 +120,48 @@ struct InlineStyle {
                 storage.addAttribute(.foregroundColor, value: style.muted, range: marker)
             }
         }
+        alignTables(tokens, in: storage)
         return reserveImages(tokens, in: storage, images: images, textWidth: textWidth)
+    }
+
+    static let superscriptFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
+
+    /// Pads every cell to its column's width with kerning: after the cell's last visible character
+    /// for left alignment, after its leading space for right, split for center. SF Mono makes the
+    /// padding an exact number of character cells.
+    private func alignTables(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage) {
+        let markers = MarkerIndex(tokens: tokens)
+        let text = storage.string as NSString
+        for token in tokens {
+            guard case .tableRow(let cells, _, _) = token.kind else { continue }
+            for cell in cells {
+                let padding = cell.columnWidth - cell.visibleWidth
+                guard padding > 0 else { continue }
+                let before: Int
+                switch cell.alignment {
+                case .left: before = 0
+                case .right: before = padding
+                case .center: before = padding / 2
+                }
+                let after = padding - before
+                if after > 0, let last = lastVisibleCharacter(in: cell.range, markers: markers) {
+                    storage.addAttribute(.kern, value: characterWidth * CGFloat(after), range: NSRange(location: last, length: 1))
+                }
+                if before > 0, cell.range.length > 0, text.character(at: cell.range.location) == 0x20, !markers.isHidden(cell.range.location) {
+                    storage.addAttribute(.kern, value: characterWidth * CGFloat(before), range: NSRange(location: cell.range.location, length: 1))
+                }
+            }
+        }
+    }
+
+    /// The last character of the cell that is not a hidden marker; for an empty cell, the pipe before it.
+    private func lastVisibleCharacter(in range: NSRange, markers: MarkerIndex) -> Int? {
+        var index = NSMaxRange(range) - 1
+        while index >= range.location {
+            if !markers.isHidden(index) { return index }
+            index -= 1
+        }
+        return range.location > 0 && !markers.isHidden(range.location - 1) ? range.location - 1 : nil
     }
 
     /// The first image of a paragraph that loads gets drawn under it: the paragraph's spacing

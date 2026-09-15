@@ -111,7 +111,7 @@ if it happens while you have unsaved keystrokes, yours win. The editor uses
 SF Mono, wraps long lines, keeps smart quotes and dashes off (they break
 Markdown), and has undo. Markdown syntax is
 colored in place: headings and links in the theme's accent, code in its code
-color, quotes, rules, URLs and front matter muted. Emphasis is italic, strong
+color, quotes, rules, URLs, front matter, table pipes and HTML tags muted. Emphasis is italic, strong
 text bold; the font size never changes, so nothing jumps while you type.
 
 **Live Preview.** The same editor, but Markdown is rendered where it stands, the
@@ -132,8 +132,13 @@ Task items show a check box in place of `[ ]`; click it to toggle the item
 appears under its line, scaled to fit the column, with the alt text above it.
 With Settings ▸ Editor ▸ Live Preview ▸ *Limit line width to a readable
 column* (on by default) the text sits in a centered column of up to 720
-points, like the rendered page. Tables, HTML, footnotes, reference-style links
-and remote images stay as source.
+points, like the rendered page. Tables stay text but line up: every column is
+padded to its widest cell (right- and center-aligned columns follow the
+delimiter row), the header row is bold, the outer pipes hide and the delimiter
+row draws as a rule. Setext headings (`Title` over `===` or `---`) render like
+`#` headings with the underline drawn as a rule, footnote references show as
+small raised labels, and HTML tags are muted. HTML blocks, reference-style
+links and remote images stay as source.
 
 In Split View the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
@@ -248,8 +253,9 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 - No syntax highlighting inside code blocks (the editor colors the Markdown
   itself, not the languages inside fences).
 - Live Preview renders inline Markdown, task boxes, local images, lists,
-  quotes, rules and fenced code; tables, HTML, footnotes, reference-style links
-  and remote images stay as source.
+  quotes, rules, fenced code, tables (as aligned text), setext headings and
+  footnote marks; HTML blocks, reference-style links and remote images stay as
+  source.
 - No Mermaid diagrams or math.
 - The app itself is not sandboxed. That is what lets it read images next to any
   document you open. The Quick Look extension is sandboxed, as macOS requires,

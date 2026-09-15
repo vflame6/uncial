@@ -132,7 +132,8 @@ only when it differs from the model and then clears undo. After every edit `rehi
 resets the base attributes and, in the source presentation, applies
 `MarkdownHighlighter.spans(from:)` with `EditorStyle` attributes (the tokenizer
 `MarkdownHighlighter.tokens(in:)` is pure and tested: fence and front-matter state, inline
-code masked before the other inline constructs, every construct with its delimiter ranges);
+code masked before the other inline constructs, every construct with its delimiter ranges;
+one line of lookahead for tables and setext headings);
 attribute-only, so undo is untouched; skipped above 200 000 characters. **Scroll sync** (Split
 View only, `AppSettings.syncScrolling`): `ScrollSyncController` (pure, tested) turns
 "editor scrolled to line L" into a `ScrollTarget` for the preview and vice versa, ignoring the
@@ -191,6 +192,21 @@ re-runs `rehighlight()` when the width changed and images exist. *Readable colum
 `AppSettings.readableLineWidth` (default on) makes `ThemedTextView.updateInsets()` set
 `textContainerInset.width = InlineLayout.horizontalInset(viewWidth:)` (720 pt column, ≥ 16) in
 the inline presentation, 16 otherwise; called from `setFrameSize` and the property setters.
+Phase 3 (2026-09-15): the tokenizer splits lines up front and looks one line ahead. *Tables* —
+a row with pipes followed by a delimiter row with the same cell count (`tableTokens`) yields
+`tableRow(cells:isHeader:pipes:)` per row (`TableCell`: range between pipes, visible width =
+length minus hidden inline markers, column width = widest visible cell, alignment from the
+delimiter) and `tableDelimiter`; `InlineStyle.alignTables` pads cells with `.kern` = (column −
+visible) × character width on the last visible character (left), on the leading space (right)
+or split (center), mutes pipes, bolds the header, and the delimiter row is fully hidden and drawn
+as a `rule`; outer pipes are markers. `.kern` on a hidden glyph is ignored (probed), which is why
+the leading pipe never carries it. *Setext headings* — a plain non-empty line followed by
+`===`/`---` is `heading(level:)` plus a fully hidden `headingUnderline` drawn as a rule, so
+`---` right under text is a heading (CommonMark), after a blank line a rule. *Footnotes* —
+`footnoteReference` (`[^` and `]` markers, label as 10 pt bold superscript with
+`baselineOffset` 4, accent) and `footnoteDefinition` (the muted `[^id]:` prefix, rest parsed
+inline). *HTML* — tags and one-line comments are `html` tokens, muted, never hidden; autolinks
+are matched first. Source coloring gained `Kind.table` and `Kind.html` (muted).
 
 **Editor conveniences.** *Line numbers* (`AppSettings.showLineNumbers`): `LineNumberRulerView`,
 an `NSRulerView` installed once per editor as the scroll view's vertical ruler (`rulersVisible`

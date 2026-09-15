@@ -173,6 +173,24 @@ quirks: hidden glyphs at a paragraph start belong to the previous line's fragmen
 revealed (so measure line widths from the line break; a fully hidden last line without a
 newline has no fragment of its own), and everything above `highlightingLimit` falls back to
 source. Switching presentation is a `rehighlight()`; text, caret and undo survive.
+Phase 2 (2026-09-15): *task boxes* — the tokenizer's `listItem(bullet:box:)` names the `[ ]`
+range and lists its brackets as markers, `InlineStyle` stores `.taskBox` ("checked"/"unchecked")
+on it and shortens the hanging indent by the two hidden characters, `InlineLayoutManager` draws
+a rounded square over the middle character while the `[` glyph is `.null` (stroke = muted,
+checked = accent fill + white check), and `ThemedTextView.mouseDown` → `taskBox(at:)` /
+`toggle(taskBox:)` flips the middle character through `shouldChangeText` /
+`replaceCharacters` / `didChangeText` (undoable, caret untouched). *Images* — the first
+`image(destination:)` token of a paragraph whose destination is a local file (resolved against
+`baseURL`, cached per view including misses, `image(for:)`) gets an `InlineImage` (fitted size:
+scale ≤ 1, width ≤ text width − head indent, height ≤ 480) under `.inlineImage` and
+`paragraphSpacing = height + 8`; TextKit 1 includes that spacing in the last fragment's rect and
+maps the area to the paragraph's glyphs (probed), so `drawBackground` draws the image at the
+fragment's bottom; `apply(_:to:images:textWidth:)` returns the resolved token locations and
+`MarkerIndex(tokens:resolvedImages:)` hides only those images' markers; `setFrameSize`
+re-runs `rehighlight()` when the width changed and images exist. *Readable column* —
+`AppSettings.readableLineWidth` (default on) makes `ThemedTextView.updateInsets()` set
+`textContainerInset.width = InlineLayout.horizontalInset(viewWidth:)` (720 pt column, ≥ 16) in
+the inline presentation, 16 otherwise; called from `setFrameSize` and the property setters.
 
 **Editor conveniences.** *Line numbers* (`AppSettings.showLineNumbers`): `LineNumberRulerView`,
 an `NSRulerView` installed once per editor as the scroll view's vertical ruler (`rulersVisible`
@@ -221,7 +239,7 @@ including whitespace) computed synchronously at init and then together with the 
 
 **Settings / first run:** `AppSettings` (`appearance` System/Light/Dark → `NSApp.appearance`,
 `theme`, `defaultEditorMode`, `syncScrolling`, `showLineNumbers`, `autoPairing`,
-`continueLists`, `showStatusBar`, `hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
+`continueLists`, `showStatusBar`, `readableLineWidth`, `hasCompletedFirstRun`; UserDefaults keys of the same names, injectable for tests; a legacy `theme` value of system/light/dark migrates to
 `appearance`; `publishTheme()` writes the theme for Quick Look, see Sandbox),
 `QuickLookExtensionManager` (drives `/usr/bin/pluginkit` through `ShellCommand`; Install =
 `-a` + `-e use`, Remove = `-e ignore`), `DefaultAppManager` (`NSWorkspace` behind the

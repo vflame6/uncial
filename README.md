@@ -127,7 +127,13 @@ cursor is in, shows its markers in the muted color; a selection reveals every
 line it touches, and a find match reveals its line. Typing happens on that
 revealed line, so auto-pairing, list continuation, undo, find and replace and
 line numbers behave exactly as in Raw Editor, and copying gives Markdown.
-Images, tables, HTML, footnotes and reference links stay as source.
+Task items show a check box in place of `[ ]`; click it to toggle the item
+(undoable, saved like typing). A local image referenced as `![alt](path)`
+appears under its line, scaled to fit the column, with the alt text above it.
+With Settings ▸ Editor ▸ Live Preview ▸ *Limit line width to a readable
+column* (on by default) the text sits in a centered column of up to 720
+points, like the rendered page. Tables, HTML, footnotes, reference-style links
+and remote images stay as source.
 
 In Split View the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
@@ -201,8 +207,9 @@ dismisses it for good.
 
 **Editor**: the mode new windows start in (Read Only, Live Preview, Split View,
 Raw Editor), the status bar, line numbers, automatic closing of brackets, quotes
-and Markdown markers, list and quote continuation on Return, and whether Split
-View keeps the source and the rendered page scrolled to the same place.
+and Markdown markers, list and quote continuation on Return, the readable
+column in Live Preview, and whether Split View keeps the source and the
+rendered page scrolled to the same place.
 
 **Shortcuts**: a reference list of every keyboard shortcut.
 
@@ -240,8 +247,9 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 
 - No syntax highlighting inside code blocks (the editor colors the Markdown
   itself, not the languages inside fences).
-- Live Preview renders inline Markdown, lists, quotes, rules and fenced code;
-  images, tables, HTML, footnotes and reference-style links stay as source.
+- Live Preview renders inline Markdown, task boxes, local images, lists,
+  quotes, rules and fenced code; tables, HTML, footnotes, reference-style links
+  and remote images stay as source.
 - No Mermaid diagrams or math.
 - The app itself is not sandboxed. That is what lets it read images next to any
   document you open. The Quick Look extension is sandboxed, as macOS requires,

@@ -67,6 +67,47 @@ import Testing
         let text = "a\n\n---\n\n* * *\n"
         #expect(has(text, .rule, "---"))
         #expect(has(text, .rule, "* * *"))
+        #expect(has("text\n---", .heading, "text"))
+    }
+
+    @Test func tablesAlignColumns() {
+        let text = "| a | **b** |\n|:--|--:|\n| cc | d |\n"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        guard case .tableRow(let cells, let isHeader, let pipes) = tokens[0].kind else {
+            Issue.record("no header row")
+            return
+        }
+        #expect(isHeader && pipes == [0, 4, 12])
+        #expect(cells.map { (text as NSString).substring(with: $0.range) } == [" a ", " **b** "])
+        #expect(cells.map(\.visibleWidth) == [3, 3] && cells.map(\.columnWidth) == [4, 3])
+        #expect(cells.map(\.alignment) == [.left, .right])
+        #expect(markers(tokens[0], in: text) == ["|", "|"])
+        #expect(tokens[1].kind == .strong)
+        #expect(tokens[2].kind == .tableDelimiter && markers(tokens[2], in: text) == ["|:--|--:|"])
+        guard case .tableRow(let body, let bodyHeader, _) = tokens[3].kind else {
+            Issue.record("no body row")
+            return
+        }
+        #expect(!bodyHeader && body.map(\.visibleWidth) == [4, 3] && body.map(\.columnWidth) == [4, 3])
+        #expect(tokens.count == 4)
+        #expect(has(text, .table, "|") && has(text, .table, "|:--|--:|"))
+    }
+
+    @Test func setextHeadings() {
+        let text = "Title\n===\ntext *e*\n---\n\n---"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.heading(level: 1), .headingUnderline, .heading(level: 2), .emphasis, .headingUnderline, .rule])
+        #expect(tokens[0].markers.isEmpty && markers(tokens[1], in: text) == ["==="])
+        #expect(has(text, .heading, "Title") && has(text, .heading, "text *e*") && has(text, .rule, "==="))
+    }
+
+    @Test func footnotesAndHtml() {
+        let text = "see[^1] and <b>x</b> <!-- c -->\n[^1]: note **b**"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.footnoteReference, .html, .html, .html, .footnoteDefinition, .strong])
+        #expect(markers(tokens[0], in: text) == ["[^", "]"])
+        #expect((text as NSString).substring(with: tokens[4].range) == "[^1]:")
+        #expect(has(text, .link, "[^1]") && has(text, .html, "<b>") && has(text, .link, "[^1]:"))
     }
 
     @Test func frontMatterIsNotARule() {

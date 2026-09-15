@@ -36,7 +36,7 @@ struct EditorStyle {
         case .strikethrough: [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
         case .inlineCode, .codeBlock: [.foregroundColor: code]
         case .link, .listMarker: [.foregroundColor: accent]
-        case .url, .quote, .rule, .frontMatter: [.foregroundColor: muted]
+        case .url, .quote, .rule, .frontMatter, .table, .html: [.foregroundColor: muted]
         }
     }
 }

@@ -93,8 +93,10 @@ struct InlineStyle {
                 indented.firstLineHeadIndent = Self.quoteIndent * CGFloat(depth)
                 indented.headIndent = indented.firstLineHeadIndent
                 storage.addAttributes([.paragraphStyle: indented, .blockDecoration: "quote:\(depth)", .foregroundColor: style.muted], range: paragraph)
-            case .rule:
+            case .rule, .headingUnderline, .tableDelimiter:
                 storage.addAttributes([.blockDecoration: "rule", .foregroundColor: style.muted], range: paragraph)
+            case .footnoteReference, .footnoteDefinition, .html, .tableRow:
+                break
             case .fence, .code:
                 let inset = NSMutableParagraphStyle()
                 inset.firstLineHeadIndent = Self.codeIndent

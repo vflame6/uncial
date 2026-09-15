@@ -6,9 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Uncial is a native macOS Markdown reader and editor (SwiftUI document app) with a bundled
 Quick Look Preview Extension. One Swift package renders Markdown to a self-contained HTML page
-in one of three themes; the app shows it in a `WKWebView`, offers an `NSTextView` editor beside
-it (Read Only / Live Preview / Raw Editor) with Markdown coloring, scroll sync, optional line
-numbers, auto-closing pairs, a find/replace bar and an optional status bar, writes edits through to the file, and
+in one of three themes; the app shows it in a `WKWebView`, offers an `NSTextView` editor
+(Read Only / Live Preview / Split View / Raw Editor) with Markdown coloring or, in Live Preview,
+Markdown rendered in place with the caret line's markers revealed, plus scroll sync, optional
+line numbers, auto-closing pairs, a find/replace bar and an optional status bar, writes edits through to the file, and
 re-renders on disk changes; the extension returns the same HTML, in
 the theme the app published to the App Group container, to Quick Look. Design specs and implementation plans (with execution notes) are local
 working notes under `docs/superpowers/`, which is gitignored; they exist only on this machine.
@@ -100,7 +101,10 @@ CSS is a Swift string literal on purpose: no resource bundle to ship into the ex
 Light/dark is pure CSS (`prefers-color-scheme`); the app's Appearance setting works by setting
 `NSApp.appearance`, which `WKWebView` and `ThemedTextView` follow without reloading.
 
-**App flow:** `DocumentGroup(viewing:)` → `DocumentView` (per-window `EditorMode` state;
+**App flow:** `DocumentGroup(viewing:)` → `DocumentView` (per-window `EditorMode` state:
+`readOnly`, `livePreview` (the inline editor, stored as `inlinePreview` because `livePreview`
+meant the split before 2026-09-15; `AppSettings` migrates that value to `split`), `split`,
+`rawEditor`; `EditorMode.presentation` is `.inline` for Live Preview and `.source` otherwise;
 `HSplitView` of `MarkdownTextView` and/or the preview; toolbar segmented picker; focused values
 `reloadDocument`, `saveDocument`, `editorMode`) → `DocumentViewModel`, which owns the editor
 `text`, the rendered `body` (rendered off the main actor in `Task.detached`, stale results
@@ -120,13 +124,17 @@ write (probed 2026-09-08: error 67000); `DocumentViewModel.saveNow` also refresh
 NSDocument's `fileModificationDate` after each write so that check never trips. `WebView` reloads only when title/theme/baseURL change (scroll kept)
 and otherwise swaps the body in place; a body arriving mid-load is applied in `didFinish`.
 `MarkdownTextView` wraps `ThemedTextView` (TextKit 1 on purpose: `NSLayoutManager` does the
-glyph ↔ point ↔ line math; `allowsNonContiguousLayout` on; SF Mono 13, soft wrap, smart
-substitutions off, spell check on, find bar, undo); `updateNSView` replaces the string only
-when it differs from the model and then clears undo. After every edit `rehighlight()` resets
-the base attributes and applies `MarkdownHighlighter.spans(in:)` (pure, tested: fence and
-front-matter state, inline code masked before emphasis/links) with `EditorStyle` attributes;
-attribute-only, so undo is untouched; skipped above 200 000 characters. **Scroll sync** (Live
-Preview only, `AppSettings.syncScrolling`): `ScrollSyncController` (pure, tested) turns
+glyph ↔ point ↔ line math and the glyph properties Live Preview needs; the stack is built by
+`ThemedTextView.standalone()`: storage → `InlineLayoutManager` → container → view, the view
+being the layout manager's delegate; `allowsNonContiguousLayout` on; SF Mono 13, soft wrap,
+smart substitutions off, spell check on, find bar, undo); `updateNSView` replaces the string
+only when it differs from the model and then clears undo. After every edit `rehighlight()`
+resets the base attributes and, in the source presentation, applies
+`MarkdownHighlighter.spans(from:)` with `EditorStyle` attributes (the tokenizer
+`MarkdownHighlighter.tokens(in:)` is pure and tested: fence and front-matter state, inline
+code masked before the other inline constructs, every construct with its delimiter ranges);
+attribute-only, so undo is untouched; skipped above 200 000 characters. **Scroll sync** (Split
+View only, `AppSettings.syncScrolling`): `ScrollSyncController` (pure, tested) turns
 "editor scrolled to line L" into a `ScrollTarget` for the preview and vice versa, ignoring the
 driven pane's echo for 300 ms; lines are 1-based fractional document lines, cmark's
 `data-sourcepos` unit (`ThemedTextView.visibleTopLine()` is 0-based, `MarkdownTextView`
@@ -136,6 +144,35 @@ re-applies its last target after every body swap so typing keeps the panes align
 policy in `WebView` is unchanged: same-document fragments allowed, everything else cancelled
 and routed through `LinkOpener`. Keyboard shortcuts live in one table, `AppShortcut` (menus
 bind from it; the Shortcuts tab lists it).
+
+**Inline presentation (Live Preview).** `ThemedTextView.presentation == .inline` keeps the
+raw Markdown in the storage and renders it with attributes and glyph properties only.
+`rehighlight()` applies `InlineStyle` (SF Mono headings 22/19/16/14/13/13 pt bold, h6 muted;
+bold/italic via `NSFontManager` traits; strikethrough; inline code on
+`foreground.withAlphaComponent(0.06)`; `.link` attribute with the raw destination and the
+accent color; list prefixes in the accent color with a hanging `headIndent` of
+`characterWidth × prefix length`; quotes indented 16 pt per level; code and fence lines inset
+12 pt; every marker muted) and stores the paragraph attribute `.blockDecoration` (`"code"`,
+`"quote:N"`, `"rule"`) that `InlineLayoutManager.drawBackground(forGlyphRange:at:)` paints
+per line fragment: one rounded rectangle across a fenced block (corners rounded only on the
+block's first and last fragment, painted piecewise with clipping), a 3 pt bar per quote level,
+a 1 pt rule at the fragment's middle. `MarkerIndex` (pure, tested) holds the sorted marker
+ranges of every token except images, the bullet character indexes and the fenced blocks, and
+computes `revealedRange(for:in:)`: the paragraphs the selection touches, widened to a fenced
+block the caret is in. `ThemedTextView` is the `NSLayoutManagerDelegate`: in
+`shouldGenerateGlyphs` it gives markers outside `revealed` the `.null` property (zero width,
+not drawn, characters untouched) and swaps `-`/`*`/`+` glyphs for the bullet glyph of the run's
+font (`CTFontGetGlyphsForCharacters`, cached per font); it must not touch the glyph tree there
+(reentrancy exception, probed 2026-09-15). `setSelectedRanges` recomputes `revealed` and
+invalidates glyphs + layout for the old and new ranges only; `rehighlight()` invalidates
+glyphs and layout for the whole text whenever markers exist or existed, so a marker that
+appears or vanishes anywhere is regenerated (lazily, visible ranges first). `clicked(onLink:at:)`
+opens the destination through `LinkOpener` only with ⌘ held (relative targets resolved against
+`baseURL`, fragments ignored); a plain click places the caret, which reveals the line. Known
+quirks: hidden glyphs at a paragraph start belong to the previous line's fragment until
+revealed (so measure line widths from the line break; a fully hidden last line without a
+newline has no fragment of its own), and everything above `highlightingLimit` falls back to
+source. Switching presentation is a `rehighlight()`; text, caret and undo survive.
 
 **Editor conveniences.** *Line numbers* (`AppSettings.showLineNumbers`): `LineNumberRulerView`,
 an `NSRulerView` installed once per editor as the scroll view's vertical ruler (`rulersVisible`
@@ -237,7 +274,8 @@ build-setting sandbox, but the owner chose not to ship one.
 - An app launched with `open -a` from this terminal never becomes active (no key window, so
   focused-value menu items read as disabled and `osascript … activate` does not help); use
   `open -a` with an absolute path. Check computed CSS in the app with a temporary
-  `evaluateJavaScript(getComputedStyle…)` log, not screenshots.
+  `evaluateJavaScript(getComputedStyle…)` log, not screenshots. Mode shortcuts are ⌥⌘1–4
+  (Read Only, Live Preview, Split View, Raw Editor).
 - Preferences: the app is unsandboxed but a stale container exists for its bundle id, so use the
   path form: `defaults read /Users/flame/Library/Preferences/com.maksimradaev.uncial`.
   Reset first run with `defaults delete <that path> hasCompletedFirstRun`.
@@ -256,6 +294,16 @@ build-setting sandbox, but the owner chose not to ship one.
   starting the next: `open -a` reaches an instance that is still terminating.
 - `xcodebuild test` re-signs the Debug app with test-host entitlements; run a plain `build` before
   inspecting entitlements with `codesign -d --entitlements :-`.
+- The `xcodebuild` log names failing Swift Testing cases but not their expectations; read them with
+  `xcrun xcresulttool get test-results tests --path build/Logs/Test/<newest>.xcresult` (a test that
+  crashes shows up as "Crash: … abort() called" there; the exception text is in
+  `xcrun xcresulttool export diagnostics` output or `~/Library/Logs/DiagnosticReports/Uncial-*.ips`).
+  `NSString.size(withAttributes:)` crashed inside CoreText in the test host (nil font attribute),
+  which is why `InlineStyle` measures advances with `CTFontGetAdvancesForGlyphs`.
+- TextKit 1 layout can be checked without a window (`ThemedTextView.standalone()`, set the frame and
+  container size, `ensureLayout`, read `lineFragmentUsedRect`), and `InlineLayoutManager` drawing by
+  rendering into an `NSBitmapImageRep` context flipped with `translateBy`/`scaleBy` and sampling
+  `colorAt(x:y:)`; see `ThemedTextViewInlineTests` and `InlineStyleTests`.
 - Leave the machine as found after experiments: default Markdown app (currently Xcode),
   first-run flag, and Quick Look election.
 

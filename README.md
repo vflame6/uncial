@@ -3,8 +3,9 @@
 Uncial is a small native macOS Markdown reader and editor. Open a `.md` file and
 it renders GitHub-flavored Markdown right away, follows the system light or dark
 appearance, and re-renders whenever the file changes on disk. Switch to Live
-Preview to edit the source next to the rendered page; changes are written back
-to the file as you type. It ships with a Quick Look extension, so pressing Space
+Preview to edit with the Markdown rendered in place, or to Split View to edit
+the source next to the rendered page; changes are written back to the file as
+you type. It ships with a Quick Look extension, so pressing Space
 on a Markdown file in Finder shows the rendered document instead of raw text.
 
 ## Features
@@ -13,14 +14,15 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
   autolinks, footnotes, fenced code, raw HTML (dangerous tags are filtered).
 - Automatic re-rendering when the file changes, including atomic saves from
   editors such as VS Code, Vim, or TextEdit. Scroll position is kept.
-- Three editor modes per window: **Read Only**, **Live Preview** (source beside
-  the rendered page, updating as you type) and **Raw Editor**. Edits are saved
-  to the file automatically half a second after you stop typing.
+- Four editor modes per window: **Read Only**, **Live Preview** (Markdown
+  rendered in place, the line with the cursor shows its source), **Split View**
+  (source beside the rendered page, updating as you type) and **Raw Editor**.
+  Edits are saved to the file automatically half a second after you stop typing.
 - Three document themes, each with light and dark variants: **macOS** (system
   fonts and colors, looks like a native document), **GitHub**, and **Solarized**.
   The editor's colors follow the theme, and so do Quick Look previews.
 - The source editor colors Markdown: headings, emphasis, code, links, list
-  markers, quotes, rules and front matter. In Live Preview the two panes scroll
+  markers, quotes, rules and front matter. In Split View the two panes scroll
   together.
 - Editor conveniences: optional line numbers (also as source lines in the
   rendered page), brackets and Markdown markers that close themselves as you
@@ -94,11 +96,12 @@ toolbar, the View menu, or the keyboard:
 | Mode | Shows | Shortcut |
 |---|---|---|
 | Read Only | The rendered document | ⌥⌘1 |
-| Live Preview | Markdown source on the left, rendered document on the right | ⌥⌘2 |
-| Raw Editor | Markdown source only | ⌥⌘3 |
+| Live Preview | One editor with the Markdown rendered in place; the line with the cursor shows its source | ⌥⌘2 |
+| Split View | Markdown source on the left, rendered document on the right | ⌥⌘3 |
+| Raw Editor | Markdown source only | ⌥⌘4 |
 
-⇧⌘E cycles through the three. New windows start in the mode chosen in
-Settings ▸ Editor (Live Preview by default).
+⇧⌘E cycles through the four. New windows start in the mode chosen in
+Settings ▸ Editor (Split View by default).
 
 The file on disk is the source of truth. Whatever you type is written to it
 half a second after you pause, when you leave an editing mode, when the window
@@ -111,7 +114,22 @@ colored in place: headings and links in the theme's accent, code in its code
 color, quotes, rules, URLs and front matter muted. Emphasis is italic, strong
 text bold; the font size never changes, so nothing jumps while you type.
 
-In Live Preview the panes follow each other: scroll the source and the
+**Live Preview.** The same editor, but Markdown is rendered where it stands, the
+way Obsidian does it: headings grow (SF Mono bold, 22 pt for `#` down to 13 pt
+for `######`), `**bold**`, `*emphasis*` and `~~struck~~` text are styled with
+their markers hidden, `` `code` `` sits on a tint, links show their text in the
+accent color (⌘-click opens them; a plain click just places the cursor), bullets
+become •, wrapped list lines hang under their text, quotes are indented behind
+a bar, fenced code blocks get a rounded background with the fence lines
+hidden (only an info string such as `swift` stays), rules draw as a line and
+front matter is muted. The line with the cursor, or the whole fenced block the
+cursor is in, shows its markers in the muted color; a selection reveals every
+line it touches, and a find match reveals its line. Typing happens on that
+revealed line, so auto-pairing, list continuation, undo, find and replace and
+line numbers behave exactly as in Raw Editor, and copying gives Markdown.
+Images, tables, HTML, footnotes and reference links stay as source.
+
+In Split View the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
 Switch it off in Settings ▸ Editor if you prefer independent scrolling.
 
@@ -120,7 +138,7 @@ one number per line of the file; wrapped continuation rows stay unnumbered,
 and the number of the line with the cursor is highlighted. The rendered page
 gets the same numbers: each heading, paragraph, list item or quote is labeled
 with the source line it starts on, and code blocks number every line, so a
-Read Only window can still point at "line 42" and Live Preview's two panes
+Read Only window can still point at "line 42" and Split View's two panes
 carry matching numbers.
 
 **Auto-pairing.** Typing `(`, `[`, `{`, `` ` ``, `*`, `_` or `"` inserts the
@@ -159,7 +177,7 @@ Replace & Find. ⌘G and ⇧⌘G step through matches, ⌘E searches for the
 selection, Esc closes the bar. In Read Only mode ⌘F opens a find bar above
 the rendered page instead: matches are selected and scrolled into view with a
 count of how many there are. Replacing needs the source, so Find and Replace…
-is available in Live Preview and Raw Editor only.
+is available in every mode but Read Only.
 
 ## Settings
 
@@ -181,10 +199,10 @@ dismisses it for good.
   *Remove* hands the role back to the app that had it before, or TextEdit if that
   is unknown. macOS takes a few seconds to apply either change.
 
-**Editor**: the mode new windows start in (Read Only, Live Preview, Raw Editor),
-the status bar, line numbers, automatic closing of brackets, quotes and Markdown markers,
-list and quote continuation on Return, and whether Live Preview keeps the
-source and the rendered page scrolled to the same place.
+**Editor**: the mode new windows start in (Read Only, Live Preview, Split View,
+Raw Editor), the status bar, line numbers, automatic closing of brackets, quotes
+and Markdown markers, list and quote continuation on Return, and whether Split
+View keeps the source and the rendered page scrolled to the same place.
 
 **Shortcuts**: a reference list of every keyboard shortcut.
 
@@ -222,6 +240,8 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 
 - No syntax highlighting inside code blocks (the editor colors the Markdown
   itself, not the languages inside fences).
+- Live Preview renders inline Markdown, lists, quotes, rules and fenced code;
+  images, tables, HTML, footnotes and reference-style links stay as source.
 - No Mermaid diagrams or math.
 - The app itself is not sandboxed. That is what lets it read images next to any
   document you open. The Quick Look extension is sandboxed, as macOS requires,

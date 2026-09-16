@@ -49,7 +49,7 @@ publish)
     fi
     git add "$cask"
     git commit -m "chore: release $version"
-    git tag "v$version"
+    git tag -a "v$version" -m "Uncial $version"
     git push --follow-tags
     gh release create "v$version" "$zip" --title "Uncial $version" --generate-notes
     ;;

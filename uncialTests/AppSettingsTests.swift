@@ -23,6 +23,7 @@ import UncialCore
         #expect(settings.continueLists == true)
         #expect(settings.showStatusBar == false)
         #expect(settings.readableLineWidth == true)
+        #expect(settings.splitRatio == 0.5)
         #expect(settings.hasCompletedFirstRun == false)
     }
 
@@ -40,6 +41,17 @@ import UncialCore
         #expect(reloaded.continueLists == false)
         #expect(reloaded.showStatusBar == true)
         #expect(reloaded.readableLineWidth == false)
+    }
+
+    @Test func persistsAndClampsTheSplitRatio() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.splitRatio = 0.35
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.35)
+        defaults.set(0.95, forKey: "splitRatio")
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.8)
+        defaults.set("wide", forKey: "splitRatio")
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.5)
     }
 
     @Test func persistsSyncScrollingOff() {

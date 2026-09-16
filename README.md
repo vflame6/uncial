@@ -214,8 +214,11 @@ middle of the screen.
 **Editor**: the mode new windows start in (Read Only, Live Preview, Split View,
 Raw Editor), the status bar, line numbers, automatic closing of brackets, quotes
 and Markdown markers, list and quote continuation on Return, the readable
-column in Live Preview, and whether Split View keeps the source and the
-rendered page scrolled to the same place.
+column in Live Preview, whether Split View keeps the source and the rendered
+page scrolled to the same place, and how Split View divides its width between
+source and preview: half each unless you change it. Entering Split View applies
+the setting; dragging the divider changes that window until it leaves Split
+View.
 
 **Shortcuts**: a reference list of every keyboard shortcut.
 

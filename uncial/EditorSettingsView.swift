@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Editor tab: default mode, status bar, source editor conveniences, Split View scroll sync.
+/// Editor tab: default mode, status bar, source editor conveniences, Split View scroll sync and ratio.
 struct EditorSettingsView: View {
     @Bindable var settings: AppSettings
 
@@ -49,10 +49,25 @@ struct EditorSettingsView: View {
                 Text("Centers up to \(Int(InlineLayout.readableWidth)) points of text, like the rendered page. Split View and Raw Editor always use the full width.")
             }
 
-            Section("Split View") {
+            Section {
                 Toggle("Sync scrolling between source and preview", isOn: $settings.syncScrolling)
+                Slider(value: $settings.splitRatio, in: SplitLayout.ratioRange, step: SplitLayout.ratioStep) {
+                    Text("Source pane width")
+                } minimumValueLabel: {
+                    Text(percent(SplitLayout.ratioRange.lowerBound))
+                } maximumValueLabel: {
+                    Text(percent(SplitLayout.ratioRange.upperBound))
+                }
+            } header: {
+                Text("Split View")
+            } footer: {
+                Text("The source gets \(percent(settings.splitRatio)) of the width and the preview \(percent(1 - settings.splitRatio)) whenever a window enters Split View. Dragging the divider changes a window until it leaves Split View.")
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func percent(_ share: Double) -> String {
+        "\(Int((share * 100).rounded()))%"
     }
 }

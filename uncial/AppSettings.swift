@@ -16,6 +16,7 @@ final class AppSettings {
         static let continueLists = "continueLists"
         static let showStatusBar = "showStatusBar"
         static let readableLineWidth = "readableLineWidth"
+        static let splitRatio = "splitRatio"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
     }
 
@@ -64,6 +65,11 @@ final class AppSettings {
         didSet { defaults.set(readableLineWidth, forKey: Key.readableLineWidth) }
     }
 
+    /// Share of a Split View window's width for the source pane, within `SplitLayout.ratioRange`.
+    var splitRatio: Double {
+        didSet { defaults.set(splitRatio, forKey: Key.splitRatio) }
+    }
+
     private(set) var hasCompletedFirstRun: Bool
 
     init(defaults: UserDefaults, applyAppearance: Bool) {
@@ -88,6 +94,7 @@ final class AppSettings {
         continueLists = defaults.object(forKey: Key.continueLists) == nil ? true : defaults.bool(forKey: Key.continueLists)
         showStatusBar = defaults.bool(forKey: Key.showStatusBar)
         readableLineWidth = defaults.object(forKey: Key.readableLineWidth) == nil ? true : defaults.bool(forKey: Key.readableLineWidth)
+        splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
         hasCompletedFirstRun = defaults.bool(forKey: Key.hasCompletedFirstRun)
     }
 

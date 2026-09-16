@@ -19,13 +19,10 @@ struct DocumentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
-                if mode.showsEditor {
-                    editor.frame(minWidth: 280)
-                }
-                if mode.showsPreview {
-                    preview.frame(minWidth: 280)
-                }
+            SplitPanes(showsLeading: mode.showsEditor, showsTrailing: mode.showsPreview, ratio: settings.splitRatio) {
+                editor
+            } trailing: {
+                preview
             }
             if settings.showStatusBar {
                 StatusBarView(mode: mode, statistics: model.statistics)

@@ -14,6 +14,10 @@ struct UncialApp: App {
         }
         .defaultSize(width: 1000, height: 760)
         .commands {
+            // The stock About panel shows only name and version; this one credits the author.
+            CommandGroup(replacing: .appInfo) {
+                Button("About \(AppInfo().name)") { AboutPanel.show() }
+            }
             CommandGroup(before: .newItem) {
                 Button("New…") { NewDocumentCommand.run() }
                     .keyboardShortcut(.newDocument)

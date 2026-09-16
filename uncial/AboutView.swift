@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// About tab: icon, version, what renders the Markdown, where the source lives.
+/// About tab: icon, version, what renders the Markdown, who made it, where the source lives.
 struct AboutView: View {
     private let info = AppInfo()
 
@@ -19,8 +19,9 @@ struct AboutView: View {
             Text("GitHub-flavored Markdown by cmark-gfm, math by KaTeX, diagrams by beautiful-mermaid and mermaid.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            Link("View on GitHub", destination: AppInfo.repositoryURL)
+            Text((try? AttributedString(markdown: AppInfo.attribution)) ?? AttributedString(AppInfo.attribution))
                 .padding(.top, 6)
+            Link("View on GitHub", destination: AppInfo.repositoryURL)
             if let copyright = info.copyright {
                 Text(copyright)
                     .font(.caption)

@@ -4,7 +4,7 @@
 # `make release` rewrites the version and the checksum for every release.
 cask "uncial" do
   version "1.0.0"
-  sha256 "0000000000000000000000000000000000000000000000000000000000000000"
+  sha256 "1983658bdde3c2cd670063766fd2906c5efbf3e6cfe69ac3bda2f987046fecc1"
 
   url "https://github.com/vflame6/uncial/releases/download/v#{version}/Uncial-#{version}.zip"
   name "Uncial"

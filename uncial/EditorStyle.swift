@@ -13,9 +13,12 @@ struct EditorStyle {
     let italic: NSFont
     /// Body size in points; everything else scales from it (13 is the system size).
     let size: CGFloat
+    /// Whether the colors are the dark variant.
+    let isDark: Bool
 
     init(palette: EditorPalette?, isDark: Bool, size: CGFloat = 13) {
         self.size = size
+        self.isDark = isDark
         let colors = palette.map { isDark ? $0.dark : $0.light }
         background = colors.map { NSColor(rgb: $0.background) } ?? .textBackgroundColor
         foreground = colors.map { NSColor(rgb: $0.foreground) } ?? .textColor

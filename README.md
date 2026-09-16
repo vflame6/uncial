@@ -25,7 +25,8 @@ Open panels and Get Info show a thumbnail of the rendered page.
 - Automatic re-rendering when the file changes, including atomic saves from
   editors such as VS Code, Vim, or TextEdit. Scroll position is kept.
 - Four editor modes per window: **Read Only**, **Live Preview** (Markdown
-  rendered in place, the line with the cursor shows its source), **Split View**
+  rendered in place, images and diagrams included; the line with the cursor
+  shows its source), **Split View**
   (source beside the rendered page, updating as you type) and **Raw Editor**.
   Edits are saved to the file automatically half a second after you stop typing.
 - Three document themes, each with light and dark variants: **macOS** (system

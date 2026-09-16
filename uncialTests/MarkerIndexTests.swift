@@ -17,6 +17,22 @@ import Testing
         #expect(resolved.hidden.count == 5 && resolved.isHidden(11) && resolved.isHidden(16) && !resolved.isHidden(13))
     }
 
+    @Test func hidesResolvedDiagramBlocksButTheirLastNewline() {
+        // "intro\n" 0–5, "```mermaid" 6–15, "pie" 17–19, "```" 21–23, "\n" 24, "after" 25–29.
+        let text = "intro\n```mermaid\npie\n```\nafter"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        let block = NSRange(location: 6, length: 18)
+        let plain = MarkerIndex(tokens: tokens, diagramBlocks: [block])
+        #expect(plain.diagramBlocks == [block] && !plain.isHidden(17) && plain.isHidden(6) && plain.hasDiagram(touching: NSRange(location: 20, length: 0)))
+        let resolved = MarkerIndex(tokens: tokens, diagramBlocks: [block], resolvedDiagrams: [6])
+        #expect(resolved.diagramBlocks == [block])
+        #expect(resolved.hidden == [NSRange(location: 6, length: 18)])
+        #expect(resolved.isHidden(6) && resolved.isHidden(17) && resolved.isHidden(23) && !resolved.isHidden(24) && !resolved.isHidden(25))
+        #expect(resolved.hasDiagram(touching: NSRange(location: 17, length: 0)) && !resolved.hasDiagram(touching: NSRange(location: 25, length: 3)))
+        #expect(resolved.revealedRange(for: NSRange(location: 24, length: 0), in: text as NSString) == NSRange(location: 6, length: 19))
+        #expect(MarkerIndex.merged([NSRange(location: 5, length: 2), NSRange(location: 0, length: 3), NSRange(location: 6, length: 4)]) == [NSRange(location: 0, length: 3), NSRange(location: 5, length: 5)])
+    }
+
     @Test func collectsBulletsAndBlocks() {
         let text = "- a\n1. b\n```\nx\n```\ntext\n~~~\nopen"
         let markers = index(text)

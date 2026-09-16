@@ -7,6 +7,8 @@ import UncialCore
 struct MarkdownTextView: NSViewRepresentable {
     let text: String
     let palette: EditorPalette?
+    /// Colors and cache key for the diagrams drawn in Live Preview.
+    let theme: Theme
     /// Body size in points (headings scale from it).
     let fontSize: CGFloat
     let showsLineNumbers: Bool
@@ -67,6 +69,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.presentation = presentation
         textView.readableWidth = readableWidth
         textView.baseURL = baseURL
+        textView.theme = theme
         textView.string = text
         textView.fontSize = fontSize
         textView.palette = palette
@@ -97,6 +100,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
         textView.baseURL = baseURL
+        textView.theme = theme
         textView.readableWidth = readableWidth
         if textView.presentation != presentation {
             textView.presentation = presentation
@@ -244,13 +248,22 @@ final class ThemedTextView: NSTextView {
                 markers = .empty
             case .inline:
                 let textWidth = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
-                resolvedImages = InlineStyle(style: style).apply(tokens, to: textStorage, images: { self.image(for: $0) }, textWidth: textWidth)
-                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages)
+                // A diagram the caret is in stays source, so the reveal is settled first, from the new tokens.
+                let reveal = MarkerIndex(tokens: tokens).revealedRange(for: selectedRange(), in: text as NSString)
+                let resolved = InlineStyle(style: style).apply(tokens, to: textStorage, images: { self.image(for: $0) },
+                                                               diagrams: { self.image(forDiagram: $0) }, revealed: reveal, textWidth: textWidth)
+                resolvedImages = resolved.images
+                resolvedDiagrams = resolved.diagrams
+                let diagramBlocks = InlineStyle.diagramBlocks(in: tokens, text: text as NSString).map(\.range)
+                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, diagramBlocks: diagramBlocks, resolvedDiagrams: resolvedDiagrams)
             }
         } else {
             markers = .empty
         }
-        if presentation == .source { resolvedImages = [] }
+        if presentation == .source {
+            resolvedImages = []
+            resolvedDiagrams = []
+        }
         textStorage.endEditing()
         typingAttributes = style.baseAttributes
         if hadMarkers || markers != .empty {
@@ -295,6 +308,20 @@ final class ThemedTextView: NSTextView {
             DispatchQueue.main.async { completion(image) }
         }.resume()
     }
+    /// The document theme: the colors of the diagrams mermaid.js draws, and part of their cache key.
+    var theme: Theme = .default {
+        didSet { if theme != oldValue, presentation == .inline { rehighlight() } }
+    }
+    /// Opening fence locations of the mermaid blocks drawn as pictures.
+    private(set) var resolvedDiagrams: Set<Int> = []
+    private var diagramCache: [DiagramRequest: NSImage?] = [:]
+    private var pendingDiagrams: Set<DiagramRequest> = []
+    /// Draws one diagram to a bitmap and calls back on the main thread; tests inject their own.
+    var diagramRenderer: (DiagramRequest, @escaping (NSImage?) -> Void) -> Void = { request, completion in
+        Task { @MainActor in
+            completion(await DiagramWebRenderer.shared.image(for: request))
+        }
+    }
     private var layoutWidth: CGFloat = 0
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
     private(set) var revealed = NSRange(location: 0, length: 0) {
@@ -307,6 +334,11 @@ final class ThemedTextView: NSTextView {
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
         let previous = revealed
+        if markers.hasDiagram(touching: previous) || markers.hasDiagram(touching: next) {
+            // The picture gives way to the source and back: attributes, not just glyphs, change.
+            rehighlight()
+            return
+        }
         revealed = next
         let whole = NSRange(location: 0, length: currentText.length)
         for range in [previous, next] {
@@ -349,14 +381,35 @@ final class ThemedTextView: NSTextView {
         return nil
     }
 
-    /// The column follows the width, and images are fitted to the text width, so a width change
+    /// A diagram's picture in the current look, once `diagramRenderer` has drawn it; the first call
+    /// starts the drawing and re-renders the text when it lands. Every outcome is cached, misses too.
+    func image(forDiagram source: String) -> NSImage? {
+        let width = ((textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)).rounded()
+        let request = DiagramRequest(source: source, theme: theme, dark: style.isDark, scale: style.scale, width: max(0, width))
+        if let cached = diagramCache[request] { return cached }
+        guard !pendingDiagrams.contains(request) else { return nil }
+        pendingDiagrams.insert(request)
+        diagramRenderer(request) { [weak self] image in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pendingDiagrams.remove(request)
+                self.diagramCache[request] = .some(image)
+                if image != nil, self.presentation == .inline {
+                    self.rehighlight()
+                }
+            }
+        }
+        return nil
+    }
+
+    /// The column follows the width, and pictures are fitted to the text width, so a width change
     /// re-fits both.
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         guard newSize.width != layoutWidth else { return }
         layoutWidth = newSize.width
         updateInsets()
-        if presentation == .inline, !resolvedImages.isEmpty {
+        if presentation == .inline, !resolvedImages.isEmpty || !resolvedDiagrams.isEmpty {
             rehighlight()
         }
     }

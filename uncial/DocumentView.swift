@@ -73,6 +73,7 @@ struct DocumentView: View {
             MarkdownTextView(
                 text: model.text,
                 palette: settings.theme.editorPalette,
+                theme: settings.theme,
                 fontSize: CGFloat(settings.effectiveTextSize),
                 showsLineNumbers: settings.showLineNumbers,
                 autoPairing: settings.autoPairing,

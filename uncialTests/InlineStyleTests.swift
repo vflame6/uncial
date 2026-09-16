@@ -67,7 +67,7 @@ import UncialCore
         let text = "![a](pic.png)\n![b](missing.png)"
         let wide = NSTextStorage(string: text, attributes: style.baseAttributes)
         let resolved = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: wide, images: provider, textWidth: 400)
-        #expect(resolved == [0])
+        #expect(resolved.images == [0] && resolved.diagrams.isEmpty)
         #expect(paragraph(wide, 0)?.paragraphSpacing == 108)
         #expect((wide.attribute(.inlineImage, at: 0, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 200, height: 100))
         #expect((paragraph(wide, 14)?.paragraphSpacing ?? 0) == 0)

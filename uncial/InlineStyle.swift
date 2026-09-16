@@ -1,4 +1,5 @@
 import AppKit
+import UncialCore
 
 extension NSAttributedString.Key {
     /// Paragraph decoration drawn by `InlineLayoutManager`: "code", "quote:N" or "rule".
@@ -28,7 +29,21 @@ struct InlineStyle {
     static let quoteIndent: CGFloat = 16
     static let codeIndent: CGFloat = 12
     static let maximumImageHeight: CGFloat = 480
+    static let maximumDiagramHeight: CGFloat = 800
     static let imageGap: CGFloat = 8
+
+    /// What `apply` drew as pictures: the image tokens' locations and the opening fences of diagrams.
+    struct Resolved: Equatable {
+        var images: Set<Int> = []
+        var diagrams: Set<Int> = []
+    }
+
+    /// A mermaid fence: `range` spans both fence lines (an unclosed one ends at its last code
+    /// line), `source` is the diagram text as `MermaidRenderer.key(for:)` normalizes it.
+    struct DiagramBlock: Equatable {
+        let range: NSRange
+        let source: String
+    }
 
     let style: EditorStyle
     let characterWidth: CGFloat
@@ -56,10 +71,13 @@ struct InlineStyle {
     }
 
     /// `storage` must already carry the base attributes for its whole text. `images` loads an
-    /// image token's destination (nil keeps it as source); `textWidth` is the room for text, which
-    /// bounds the drawn size. Returns the locations of the image tokens that got an image.
+    /// image token's destination and `diagrams` a mermaid fence's picture (nil keeps either as
+    /// source; a fence inside `revealed` is never asked for); `textWidth` is the room for text, which
+    /// bounds the drawn sizes. Returns what got a picture.
     @discardableResult
-    func apply(_ tokens: [MarkdownHighlighter.Token], to storage: NSTextStorage, images: (String) -> NSImage? = { _ in nil }, textWidth: CGFloat = .greatestFiniteMagnitude) -> Set<Int> {
+    func apply(_ tokens: [MarkdownHighlighter.Token], to storage: NSTextStorage, images: (String) -> NSImage? = { _ in nil },
+               diagrams: (String) -> NSImage? = { _ in nil }, revealed: NSRange = NSRange(location: 0, length: 0),
+               textWidth: CGFloat = .greatestFiniteMagnitude) -> Resolved {
         let text = storage.string as NSString
         for token in tokens {
             let paragraph = text.paragraphRange(for: token.range)
@@ -139,7 +157,8 @@ struct InlineStyle {
             }
         }
         alignTables(tokens, in: storage)
-        return reserveImages(tokens, in: storage, images: images, textWidth: textWidth)
+        return Resolved(images: reserveImages(tokens, in: storage, images: images, textWidth: textWidth),
+                        diagrams: reserveDiagrams(tokens, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth))
     }
 
     var superscriptFont: NSFont { NSFont.monospacedSystemFont(ofSize: 10 * style.scale, weight: .bold) }
@@ -259,6 +278,68 @@ struct InlineStyle {
             resolved.insert(token.range.location)
         }
         return resolved
+    }
+
+    /// A mermaid fence outside `revealed` whose picture is ready collapses to one blank line with the
+    /// picture under it: `MarkerIndex` hides the block's glyphs but for the last newline, the code
+    /// decoration goes, and the closing line's paragraph reserves the picture's height like an image's.
+    private func reserveDiagrams(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, diagrams: (String) -> NSImage?, revealed: NSRange, textWidth: CGFloat) -> Set<Int> {
+        let text = storage.string as NSString
+        var resolved: Set<Int> = []
+        for block in Self.diagramBlocks(in: tokens, text: text) {
+            guard block.range.length > 0, NSIntersectionRange(block.range, revealed).length == 0, !NSLocationInRange(revealed.location, block.range),
+                  let image = diagrams(block.source), image.size.width > 0, image.size.height > 0 else { continue }
+            let available = max(40, textWidth)
+            let scale = min(1, available / image.size.width, Self.maximumDiagramHeight / image.size.height)
+            let size = NSSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
+            storage.removeAttribute(.blockDecoration, range: text.paragraphRange(for: block.range))
+            let last = text.paragraphRange(for: NSRange(location: NSMaxRange(block.range) - 1, length: 0))
+            let spaced = NSMutableParagraphStyle()
+            spaced.paragraphSpacing = size.height + Self.imageGap
+            storage.addAttributes([.paragraphStyle: spaced, .inlineImage: InlineImage(image: image, size: size)], range: last)
+            resolved.insert(block.range.location)
+        }
+        return resolved
+    }
+
+    /// The fenced blocks whose info string starts with `mermaid`.
+    static func diagramBlocks(in tokens: [MarkdownHighlighter.Token], text: NSString) -> [DiagramBlock] {
+        var blocks: [DiagramBlock] = []
+        var start: Int?
+        var end = 0
+        var lines: [String] = []
+        var isDiagram = false
+        func close(_ open: Int, at end: Int) {
+            guard isDiagram, !lines.isEmpty else { return }
+            blocks.append(DiagramBlock(range: NSRange(location: open, length: end - open), source: MermaidRenderer.key(for: lines.joined(separator: "\n"))))
+        }
+        for token in tokens {
+            switch token.kind {
+            case .fence:
+                if let open = start {
+                    close(open, at: NSMaxRange(token.range))
+                    start = nil
+                } else {
+                    start = token.range.location
+                    end = NSMaxRange(token.range)
+                    lines = []
+                    let markerEnd = token.markers.first.map { NSMaxRange($0) } ?? token.range.location
+                    let info = text.substring(with: NSRange(location: markerEnd, length: max(0, NSMaxRange(token.range) - markerEnd)))
+                    isDiagram = info.split(whereSeparator: { $0 == " " || $0 == "\t" }).first == "mermaid"
+                }
+            case .code:
+                if start != nil {
+                    lines.append(text.substring(with: token.range))
+                    end = NSMaxRange(token.range)
+                }
+            default:
+                break
+            }
+        }
+        if let open = start {
+            close(open, at: end)
+        }
+        return blocks
     }
 
     private func addTrait(_ trait: NSFontTraitMask, to storage: NSTextStorage, in range: NSRange) {

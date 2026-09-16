@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import UncialCore
 @testable import Uncial
 
 @MainActor
@@ -161,6 +162,50 @@ import Testing
         #expect(inline.markers.isHidden(0) && inline.markers.isHidden(4))
         inline.rehighlight()
         #expect(requested.count == 1)
+    }
+
+    @Test func drawsDiagramsUnlessTheCaretIsInside() async throws {
+        let picture = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
+            NSColor.blue.setFill()
+            rect.fill()
+            return true
+        }
+        var requests: [DiagramRequest] = []
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.presentation = .inline
+        inline.theme = .github
+        inline.diagramRenderer = { request, completion in
+            requests.append(request)
+            DispatchQueue.main.async { completion(picture) }
+        }
+        // "intro\n" 0–5, "```mermaid" 6–15, "pie" 17–19, "  \"a\" : 1" 21–29, "```" 31–33, "\n" 34, "after" 35–39.
+        inline.replaceText(with: "intro\n```mermaid\npie\n  \"a\" : 1\n```\nafter")
+        inline.setSelectedRange(NSRange(location: 0, length: 0))
+        #expect(inline.resolvedDiagrams.isEmpty)
+        #expect(requests.map(\.source) == ["pie\n  \"a\" : 1"] && requests.first?.theme == .github && requests.first?.dark == false)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(inline.resolvedDiagrams == [6])
+        #expect(inline.markers.isHidden(6) && inline.markers.isHidden(33) && !inline.markers.isHidden(34))
+        let storage = inline.textStorage!
+        #expect((storage.attribute(.inlineImage, at: 34, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 100, height: 40))
+        #expect(storage.attribute(.blockDecoration, at: 6, effectiveRange: nil) == nil)
+        layout(inline)
+        let lineHeight = inline.layoutManager!.lineFragmentUsedRect(forGlyphAt: 0, effectiveRange: nil).height
+        let height = inline.layoutManager!.usedRect(for: inline.textContainer!).height
+        // intro, the block's one blank line, after: three lines plus the picture and its gap.
+        #expect(height > 2.5 * lineHeight + 40 && height < 3.5 * lineHeight + 40 + InlineStyle.imageGap, "height \(height) for lines of \(lineHeight)")
+        // The caret inside the block reveals the source and drops the picture.
+        inline.setSelectedRange(NSRange(location: 17, length: 0))
+        #expect(inline.revealed == NSRange(location: 6, length: 29))
+        #expect(storage.attribute(.inlineImage, at: 34, effectiveRange: nil) == nil)
+        #expect(storage.attribute(.blockDecoration, at: 6, effectiveRange: nil) as? String == "code")
+        #expect(inline.resolvedDiagrams.isEmpty && requests.count == 1)
+        // Leaving brings the picture back from the cache.
+        inline.setSelectedRange(NSRange(location: 37, length: 0))
+        #expect(inline.resolvedDiagrams == [6] && requests.count == 1)
+        #expect(storage.attribute(.inlineImage, at: 34, effectiveRange: nil) != nil)
     }
 
     @Test func clickingATaskBoxTogglesIt() {

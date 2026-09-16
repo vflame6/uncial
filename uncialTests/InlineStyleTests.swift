@@ -29,6 +29,44 @@ import UncialCore
         storage.attribute(.blockDecoration, at: index, effectiveRange: nil) as? String
     }
 
+    @Test func listsFencedBlocks() {
+        // "```math" 0–6, "x" 8, "```" 10–12, "$$" 14–15, "y" 17, "$$" 19–20, "```mermaid" 22–31, "graph TD" 33–40 (unclosed).
+        let text = "```math\nx\n```\n$$\ny\n$$\n```mermaid\ngraph TD"
+        let blocks = InlineStyle.fencedBlocks(in: MarkdownHighlighter.tokens(in: text), text: text as NSString)
+        #expect(blocks == [
+            InlineStyle.FencedBlock(range: NSRange(location: 0, length: 13), info: "math", lines: ["x"], closing: 10),
+            InlineStyle.FencedBlock(range: NSRange(location: 14, length: 7), info: "math", lines: ["y"], closing: 19),
+            InlineStyle.FencedBlock(range: NSRange(location: 22, length: 19), info: "mermaid", lines: ["graph TD"], closing: nil),
+        ])
+        #expect(blocks.map(\.isMath) == [true, true, false] && blocks.map(\.isDiagram) == [false, false, true])
+        #expect(InlineStyle.diagramBlocks(in: MarkdownHighlighter.tokens(in: text), text: text as NSString) == [InlineStyle.DiagramBlock(range: NSRange(location: 22, length: 19), source: "graph TD")])
+    }
+
+    @Test func drawsMathInPlaceOfItsTeX() {
+        let picture = MathPicture(image: NSImage(size: NSSize(width: 300, height: 60)), size: NSSize(width: 300, height: 60), baseline: 40)
+        // "a $x$ b\n" 0–7 (token 2–4), "$$z$$\n" 8–13, "```math\n" 14–21, "y\n" 22–23, "```" 24–26.
+        let text = "a $x$ b\n$$z$$\n```math\ny\n```"
+        let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
+        var asked: [String] = []
+        let resolved = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage, math: { tex, display in
+            asked.append("\(tex):\(display)")
+            return tex == "z" ? nil : picture
+        }, revealed: NSRange(location: 0, length: 0), textWidth: 200)
+        #expect(asked == ["x:false", "z:true", "y:true"])
+        #expect(resolved.math == [2: 2, 14: 24] && resolved.pictureBlocks == [NSRange(location: 14, length: 13)])
+        // Fitted to the text width, baseline scaled along.
+        let inline = storage.attribute(.mathPicture, at: 2, effectiveRange: nil) as? MathPicture
+        #expect(inline?.size == NSSize(width: 200, height: 40) && inline?.baseline == 27)
+        #expect(storage.attribute(.mathPicture, at: 8, effectiveRange: nil) == nil && storage.attribute(.mathPicture, at: 3, effectiveRange: nil) == nil)
+        #expect((storage.attribute(.mathPicture, at: 24, effectiveRange: nil) as? MathPicture)?.size.width == 200)
+        #expect(decoration(storage, 22) == nil && decoration(storage, 14) == nil)
+        #expect(paragraph(storage, 24)?.alignment == .center && paragraph(storage, 0)?.alignment != .center)
+        // A revealed formula stays TeX.
+        let shown = NSTextStorage(string: text, attributes: style.baseAttributes)
+        let none = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: shown, math: { _, _ in picture }, revealed: NSRange(location: 0, length: 8), textWidth: 200)
+        #expect(none.math == [8: 8, 14: 24] && shown.attribute(.mathPicture, at: 2, effectiveRange: nil) == nil)
+    }
+
     @Test func headingsGrowAndKeepMonospace() {
         let text = storage("# Title *em*\n###### six")
         #expect(font(text, 2).pointSize == 22 && font(text, 2).fontDescriptor.symbolicTraits.contains(.bold))

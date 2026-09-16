@@ -39,4 +39,25 @@ import UncialCore
         #expect(await renderer.image(for: DiagramRequest(source: "nonsense diagram type", theme: .macOS, dark: false, scale: 1, width: 600)) == nil)
         #expect(DiagramWebRenderer.hex(0x0A84FF) == "#0A84FF" && DiagramWebRenderer.mix(0xFFFFFF, into: 0x000000, 0.5) == 0x808080)
     }
+
+    @Test func rasterizesMathForLivePreview() async throws {
+        let renderer = DiagramWebRenderer()
+        let request = MathRequest(tex: "\\frac{a}{b}", display: false, theme: .macOS, dark: false, fontSize: 13)
+        let fraction = try #require(await renderer.picture(for: request))
+        #expect(fraction.size.width > 5 && fraction.size.height > 20 && fraction.baseline > 5 && fraction.baseline < fraction.size.height, "size \(fraction.size) baseline \(fraction.baseline)")
+        #expect(fraction.image.size == fraction.size)
+        let bigger = try #require(await renderer.picture(for: MathRequest(tex: "\\frac{a}{b}", display: false, theme: .macOS, dark: true, fontSize: 26)))
+        #expect(bigger.size.height > fraction.size.height * 1.6, "\(bigger.size) vs \(fraction.size)")
+        let display = try #require(await renderer.picture(for: MathRequest(tex: "\\sum_{n=1}^{\\infty} \\frac{1}{n^2}", display: true, theme: .github, dark: false, fontSize: 13)))
+        #expect(display.size.width > 30 && display.size.height > 30 && display.baseline > 0, "\(display.size)")
+        // Bad TeX comes back as KaTeX's red source, not nil.
+        let bad = try #require(await renderer.picture(for: MathRequest(tex: "\\frac{1}", display: false, theme: .solarized, dark: false, fontSize: 13)))
+        #expect(bad.size.width > 10)
+        #expect(await renderer.picture(for: request) === fraction)
+        // Transparent, so the editor's selection shows through.
+        let tiff = try #require(fraction.image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        let corner = try #require(bitmap.colorAt(x: 0, y: 0))
+        #expect(corner.alphaComponent < 0.01, "corner alpha \(corner.alphaComponent)")
+    }
 }

@@ -2,7 +2,8 @@ import AppKit
 
 /// Draws the inline presentation's block decorations behind the text: a rounded background
 /// across a fenced code block, a left border per quote level, a rule line. Driven by the
-/// `.blockDecoration` paragraph attribute, so it needs no NSTextBlock and adds no padding.
+/// `.blockDecoration` paragraph attribute, so it needs no NSTextBlock and adds no padding. Also
+/// draws the pictures: images under their paragraph, formulas on their anchor glyph.
 final class InlineLayoutManager: NSLayoutManager {
     static let cornerRadius: CGFloat = 6
     static let borderWidth: CGFloat = 3
@@ -29,6 +30,24 @@ final class InlineLayoutManager: NSLayoutManager {
             }
             self.drawTaskBoxes(in: fragment, lineRect: box, container: container, origin: origin, storage: storage)
             self.drawImage(in: fragment, lineRect: box, container: container, storage: storage, text: text)
+        }
+    }
+
+    /// A formula's picture sits on its anchor glyph, a whitespace box of the picture's size laid out by
+    /// `ThemedTextView`, with the picture's baseline on the text's.
+    override func drawGlyphs(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        super.drawGlyphs(forGlyphRange: glyphsToShow, at: origin)
+        guard let storage = textStorage else { return }
+        let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        storage.enumerateAttribute(.mathPicture, in: characters, options: []) { value, range, _ in
+            guard let picture = value as? MathPicture else { return }
+            let glyph = glyphIndexForCharacter(at: range.location)
+            guard propertyForGlyph(at: glyph) == .controlCharacter else { return }
+            let fragment = lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            let position = location(forGlyphAt: glyph)
+            let target = NSRect(x: origin.x + fragment.minX + position.x, y: origin.y + fragment.minY + position.y - picture.baseline,
+                                width: picture.size.width, height: picture.size.height)
+            picture.image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
     }
 

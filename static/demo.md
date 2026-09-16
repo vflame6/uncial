@@ -161,8 +161,9 @@ $$
 ```
 
 *Expect:* the rendered page shows real formulas (KaTeX to MathML, no script); Live
-Preview keeps the TeX in the code color with the dollars hidden off the cursor line
-and tints the `$$` block like code. Bad TeX shows in red with its source.
+Preview draws them too, inline on the baseline and display math centered on its own
+line, and shows the TeX (dollars hidden, the `$$` block tinted like code) only on
+the caret's line or block. Bad TeX shows in red with its source, in both.
 
 ## Diagrams
 

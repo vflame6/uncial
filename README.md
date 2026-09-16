@@ -157,9 +157,10 @@ escape backslashes hide, and HTML renders as far as a text view can: tags hide,
 `<b>`, `<i>`, `<u>`, `<s>`, `<code>`, `<kbd>`, `<mark>`, `<sup>`, `<sub>`, `<a>`
 and `<h1>`–`<h6>` style their text, an `align` attribute or `<center>` aligns
 the paragraph, `<img>` draws like a Markdown image and comments vanish. Remote
-images load in the background and appear once fetched. Math keeps its TeX in
-the code color with the dollars hidden; `$$` blocks sit on the code tint. Front
-matter and link definitions stay as source.
+images load in the background and appear once fetched. Math is drawn as
+formulas too, inline on the text's baseline and display math centered on its
+own line, with the TeX back on the caret's line (or the whole `$$` block while
+the caret is inside it). Front matter and link definitions stay as source.
 
 In Split View the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
@@ -286,16 +287,19 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 - Live Preview renders inline Markdown, task boxes, local images, lists,
   quotes, rules, fenced code, tables (as aligned text), setext headings,
   footnote marks, reference-style links and common HTML (tags hidden, inline
-  tags styled, `align` honored on the tag's own line) and diagrams (a mermaid
-  fence shows its source while the caret is inside it); HTML tables and lists,
-  front matter and link definitions stay as source, and math shows as TeX.
+  tags styled, `align` honored on the tag's own line), diagrams and math (a
+  mermaid fence, a formula or a `$$` block shows its source while the caret is
+  inside it); HTML tables and lists, front matter and link definitions stay as
+  source.
 - Diagrams drawn by mermaid.js (everything but flowcharts, sequence, state,
   class, ER and XY charts) have their colors baked in per theme and appearance
   and take a moment the first time a document needs one; a fence neither engine
   accepts stays a code block. Quick Look shows them for documents Uncial has
   rendered before (the app keeps the last 400 diagrams in its App Group
   container, because WebKit cannot run inside a Quick Look extension); in a
-  document the app has never opened they stay code blocks.
+  document the app has never opened they stay code blocks. Formulas in Live
+  Preview are drawn the same way, by WebKit from KaTeX's MathML, and appear a
+  moment after their TeX the first time.
 - Thumbnails show the page's text and structure only: no images, math or
   diagrams, and always the light variant of the theme.
 - The app itself is not sandboxed. That is what lets it read images next to any

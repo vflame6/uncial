@@ -15,10 +15,21 @@ nonisolated struct DiagramRequest: Hashable {
     let width: CGFloat
 }
 
+/// One formula as Live Preview wants it: KaTeX's MathML drawn by WebKit at the editor's size.
+nonisolated struct MathRequest: Hashable {
+    let tex: String
+    let display: Bool
+    let theme: Theme
+    let dark: Bool
+    /// The editor's body size in points, the formula's font size.
+    let fontSize: CGFloat
+}
+
 /// The official mermaid.js in a hidden web view, one per process and created on first use. It draws
 /// the diagram types beautiful-mermaid lacks to SVG in the theme's light and dark colors for the
-/// rendered page, and draws any diagram to a bitmap for Live Preview. The page is a blank document
-/// carrying the theme's stylesheet, with no access to files or the network, and mermaid runs with
+/// rendered page, and draws any diagram, and any formula (KaTeX's MathML, which needs a layout
+/// engine to become pixels), to a bitmap for Live Preview. The page is a blank document carrying the
+/// theme's stylesheet, with no access to files or the network, and mermaid runs with
 /// `securityLevel: "strict"`; the document page itself still gets no script. Everything drawn for
 /// the page also lands in `store` for the Quick Look extension, where WebKit cannot launch its
 /// helper processes (probed 2026-09-16: "web process failed to launch").
@@ -33,6 +44,7 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
     private var stageTheme: Theme?
     private var svgCache: [String: PreRenderedDiagram] = [:]
     private var imageCache: [DiagramRequest: NSImage] = [:]
+    private var mathCache: [MathRequest: MathPicture] = [:]
     private var nextID = 0
     private var last: Task<Void, Never> = Task {}
     /// How long one diagram may take before it counts as failed.
@@ -151,6 +163,8 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             let measure = """
             const stage = document.getElementById("stage");
             stage.style.width = width + "px";
+            stage.style.fontSize = "";
+            stage.style.padding = "";
             stage.innerHTML = svg;
             await new Promise(resolve => setTimeout(resolve, 30));
             const box = stage.querySelector("svg").getBoundingClientRect();
@@ -160,23 +174,61 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             guard let box = try? await self.withTimeout({ try await webView.callAsyncJavaScript(measure, arguments: ["svg": svg, "width": width], in: nil, contentWorld: .page) }) as? [Double],
                   box.count == 4, box[2] > 0, box[3] > 0 else { return nil }
             let rect = CGRect(x: box[0], y: box[1], width: box[2].rounded(.up), height: box[3].rounded(.up))
-            if rect.maxX > webView.frame.width || rect.maxY > webView.frame.height {
-                // The snapshot covers the viewport only.
-                let size = NSSize(width: max(webView.frame.width, rect.maxX + 40), height: max(webView.frame.height, rect.maxY + 40))
-                self.window?.setContentSize(size)
-                webView.frame = NSRect(origin: .zero, size: size)
-                try? await Task.sleep(for: .milliseconds(50))
-            }
-            let configuration = WKSnapshotConfiguration()
-            configuration.rect = rect
-            configuration.snapshotWidth = NSNumber(value: Double(rect.width) * 2 * Double(request.scale))
-            guard let snapshot = try? await self.withTimeout({ try await webView.takeSnapshot(configuration: configuration) }) else { return nil }
-            snapshot.size = NSSize(width: rect.width * request.scale, height: rect.height * request.scale)
-            _ = try? await webView.callAsyncJavaScript("document.getElementById('stage').innerHTML = '';", arguments: [:], in: nil, contentWorld: .page)
-            return snapshot
+            return await self.snapshot(of: rect, pixelsPerPoint: 2 * request.scale, pointSize: NSSize(width: rect.width * request.scale, height: rect.height * request.scale), in: webView)
         }
         if let image { imageCache[request] = image }
         return image
+    }
+
+    /// The formula at `request.fontSize` in the page's text color, with 2× pixels and its baseline;
+    /// nil when the stage is unavailable. Bad TeX draws as KaTeX's red source, like on the page.
+    func picture(for request: MathRequest) async -> MathPicture? {
+        if let cached = mathCache[request] { return cached }
+        let html = MathRenderer.mathML(request.tex, display: request.display)
+        let picture = await serialized { () -> MathPicture? in
+            guard let webView = await self.prepare(theme: request.theme) else { return nil }
+            self.ensureWindow(around: webView)
+            webView.appearance = NSAppearance(named: request.dark ? .darkAqua : .aqua)
+            // The marker, an empty inline block, sits on the baseline of the formula's line.
+            let measure = """
+            const stage = document.getElementById("stage");
+            stage.style.width = "max-content";
+            stage.style.fontSize = size + "px";
+            stage.style.padding = "4px";
+            stage.innerHTML = html + '<span id="stage-baseline" style="display: inline-block; width: 0; height: 0"></span>';
+            await new Promise(resolve => setTimeout(resolve, 30));
+            const box = (stage.querySelector("math") || stage.firstElementChild).getBoundingClientRect();
+            const marker = document.getElementById("stage-baseline").getBoundingClientRect();
+            return [box.left + window.scrollX, box.top + window.scrollY, box.width, box.height, marker.top + window.scrollY];
+            """
+            guard let box = try? await self.withTimeout({ try await webView.callAsyncJavaScript(measure, arguments: ["html": html, "size": Double(request.fontSize)], in: nil, contentWorld: .page) }) as? [Double],
+                  box.count == 5, box[2] > 0, box[3] > 0 else { return nil }
+            // One pixel around the box for ink that overhangs it.
+            let rect = CGRect(x: floor(box[0]) - 1, y: floor(box[1]) - 1, width: ceil(box[0] + box[2]) - floor(box[0]) + 2, height: ceil(box[1] + box[3]) - floor(box[1]) + 2)
+            let baseline = min(max((box[4] - rect.minY).rounded(), 0), rect.height)
+            guard let snapshot = await self.snapshot(of: rect, pixelsPerPoint: 2, pointSize: rect.size, in: webView) else { return nil }
+            return MathPicture(image: snapshot, size: rect.size, baseline: baseline)
+        }
+        if let picture { mathCache[request] = picture }
+        return picture
+    }
+
+    /// The page area `rect` at `pixelsPerPoint`, sized `pointSize`; the viewport grows to cover it
+    /// first (the snapshot covers the viewport only), and the stage is cleared after.
+    private func snapshot(of rect: CGRect, pixelsPerPoint: CGFloat, pointSize: NSSize, in webView: WKWebView) async -> NSImage? {
+        if rect.maxX > webView.frame.width || rect.maxY > webView.frame.height {
+            let size = NSSize(width: max(webView.frame.width, rect.maxX + 40), height: max(webView.frame.height, rect.maxY + 40))
+            window?.setContentSize(size)
+            webView.frame = NSRect(origin: .zero, size: size)
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let configuration = WKSnapshotConfiguration()
+        configuration.rect = rect
+        configuration.snapshotWidth = NSNumber(value: Double(rect.width * pixelsPerPoint))
+        guard let snapshot = try? await withTimeout({ try await webView.takeSnapshot(configuration: configuration) }) else { return nil }
+        snapshot.size = pointSize
+        _ = try? await webView.callAsyncJavaScript("document.getElementById('stage').innerHTML = '';", arguments: [:], in: nil, contentWorld: .page)
+        return snapshot
     }
 
     /// Snapshots need the view in a window; it is never shown.
@@ -200,6 +252,9 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
             let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 1200, height: 900), configuration: configuration)
+            // Transparent snapshots, so a picture shows the editor's selection through (the page's own
+            // background is transparent too).
+            view.setValue(false, forKey: "drawsBackground")
             view.navigationDelegate = self
             self.webView = view
             webView = view

@@ -8,6 +8,8 @@ extension NSAttributedString.Key {
     static let taskBox = NSAttributedString.Key("uncialTaskBox")
     /// An `InlineImage` drawn by `InlineLayoutManager` in the paragraph's reserved spacing.
     static let inlineImage = NSAttributedString.Key("uncialInlineImage")
+    /// A `MathPicture` on the one character that stands for a formula, drawn by `InlineLayoutManager`.
+    static let mathPicture = NSAttributedString.Key("uncialMathPicture")
 }
 
 /// A loaded image and the size it is drawn at under its paragraph.
@@ -21,6 +23,27 @@ final class InlineImage: NSObject {
     }
 }
 
+/// A formula drawn in place of its TeX: the bitmap, the size it is drawn at in points, and the
+/// distance from its top to the text baseline.
+final class MathPicture: NSObject {
+    let image: NSImage
+    let size: NSSize
+    let baseline: CGFloat
+
+    init(image: NSImage, size: NSSize, baseline: CGFloat) {
+        self.image = image
+        self.size = size
+        self.baseline = baseline
+    }
+
+    /// Scaled down, never up, to fit `width`.
+    func fitted(to width: CGFloat) -> MathPicture {
+        guard size.width > width, size.width > 0 else { return self }
+        let scale = width / size.width
+        return MathPicture(image: image, size: NSSize(width: floor(size.width * scale), height: floor(size.height * scale)), baseline: (baseline * scale).rounded())
+    }
+}
+
 /// Attributes for the inline presentation: headings sized, markers muted, code on a background,
 /// list items hanging, quotes indented behind a border, links in the accent color. Attribute-only,
 /// so undo never sees it; the fonts stay SF Mono.
@@ -31,11 +54,32 @@ struct InlineStyle {
     static let maximumImageHeight: CGFloat = 480
     static let maximumDiagramHeight: CGFloat = 800
     static let imageGap: CGFloat = 8
+    /// Room kept between a formula's picture and the lines around it.
+    static let mathGap: CGFloat = 2
 
-    /// What `apply` drew as pictures: the image tokens' locations and the opening fences of diagrams.
+    /// What `apply` drew as pictures: the image tokens' locations, the opening fences of diagrams,
+    /// and for formulas the token or block start → the character that stands for the picture (the
+    /// opening dollar, or a block's closing fence start); plus every fenced block that can be a
+    /// picture, drawn or not.
     struct Resolved: Equatable {
         var images: Set<Int> = []
         var diagrams: Set<Int> = []
+        var math: [Int: Int] = [:]
+        var pictureBlocks: [NSRange] = []
+    }
+
+    /// A fenced block: ``` or ~~~ with its info string, or a `$$` math block (info `math`). `range`
+    /// spans both fence lines (an unclosed one ends at its last content line), `lines` is the
+    /// content, `closing` the closing fence line's start.
+    struct FencedBlock: Equatable {
+        let range: NSRange
+        let info: String
+        let lines: [String]
+        let closing: Int?
+
+        var isDiagram: Bool { firstWord == "mermaid" && !lines.isEmpty }
+        var isMath: Bool { firstWord == "math" && !lines.isEmpty }
+        private var firstWord: Substring? { info.split(whereSeparator: { $0 == " " || $0 == "\t" }).first }
     }
 
     /// A mermaid fence: `range` spans both fence lines (an unclosed one ends at its last code
@@ -71,13 +115,13 @@ struct InlineStyle {
     }
 
     /// `storage` must already carry the base attributes for its whole text. `images` loads an
-    /// image token's destination and `diagrams` a mermaid fence's picture (nil keeps either as
-    /// source; a fence inside `revealed` is never asked for); `textWidth` is the room for text, which
-    /// bounds the drawn sizes. Returns what got a picture.
+    /// image token's destination, `diagrams` a mermaid fence's picture and `math` a formula's (TeX,
+    /// display); nil keeps any of them as source, and nothing inside `revealed` is asked for.
+    /// `textWidth` is the room for text, which bounds the drawn sizes. Returns what got a picture.
     @discardableResult
     func apply(_ tokens: [MarkdownHighlighter.Token], to storage: NSTextStorage, images: (String) -> NSImage? = { _ in nil },
-               diagrams: (String) -> NSImage? = { _ in nil }, revealed: NSRange = NSRange(location: 0, length: 0),
-               textWidth: CGFloat = .greatestFiniteMagnitude) -> Resolved {
+               diagrams: (String) -> NSImage? = { _ in nil }, math: (String, Bool) -> MathPicture? = { _, _ in nil },
+               revealed: NSRange = NSRange(location: 0, length: 0), textWidth: CGFloat = .greatestFiniteMagnitude) -> Resolved {
         let text = storage.string as NSString
         for token in tokens {
             let paragraph = text.paragraphRange(for: token.range)
@@ -157,8 +201,16 @@ struct InlineStyle {
             }
         }
         alignTables(tokens, in: storage)
+        let blocks = Self.fencedBlocks(in: tokens, text: text)
         return Resolved(images: reserveImages(tokens, in: storage, images: images, textWidth: textWidth),
-                        diagrams: reserveDiagrams(tokens, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth))
+                        diagrams: reserveDiagrams(blocks, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth),
+                        math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth),
+                        pictureBlocks: blocks.filter { $0.isDiagram || $0.isMath }.map(\.range))
+    }
+
+    /// Whether the revealed range reaches into `range`.
+    private static func touches(_ revealed: NSRange, _ range: NSRange) -> Bool {
+        NSIntersectionRange(range, revealed).length > 0 || NSLocationInRange(revealed.location, range)
     }
 
     var superscriptFont: NSFont { NSFont.monospacedSystemFont(ofSize: 10 * style.scale, weight: .bold) }
@@ -283,12 +335,12 @@ struct InlineStyle {
     /// A mermaid fence outside `revealed` whose picture is ready collapses to one blank line with the
     /// picture under it: `MarkerIndex` hides the block's glyphs but for the last newline, the code
     /// decoration goes, and the closing line's paragraph reserves the picture's height like an image's.
-    private func reserveDiagrams(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, diagrams: (String) -> NSImage?, revealed: NSRange, textWidth: CGFloat) -> Set<Int> {
+    private func reserveDiagrams(_ blocks: [FencedBlock], in storage: NSTextStorage, diagrams: (String) -> NSImage?, revealed: NSRange, textWidth: CGFloat) -> Set<Int> {
         let text = storage.string as NSString
         var resolved: Set<Int> = []
-        for block in Self.diagramBlocks(in: tokens, text: text) {
-            guard block.range.length > 0, NSIntersectionRange(block.range, revealed).length == 0, !NSLocationInRange(revealed.location, block.range),
-                  let image = diagrams(block.source), image.size.width > 0, image.size.height > 0 else { continue }
+        for block in blocks where block.isDiagram {
+            guard block.range.length > 0, !Self.touches(revealed, block.range),
+                  let image = diagrams(MermaidRenderer.key(for: block.lines.joined(separator: "\n"))), image.size.width > 0, image.size.height > 0 else { continue }
             let available = max(40, textWidth)
             let scale = min(1, available / image.size.width, Self.maximumDiagramHeight / image.size.height)
             let size = NSSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
@@ -302,44 +354,85 @@ struct InlineStyle {
         return resolved
     }
 
-    /// The fenced blocks whose info string starts with `mermaid`.
-    static func diagramBlocks(in tokens: [MarkdownHighlighter.Token], text: NSString) -> [DiagramBlock] {
-        var blocks: [DiagramBlock] = []
-        var start: Int?
+    /// A formula outside `revealed` whose picture is ready is drawn in place of its TeX. The picture
+    /// rides on one character, the anchor: the opening dollar, or for a `$$` or ```math block the
+    /// closing fence's first character, so that the block's other lines (hidden, they attach to the
+    /// previous line) collapse and the anchor's paragraph keeps its newline. `MarkerIndex` hides the
+    /// rest and `ThemedTextView` lays the anchor out as a box of the picture's size. A display formula
+    /// alone on its line is centered; a block also loses its code look.
+    private func reserveMath(_ tokens: [MarkdownHighlighter.Token], blocks: [FencedBlock], in storage: NSTextStorage, math: (String, Bool) -> MathPicture?, revealed: NSRange, textWidth: CGFloat) -> [Int: Int] {
+        let text = storage.string as NSString
+        var resolved: [Int: Int] = [:]
+        for token in tokens {
+            guard case .math(let display) = token.kind, token.markers.count == 2, !Self.touches(revealed, token.range) else { continue }
+            let open = NSMaxRange(token.markers[0])
+            let tex = text.substring(with: NSRange(location: open, length: max(0, token.markers[1].location - open))).trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !tex.isEmpty, let picture = math(tex, display) else { continue }
+            let paragraph = text.paragraphRange(for: token.range)
+            let indent = (storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? 0
+            let anchor = token.range.location
+            storage.addAttribute(.mathPicture, value: picture.fitted(to: max(40, textWidth - indent)), range: NSRange(location: anchor, length: 1))
+            if display, text.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines) == text.substring(with: token.range) {
+                setAlignment(.center, of: paragraph, in: storage)
+            }
+            resolved[anchor] = anchor
+        }
+        for block in blocks where block.isMath {
+            let tex = block.lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
+            guard let closing = block.closing, !tex.isEmpty, !Self.touches(revealed, block.range), let picture = math(tex, true) else { continue }
+            let paragraphs = text.paragraphRange(for: block.range)
+            storage.removeAttribute(.blockDecoration, range: paragraphs)
+            let centered = NSMutableParagraphStyle()
+            centered.alignment = .center
+            storage.addAttribute(.paragraphStyle, value: centered, range: paragraphs)
+            storage.addAttribute(.mathPicture, value: picture.fitted(to: max(40, textWidth)), range: NSRange(location: closing, length: 1))
+            resolved[block.range.location] = closing
+        }
+        return resolved
+    }
+
+    /// Every fenced block in order: ``` and ~~~ fences with their info string, `$$` blocks as `math`.
+    static func fencedBlocks(in tokens: [MarkdownHighlighter.Token], text: NSString) -> [FencedBlock] {
+        var blocks: [FencedBlock] = []
+        var open: (start: Int, info: String)?
         var end = 0
         var lines: [String] = []
-        var isDiagram = false
-        func close(_ open: Int, at end: Int) {
-            guard isDiagram, !lines.isEmpty else { return }
-            blocks.append(DiagramBlock(range: NSRange(location: open, length: end - open), source: MermaidRenderer.key(for: lines.joined(separator: "\n"))))
-        }
         for token in tokens {
             switch token.kind {
-            case .fence:
-                if let open = start {
-                    close(open, at: NSMaxRange(token.range))
-                    start = nil
+            case .fence, .mathFence:
+                if let current = open {
+                    blocks.append(FencedBlock(range: NSRange(location: current.start, length: NSMaxRange(token.range) - current.start), info: current.info, lines: lines, closing: token.range.location))
+                    open = nil
                 } else {
-                    start = token.range.location
+                    let info: String
+                    if token.kind == .mathFence {
+                        info = "math"
+                    } else {
+                        let markerEnd = token.markers.first.map { NSMaxRange($0) } ?? token.range.location
+                        info = text.substring(with: NSRange(location: markerEnd, length: max(0, NSMaxRange(token.range) - markerEnd)))
+                    }
+                    open = (token.range.location, info)
                     end = NSMaxRange(token.range)
                     lines = []
-                    let markerEnd = token.markers.first.map { NSMaxRange($0) } ?? token.range.location
-                    let info = text.substring(with: NSRange(location: markerEnd, length: max(0, NSMaxRange(token.range) - markerEnd)))
-                    isDiagram = info.split(whereSeparator: { $0 == " " || $0 == "\t" }).first == "mermaid"
                 }
-            case .code:
-                if start != nil {
-                    lines.append(text.substring(with: token.range))
-                    end = NSMaxRange(token.range)
-                }
+            case .code, .math:
+                guard open != nil else { continue }
+                lines.append(text.substring(with: token.range))
+                end = NSMaxRange(token.range)
             default:
                 break
             }
         }
-        if let open = start {
-            close(open, at: end)
+        if let current = open {
+            blocks.append(FencedBlock(range: NSRange(location: current.start, length: max(end, current.start) - current.start), info: current.info, lines: lines, closing: nil))
         }
         return blocks
+    }
+
+    /// The fenced blocks whose info string starts with `mermaid`.
+    static func diagramBlocks(in tokens: [MarkdownHighlighter.Token], text: NSString) -> [DiagramBlock] {
+        fencedBlocks(in: tokens, text: text).filter(\.isDiagram)
+            .map { DiagramBlock(range: $0.range, source: MermaidRenderer.key(for: $0.lines.joined(separator: "\n"))) }
     }
 
     private func addTrait(_ trait: NSFontTraitMask, to storage: NSTextStorage, in range: NSRange) {

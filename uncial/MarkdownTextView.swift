@@ -248,14 +248,16 @@ final class ThemedTextView: NSTextView {
                 markers = .empty
             case .inline:
                 let textWidth = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
-                // A diagram the caret is in stays source, so the reveal is settled first, from the new tokens.
+                // A diagram or formula the caret is in stays source, so the reveal is settled first, from the new tokens.
                 let reveal = MarkerIndex(tokens: tokens).revealedRange(for: selectedRange(), in: text as NSString)
                 let resolved = InlineStyle(style: style).apply(tokens, to: textStorage, images: { self.image(for: $0) },
-                                                               diagrams: { self.image(forDiagram: $0) }, revealed: reveal, textWidth: textWidth)
+                                                               diagrams: { self.image(forDiagram: $0) }, math: { self.picture(forMath: $0, display: $1) },
+                                                               revealed: reveal, textWidth: textWidth)
                 resolvedImages = resolved.images
                 resolvedDiagrams = resolved.diagrams
-                let diagramBlocks = InlineStyle.diagramBlocks(in: tokens, text: text as NSString).map(\.range)
-                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, diagramBlocks: diagramBlocks, resolvedDiagrams: resolvedDiagrams)
+                resolvedMath = resolved.math
+                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, pictureBlocks: resolved.pictureBlocks,
+                                      resolvedDiagrams: resolvedDiagrams, resolvedMath: resolvedMath)
             }
         } else {
             markers = .empty
@@ -263,6 +265,7 @@ final class ThemedTextView: NSTextView {
         if presentation == .source {
             resolvedImages = []
             resolvedDiagrams = []
+            resolvedMath = [:]
         }
         textStorage.endEditing()
         typingAttributes = style.baseAttributes
@@ -322,6 +325,17 @@ final class ThemedTextView: NSTextView {
             completion(await DiagramWebRenderer.shared.image(for: request))
         }
     }
+    /// The formulas drawn as pictures: token or block start → the character that stands for the picture.
+    private(set) var resolvedMath: [Int: Int] = [:]
+    private var mathCache: [MathRequest: MathPicture?] = [:]
+    private var pendingMath: Set<MathRequest> = []
+    private var rehighlightScheduled = false
+    /// Draws one formula to a bitmap and calls back on the main thread; tests inject their own.
+    var mathRenderer: (MathRequest, @escaping (MathPicture?) -> Void) -> Void = { request, completion in
+        Task { @MainActor in
+            completion(await DiagramWebRenderer.shared.picture(for: request))
+        }
+    }
     private var layoutWidth: CGFloat = 0
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
     private(set) var revealed = NSRange(location: 0, length: 0) {
@@ -334,7 +348,7 @@ final class ThemedTextView: NSTextView {
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
         let previous = revealed
-        if markers.hasDiagram(touching: previous) || markers.hasDiagram(touching: next) {
+        if markers.hasPicture(touching: previous) || markers.hasPicture(touching: next) {
             // The picture gives way to the source and back: attributes, not just glyphs, change.
             rehighlight()
             return
@@ -402,6 +416,35 @@ final class ThemedTextView: NSTextView {
         return nil
     }
 
+    /// A formula's picture in the current look, once `mathRenderer` has drawn it; the first call
+    /// starts the drawing and re-renders the text when it lands (one pass however many land
+    /// together). Every outcome is cached, misses too.
+    func picture(forMath tex: String, display: Bool) -> MathPicture? {
+        let request = MathRequest(tex: tex, display: display, theme: theme, dark: style.isDark, fontSize: style.regular.pointSize)
+        if let cached = mathCache[request] { return cached }
+        guard !pendingMath.contains(request) else { return nil }
+        pendingMath.insert(request)
+        mathRenderer(request) { [weak self] picture in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pendingMath.remove(request)
+                self.mathCache[request] = .some(picture)
+                if picture != nil { self.scheduleRehighlight() }
+            }
+        }
+        return nil
+    }
+
+    private func scheduleRehighlight() {
+        guard !rehighlightScheduled else { return }
+        rehighlightScheduled = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.rehighlightScheduled = false
+            if self.presentation == .inline { self.rehighlight() }
+        }
+    }
+
     /// The column follows the width, and pictures are fitted to the text width, so a width change
     /// re-fits both.
     override func setFrameSize(_ newSize: NSSize) {
@@ -409,7 +452,7 @@ final class ThemedTextView: NSTextView {
         guard newSize.width != layoutWidth else { return }
         layoutWidth = newSize.width
         updateInsets()
-        if presentation == .inline, !resolvedImages.isEmpty || !resolvedDiagrams.isEmpty {
+        if presentation == .inline, !resolvedImages.isEmpty || !resolvedDiagrams.isEmpty || !resolvedMath.isEmpty {
             rehighlight()
         }
     }
@@ -642,13 +685,16 @@ extension ThemedTextView: NSLayoutManagerDelegate {
         let first = characterIndexes[0]
         let span = NSRange(location: first, length: characterIndexes[count - 1] - first + 1)
         let wantsBullet = markers.bullets.contains { NSLocationInRange($0, span) }
-        guard markers.hasHidden(in: span) || wantsBullet else { return 0 }
+        let wantsAnchor = markers.hasAnchor(in: span)
+        guard markers.hasHidden(in: span) || wantsBullet || wantsAnchor else { return 0 }
         let bullet = wantsBullet ? bulletGlyph(for: font) : nil
         var newGlyphs = Array(UnsafeBufferPointer(start: glyphs, count: count))
         var newProperties = Array(UnsafeBufferPointer(start: properties, count: count))
         for index in 0..<count {
             let character = characterIndexes[index]
-            if markers.isHidden(character), !NSLocationInRange(character, revealed) {
+            if wantsAnchor, markers.isAnchor(character) {
+                newProperties[index] = .controlCharacter
+            } else if markers.isHidden(character), !NSLocationInRange(character, revealed) {
                 newProperties[index] = .null
             } else if let bullet, markers.bullets.contains(character) {
                 newGlyphs[index] = bullet
@@ -656,5 +702,40 @@ extension ThemedTextView: NSLayoutManagerDelegate {
         }
         layoutManager.setGlyphs(newGlyphs, properties: newProperties, characterIndexes: characterIndexes, font: font, forGlyphRange: glyphRange)
         return count
+    }
+
+    /// A formula's anchor is a control glyph laid out as whitespace of the picture's width…
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldUse action: NSLayoutManager.ControlCharacterAction, forControlCharacterAt charIndex: Int) -> NSLayoutManager.ControlCharacterAction {
+        markers.isAnchor(charIndex) ? .whitespace : action
+    }
+
+    func layoutManager(_ layoutManager: NSLayoutManager, boundingBoxForControlGlyphAt glyphIndex: Int, for textContainer: NSTextContainer, proposedLineFragment proposedRect: NSRect, glyphPosition: NSPoint, characterIndex charIndex: Int) -> NSRect {
+        NSRect(origin: glyphPosition, size: mathPicture(at: charIndex)?.size ?? NSSize(width: 0, height: proposedRect.height))
+    }
+
+    /// …and its line grows to hold the picture above and below the baseline, since the box's own
+    /// height is ignored (probed 2026-09-16); the lines after follow.
+    func layoutManager(_ layoutManager: NSLayoutManager, shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>, lineFragmentUsedRect: UnsafeMutablePointer<NSRect>, baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer, forGlyphRange glyphRange: NSRange) -> Bool {
+        guard !markers.anchors.isEmpty else { return false }
+        let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        var above: CGFloat = 0
+        var below: CGFloat = 0
+        for anchor in markers.anchors(in: characters) {
+            guard let picture = mathPicture(at: anchor) else { continue }
+            above = max(above, picture.baseline + InlineStyle.mathGap)
+            below = max(below, picture.size.height - picture.baseline + InlineStyle.mathGap)
+        }
+        let extraAbove = max(0, above - baselineOffset.pointee)
+        let extraBelow = max(0, below - (lineFragmentRect.pointee.height - baselineOffset.pointee))
+        guard extraAbove > 0 || extraBelow > 0 else { return false }
+        lineFragmentRect.pointee.size.height += extraAbove + extraBelow
+        lineFragmentUsedRect.pointee.size.height += extraAbove + extraBelow
+        baselineOffset.pointee += extraAbove
+        return true
+    }
+
+    private func mathPicture(at index: Int) -> MathPicture? {
+        guard let textStorage, index < textStorage.length else { return nil }
+        return textStorage.attribute(.mathPicture, at: index, effectiveRange: nil) as? MathPicture
     }
 }

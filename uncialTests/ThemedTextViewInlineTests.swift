@@ -208,6 +208,61 @@ import UncialCore
         #expect(storage.attribute(.inlineImage, at: 34, effectiveRange: nil) != nil)
     }
 
+    @Test func drawsMathUnlessTheCaretIsOnItsLine() async throws {
+        let image = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
+            NSColor.blue.setFill()
+            rect.fill()
+            return true
+        }
+        let picture = MathPicture(image: image, size: NSSize(width: 100, height: 40), baseline: 30)
+        var requests: [MathRequest] = []
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.presentation = .inline
+        inline.mathRenderer = { request, completion in
+            requests.append(request)
+            DispatchQueue.main.async { completion(picture) }
+        }
+        // "intro\n" 0–5, "Say $x^2$ now\n" 6–19 (token 10–14), "$$\n" 20–22, "y\n" 23–24, "$$" 25–26, "\n" 27, "after" 28–32.
+        inline.replaceText(with: "intro\nSay $x^2$ now\n$$\ny\n$$\nafter")
+        inline.setSelectedRange(NSRange(location: 0, length: 0))
+        #expect(inline.resolvedMath.isEmpty)
+        #expect(requests.map(\.tex) == ["x^2", "y"] && requests.map(\.display) == [false, true] && requests.first?.fontSize == 13)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(inline.resolvedMath == [10: 10, 20: 25])
+        #expect(inline.markers.isAnchor(10) && inline.markers.isHidden(11) && inline.markers.isHidden(14) && !inline.markers.isHidden(15))
+        #expect(inline.markers.isHidden(20) && inline.markers.isHidden(23) && !inline.markers.isHidden(25) && inline.markers.isHidden(26) && !inline.markers.isHidden(27))
+        let storage = inline.textStorage!
+        #expect((storage.attribute(.mathPicture, at: 10, effectiveRange: nil) as? MathPicture)?.size == NSSize(width: 100, height: 40))
+        #expect((storage.attribute(.paragraphStyle, at: 25, effectiveRange: nil) as? NSParagraphStyle)?.alignment == .center)
+        #expect(storage.attribute(.blockDecoration, at: 23, effectiveRange: nil) == nil)
+        layout(inline)
+        let layoutManager = inline.layoutManager!
+        let anchor = layoutManager.glyphIndexForCharacter(at: 10)
+        #expect(layoutManager.propertyForGlyph(at: anchor) == .controlCharacter)
+        let box = layoutManager.boundingRect(forGlyphRange: NSRange(location: anchor, length: 1), in: inline.textContainer!)
+        let plain = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+        // The formula's line grows to hold 30 pt above the baseline and 10 below, plus a small gap.
+        #expect(box.width == 100 && box.height >= 40 && box.height < 40 + plain, "box \(box) for lines of \(plain)")
+        let block = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: 25), effectiveRange: nil)
+        #expect(block.height >= 40 && block.height < 40 + plain, "block line \(block)")
+        let height = layoutManager.usedRect(for: inline.textContainer!).height
+        #expect(height >= 2 * plain + 80 && height < 4 * plain + 80, "height \(height)")
+        // The caret on the formula's line shows its TeX with the dollars hidden and no picture.
+        inline.setSelectedRange(NSRange(location: 8, length: 0))
+        #expect(inline.resolvedMath == [20: 25] && !inline.markers.isAnchor(10) && inline.markers.isHidden(10) && !inline.markers.isHidden(11))
+        #expect(storage.attribute(.mathPicture, at: 10, effectiveRange: nil) == nil)
+        // Inside the block the whole block is source again, and the other formula a picture.
+        inline.setSelectedRange(NSRange(location: 23, length: 0))
+        #expect(inline.revealed == NSRange(location: 20, length: 8) && inline.resolvedMath == [10: 10])
+        #expect(storage.attribute(.blockDecoration, at: 23, effectiveRange: nil) as? String == "code")
+        #expect(storage.attribute(.mathPicture, at: 25, effectiveRange: nil) == nil)
+        // Leaving brings both back from the cache.
+        inline.setSelectedRange(NSRange(location: 30, length: 0))
+        #expect(inline.resolvedMath == [10: 10, 20: 25] && requests.count == 2)
+    }
+
     @Test func clickingATaskBoxTogglesIt() {
         let inline = editor("- [ ] task\nend", presentation: .inline, caret: 12)
         let layoutManager = inline.layoutManager!

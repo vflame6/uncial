@@ -60,6 +60,8 @@ public enum Stylesheet {
     tr { background: var(--bg); border-top: 1px solid var(--border-muted); }
     tbody tr:nth-child(2n) { background: var(--row-alt); }
     hr { height: .25em; padding: 0; margin: 24px 0; background: var(--border); border: 0; }
+    math { font-family: "STIX Two Math", "Latin Modern Math", STIXGeneral, serif; }
+    p.math { margin: 16px 0; }
     details summary { cursor: pointer; font-weight: 600; }
     mark { background: var(--mark); color: inherit; }
     kbd {

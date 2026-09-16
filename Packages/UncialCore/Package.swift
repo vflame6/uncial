@@ -16,7 +16,8 @@ let package = Package(
             dependencies: [
                 .product(name: "cmark-gfm", package: "swift-cmark"),
                 .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
-            ]
+            ],
+            resources: [.copy("Resources/katex.min.js"), .copy("Resources/KATEX-LICENSE")]
         ),
         .testTarget(
             name: "UncialCoreTests",

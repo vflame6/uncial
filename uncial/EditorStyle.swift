@@ -34,7 +34,7 @@ struct EditorStyle {
         case .strong: [.font: bold]
         case .emphasis: [.font: italic]
         case .strikethrough: [.strikethroughStyle: NSUnderlineStyle.single.rawValue]
-        case .inlineCode, .codeBlock: [.foregroundColor: code]
+        case .inlineCode, .codeBlock, .math: [.foregroundColor: code]
         case .link, .listMarker: [.foregroundColor: accent]
         case .url, .quote, .rule, .frontMatter, .table, .html: [.foregroundColor: muted]
         }

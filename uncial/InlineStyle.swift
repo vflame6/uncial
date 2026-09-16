@@ -117,12 +117,20 @@ struct InlineStyle {
                 if isHeader {
                     addTrait(.boldFontMask, to: storage, in: token.range)
                 }
-            case .fence, .code:
+            case .fence, .code, .mathFence:
                 let inset = NSMutableParagraphStyle()
                 inset.firstLineHeadIndent = Self.codeIndent
                 inset.headIndent = Self.codeIndent
                 storage.addAttributes([.paragraphStyle: inset, .blockDecoration: "code"], range: paragraph)
-                storage.addAttribute(.foregroundColor, value: token.kind == .fence ? style.muted : style.code, range: token.range)
+                storage.addAttribute(.foregroundColor, value: token.kind == .code ? style.code : style.muted, range: token.range)
+            case .math(let display):
+                if display, token.markers.isEmpty {
+                    let inset = NSMutableParagraphStyle()
+                    inset.firstLineHeadIndent = Self.codeIndent
+                    inset.headIndent = Self.codeIndent
+                    storage.addAttributes([.paragraphStyle: inset, .blockDecoration: "code"], range: paragraph)
+                }
+                storage.addAttribute(.foregroundColor, value: style.code, range: token.range)
             case .frontMatter:
                 storage.addAttribute(.foregroundColor, value: style.muted, range: token.range)
             }

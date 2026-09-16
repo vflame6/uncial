@@ -65,4 +65,10 @@ import Testing
         #expect(HTMLDocument.wrap(body: "", title: "t").contains("<html data-theme=\"macos\">"))
         #expect(HTMLDocument.wrap(body: "", title: "t", lineNumbers: true).contains("<html data-theme=\"macos\" class=\"line-numbers\">"))
     }
+
+    @Test func namesMathFonts() {
+        for theme in Theme.allCases {
+            #expect(Stylesheet.css(for: theme).contains("math { font-family:"), "\(theme) has no math font rule")
+        }
+    }
 }

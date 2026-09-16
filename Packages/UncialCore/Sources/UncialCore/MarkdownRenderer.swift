@@ -11,6 +11,7 @@ public struct MarkdownRenderer: Sendable {
         let (frontMatter, body) = FrontMatter.split(markdown)
         var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
         html = HeadingAnchors.addIDs(to: html)
+        html = MathRenderer.render(html)
         if sourcePositions {
             if frontMatter != nil {
                 html = SourcePositions.shift(html, by: FrontMatter.bodyLineOffset(of: markdown))

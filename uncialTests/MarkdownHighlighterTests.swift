@@ -167,6 +167,16 @@ import Testing
         #expect((text as NSString).substring(with: tokens[1].range) == "\\[")
     }
 
+    @Test func mathHidesItsDollars() {
+        let text = "Euler $e^{i\\pi}$ costs $5 and $10; $$\\int x$$ and *a $b*c$ d*\n$$\nx = 1\n$$"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.math(display: false), .math(display: true), .emphasis, .math(display: false), .mathFence, .math(display: true), .mathFence])
+        #expect(markers(tokens[0], in: text) == ["$", "$"] && markers(tokens[1], in: text) == ["$$", "$$"])
+        #expect((text as NSString).substring(with: tokens[3].range) == "$b*c$")
+        #expect(markers(tokens[4], in: text) == ["$$"] && (text as NSString).substring(with: tokens[5].range) == "x = 1")
+        #expect(has(text, .math, "$e^{i\\pi}$") && has(text, .math, "x = 1"))
+    }
+
     @Test func frontMatterIsNotARule() {
         let text = "---\ntitle: x\n---\n# H"
         let spans = kinds(text)

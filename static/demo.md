@@ -147,9 +147,26 @@ x<sup>2</sup>, <mark>marked</mark>, <a href="https://example.com">a link</a>, an
 their Markdown equivalents, the image drawn under its line at 128 pt. A multi-line block only
 hides its tag lines; comments and `<br>` leave nothing behind.
 
+## Math
+
+Inline math $E = mc^2$ and $\frac{a}{b}$ sit in the text; prices like $5 and $10
+are not math. Display math stands alone:
+
+$$
+\int_0^1 x^2 \, dx = \frac{1}{3}
+$$
+
+```math
+\sum_{n=1}^{\infty} \frac{1}{n^2} = \frac{\pi^2}{6}
+```
+
+*Expect:* the rendered page shows real formulas (KaTeX to MathML, no script); Live
+Preview keeps the TeX in the code color with the dollars hidden off the cursor line
+and tints the `$$` block like code. Bad TeX shows in red with its source.
+
 ## Not rendered on purpose
 
-Math like $x^2$ and Mermaid fences are not supported:
+Mermaid fences are not supported:
 
 ```mermaid
 graph TD; A-->B;

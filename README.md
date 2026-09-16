@@ -11,7 +11,9 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
 ## Features
 
 - GitHub-flavored Markdown through cmark-gfm: tables, task lists, strikethrough,
-  autolinks, footnotes, fenced code, raw HTML (dangerous tags are filtered).
+  autolinks, footnotes, fenced code, raw HTML (dangerous tags are filtered),
+  and LaTeX math (`$…$`, `$$…$$`, ```` ```math ```` fences) rendered to MathML
+  with KaTeX at render time, so no script runs in the page.
 - Automatic re-rendering when the file changes, including atomic saves from
   editors such as VS Code, Vim, or TextEdit. Scroll position is kept.
 - Four editor modes per window: **Read Only**, **Live Preview** (Markdown
@@ -142,7 +144,9 @@ escape backslashes hide, and HTML renders as far as a text view can: tags hide,
 `<b>`, `<i>`, `<u>`, `<s>`, `<code>`, `<kbd>`, `<mark>`, `<sup>`, `<sub>`, `<a>`
 and `<h1>`–`<h6>` style their text, an `align` attribute or `<center>` aligns
 the paragraph, `<img>` draws like a Markdown image and comments vanish. Remote
-images, front matter and link definitions stay as source.
+images load in the background and appear once fetched. Math keeps its TeX in
+the code color with the dollars hidden; `$$` blocks sit on the code tint. Front
+matter and link definitions stay as source.
 
 In Split View the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
@@ -267,8 +271,8 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
   quotes, rules, fenced code, tables (as aligned text), setext headings,
   footnote marks, reference-style links and common HTML (tags hidden, inline
   tags styled, `align` honored on the tag's own line); HTML tables and lists,
-  remote images, front matter and link definitions stay as source.
-- No Mermaid diagrams or math.
+  front matter and link definitions stay as source, and math shows as TeX.
+- No Mermaid diagrams.
 - The app itself is not sandboxed. That is what lets it read images next to any
   document you open. The Quick Look extension is sandboxed, as macOS requires,
   and the sandbox only lets it read the previewed file: images do not appear in

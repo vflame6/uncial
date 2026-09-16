@@ -7,7 +7,7 @@ import Foundation
 /// ranges); `spans(in:)` is the flat coloring view of it.
 nonisolated enum MarkdownHighlighter {
     enum Kind: Equatable {
-        case heading, strong, emphasis, strikethrough, inlineCode, codeBlock, link, url, listMarker, quote, rule, frontMatter, table, html
+        case heading, strong, emphasis, strikethrough, inlineCode, codeBlock, link, url, listMarker, quote, rule, frontMatter, table, html, math
     }
 
     struct Span: Equatable {
@@ -47,6 +47,11 @@ nonisolated enum MarkdownHighlighter {
             case linkDefinition
             /// A backslash before ASCII punctuation; the backslash is the marker.
             case escape
+            /// `$…$` (inline) or `$$…$$` (display) with the dollars as markers; a line inside a `$$` block
+            /// is display math without markers.
+            case math(display: Bool)
+            /// A `$$` line opening or closing a math block; the dollars are the marker.
+            case mathFence
             /// `bullet` is the character index of a `-`, `*` or `+` marker (nil for numbered items);
             /// `box` the three characters of a task box `[ ]`/`[x]`, whose brackets are markers.
             case listItem(bullet: Int?, box: NSRange?)
@@ -99,6 +104,10 @@ nonisolated enum MarkdownHighlighter {
     private static let linkDefinition = regex(#"^\s{0,3}\[([^\]\n]+)\]:\s*(?:<([^>\n]*)>|(\S+))"#)
     private static let referenceLink = regex(#"(!?)\[([^\[\]\n]+)\](?:\[([^\[\]\n]*)\])?"#)
     private static let escape = regex(#"\\[!-/:-@\[-`{-~]"#)
+    private static let mathFence = regex(#"^\s{0,3}\$\$\s*$"#)
+    private static let displayMath = regex(#"\$\$([^$\n]+?)\$\$"#)
+    // GitHub's rules: no space right inside the dollars, no digit right after the closing one.
+    private static let inlineMath = regex(#"(?<![\w$\\])\$(?![\s$])([^$\n]+?)(?<![\s\\])\$(?![\d$])"#)
 
     static func spans(in text: String) -> [Span] {
         spans(from: tokens(in: text))
@@ -109,6 +118,7 @@ nonisolated enum MarkdownHighlighter {
         let lines = lineRanges(of: source)
         var tokens: [Token] = []
         var fenceMarker: String?
+        var inMathBlock = false
         var inFrontMatter = false
         var index = 0
         let definitions = linkDefinitions(in: lines, source: source)
@@ -150,6 +160,15 @@ nonisolated enum MarkdownHighlighter {
             }
             if fenceMarker != nil {
                 tokens.append(Token(range: contentRange, kind: .code, markers: []))
+                continue
+            }
+            if mathFence.firstMatch(in: line, range: whole) != nil {
+                inMathBlock.toggle()
+                tokens.append(Token(range: contentRange, kind: .mathFence, markers: [shifted((line as NSString).range(of: "$$"))]))
+                continue
+            }
+            if inMathBlock {
+                tokens.append(Token(range: contentRange, kind: .math(display: true), markers: []))
                 continue
             }
             if rule.firstMatch(in: line, range: whole) != nil {
@@ -386,6 +405,14 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: .escape, markers: [NSRange(location: offset + match.range.location, length: 1)]))
             mask(match.range)
         }
+        for match in displayMath.matches(in: scratch as String, range: region) {
+            tokens.append(Token(range: shifted(match.range), kind: .math(display: true), markers: edges(match.range, open: 2, close: 2)))
+            mask(match.range)
+        }
+        for match in inlineMath.matches(in: scratch as String, range: region) {
+            tokens.append(Token(range: shifted(match.range), kind: .math(display: false), markers: edges(match.range, open: 1, close: 1)))
+            mask(match.range)
+        }
         for match in autolink.matches(in: scratch as String, range: region) {
             let inner = NSRange(location: match.range.location + 1, length: match.range.length - 2)
             tokens.append(Token(range: shifted(match.range), kind: .autolink(destination: scratch.substring(with: inner)), markers: edges(match.range, open: 1, close: 1)))
@@ -514,6 +541,7 @@ nonisolated enum MarkdownHighlighter {
                 for marker in token.markers { spans.append(Span(range: marker, kind: .html)) }
             case .linkDefinition: spans.append(Span(range: token.range, kind: .link))
             case .escape: break
+            case .math, .mathFence: spans.append(Span(range: token.range, kind: .math))
             case .listItem: spans.append(Span(range: token.range, kind: .listMarker))
             case .quote: spans.append(Span(range: token.range, kind: .quote))
             case .rule: spans.append(Span(range: token.range, kind: .rule))

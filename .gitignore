@@ -1,5 +1,6 @@
 # Xcode
 build/
+*.profraw
 DerivedData/
 xcuserdata/
 *.xcuserstate

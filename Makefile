@@ -33,7 +33,7 @@ uninstall:
 	qlmanage -r
 
 icon:
-	swift scripts/make-icon.swift uncial/Assets.xcassets/AppIcon.appiconset
+	swift scripts/make-icon.swift static/icon.png uncial/Assets.xcassets/AppIcon.appiconset
 
 clean:
 	rm -rf $(BUILD_DIR)

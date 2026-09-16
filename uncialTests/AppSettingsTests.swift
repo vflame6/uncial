@@ -23,6 +23,7 @@ import UncialCore
         #expect(settings.continueLists == true)
         #expect(settings.showStatusBar == false)
         #expect(settings.readableLineWidth == true)
+        #expect(settings.autosave == false)
         #expect(settings.splitRatio == 0.5)
         #expect(settings.textSize == nil && settings.effectiveTextSize == 13 && settings.textScale == 1)
         #expect(settings.hasCompletedFirstRun == false)
@@ -76,6 +77,15 @@ import UncialCore
         #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == 36)
         defaults.set(0, forKey: "textSize")
         #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == nil)
+    }
+
+    @Test func persistsAutosave() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.autosave = true
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).autosave == true)
+        settings.autosave = false
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).autosave == false)
     }
 
     @Test func persistsSyncScrollingOff() {

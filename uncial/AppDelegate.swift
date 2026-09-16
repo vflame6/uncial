@@ -24,4 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             WelcomeWindowController.shared.present()
         }
     }
+
+    /// Manually saved documents with unsaved edits get the Save / Cancel / Don't Save sheet, one window
+    /// at a time; NSDocument knows nothing about those edits (see `DocumentWindowGuard`).
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let pending = DocumentWindowGuard.needingReview
+        guard !pending.isEmpty else { return .terminateNow }
+        Task { @MainActor in
+            sender.reply(toApplicationShouldTerminate: await DocumentWindowGuard.review(pending))
+        }
+        return .terminateLater
+    }
 }

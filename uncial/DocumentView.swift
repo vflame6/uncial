@@ -6,11 +6,14 @@ struct DocumentView: View {
     @State private var mode: EditorMode
     @State private var sync = ScrollSyncController()
     @State private var editorHandle = EditorHandle()
+    @State private var windowHandle = DocumentWindowHandle()
     @State private var previewFind = PreviewFindController()
     private let settings: AppSettings
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
-        _model = State(initialValue: DocumentViewModel(fileURL: fileURL, initialText: document.text, theme: settings.theme))
+        let model = DocumentViewModel(fileURL: fileURL, initialText: document.text, theme: settings.theme)
+        model.autosaves = settings.autosave
+        _model = State(initialValue: model)
         let preferred = settings.defaultEditorMode
         // An empty read-only window is useless: new documents open with the editor visible.
         _mode = State(initialValue: document.text.isEmpty && preferred == .readOnly ? .split : preferred)
@@ -29,6 +32,7 @@ struct DocumentView: View {
             }
         }
         .frame(minWidth: mode == .split ? 600 : 480, minHeight: 320)
+        .background(DocumentWindowBridge(model: model, isEdited: model.needsSavePrompt, handle: windowHandle).frame(width: 0, height: 0))
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Picker("Editor Mode", selection: $mode) {
@@ -41,7 +45,7 @@ struct DocumentView: View {
                 .help("Editor mode: \(EditorMode.allCases.map { "\($0.title) \($0.shortcut.display)" }.joined(separator: ", "))")
             }
         }
-        .focusedSceneValue(\.reloadDocument, ReloadAction { model.reload() })
+        .focusedSceneValue(\.reloadDocument, ReloadAction { reload() })
         .focusedSceneValue(\.saveDocument, SaveAction { model.saveNow() })
         .focusedSceneValue(\.editorMode, $mode)
         .focusedSceneValue(\.findInDocument, FindAction(supportsReplace: mode.showsEditor) { action in
@@ -53,15 +57,25 @@ struct DocumentView: View {
         })
         .onChange(of: mode) { old, new in
             if old.showsEditor, !new.showsEditor {
-                model.saveNow()
+                model.saveIfAutomatic()
             }
             previewFind.hide()
             updateSync()
         }
         .onChange(of: settings.syncScrolling) { updateSync() }
         .onChange(of: settings.theme) { model.theme = settings.theme }
+        .onChange(of: settings.autosave) { model.autosaves = settings.autosave }
         .onAppear { updateSync() }
-        .onDisappear { model.saveNow() }
+        .onDisappear { model.saveIfAutomatic() }
+    }
+
+    /// View ▸ Reload, through the window's guard so unsaved edits get a confirmation sheet.
+    private func reload() {
+        if let guardian = windowHandle.guardian {
+            Task { await guardian.reload() }
+        } else {
+            model.reload()
+        }
     }
 
     private func updateSync() {

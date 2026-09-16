@@ -40,6 +40,7 @@ import Testing
     @Test func typingIsWrittenAfterThePause() async throws {
         let file = try temporaryFile("a")
         let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .milliseconds(50))
+        model.autosaves = true
         model.updateText("ab")
         model.updateText("abc")
         #expect(try contents(of: file) == "a")
@@ -72,6 +73,7 @@ import Testing
     @Test func localEditsSurviveAConcurrentExternalChange() async throws {
         let file = try temporaryFile("one")
         let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .milliseconds(900))
+        model.autosaves = true
         try await Task.sleep(for: .milliseconds(150))
         model.updateText("mine")
         try Data("theirs".utf8).write(to: file)
@@ -100,6 +102,48 @@ import Testing
         model.updateText("b")
         model.saveNow()
         #expect(model.saveError != nil)
+        #expect(model.hasUnsavedChanges == true)
+    }
+
+    @Test func savesOnlyOnRequestByDefault() async throws {
+        let file = try temporaryFile("a")
+        let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .milliseconds(50))
+        #expect(model.autosaves == false)
+        #expect(model.needsSavePrompt == false)
+        model.updateText("ab")
+        try await Task.sleep(for: .milliseconds(400))
+        #expect(try contents(of: file) == "a")
+        #expect(model.hasUnsavedChanges == true)
+        #expect(model.needsSavePrompt == true)
+        model.saveIfAutomatic()
+        #expect(try contents(of: file) == "a")
+        model.saveNow()
+        #expect(try contents(of: file) == "ab")
+        #expect(model.needsSavePrompt == false)
+    }
+
+    @Test func saveIfAutomaticWritesOnlyWhenAutosaving() throws {
+        let file = try temporaryFile("a")
+        let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .seconds(5))
+        model.autosaves = true
+        model.updateText("b")
+        #expect(model.needsSavePrompt == false)
+        model.saveIfAutomatic()
+        #expect(try contents(of: file) == "b")
+    }
+
+    @Test func changingTheSavePolicySettlesTheFile() async throws {
+        let file = try temporaryFile("a")
+        let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .seconds(5))
+        model.updateText("manual")
+        model.autosaves = true
+        #expect(try contents(of: file) == "manual")
+        model.updateText("pending")
+        model.autosaves = false
+        #expect(try contents(of: file) == "pending")
+        model.updateText("later")
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(try contents(of: file) == "pending")
         #expect(model.hasUnsavedChanges == true)
     }
 }

@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// Editor tab: default mode, status bar, source editor conveniences, Split View scroll sync and ratio.
+/// Editor tab: default mode, saving, status bar, source editor conveniences, Split View scroll sync and ratio.
 struct EditorSettingsView: View {
     @Bindable var settings: AppSettings
 
@@ -20,7 +20,15 @@ struct EditorSettingsView: View {
             } header: {
                 Text("Editing")
             } footer: {
-                Text("Applies to documents you open next. Switch any window with \(EditorMode.allCases.map { "\($0.title) \($0.shortcut.display)" }.joined(separator: ", ")), or cycle with \(AppShortcut.toggleEditorMode.display). Changes are saved to the file as you type.")
+                Text("Applies to documents you open next. Switch any window with \(EditorMode.allCases.map { "\($0.title) \($0.shortcut.display)" }.joined(separator: ", ")), or cycle with \(AppShortcut.toggleEditorMode.display).")
+            }
+
+            Section {
+                Toggle("Save changes automatically", isOn: $settings.autosave)
+            } header: {
+                Text("Saving")
+            } footer: {
+                Text("Off, the file changes only when you save with \(AppShortcut.save.display), and closing a window, quitting or reloading with unsaved changes asks first. On, edits are written to the file half a second after you stop typing, without asking.")
             }
 
             Section {

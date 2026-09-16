@@ -16,6 +16,7 @@ final class AppSettings {
         static let continueLists = "continueLists"
         static let showStatusBar = "showStatusBar"
         static let readableLineWidth = "readableLineWidth"
+        static let autosave = "autosave"
         static let splitRatio = "splitRatio"
         static let textSize = "textSize"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
@@ -64,6 +65,12 @@ final class AppSettings {
 
     var readableLineWidth: Bool {
         didSet { defaults.set(readableLineWidth, forKey: Key.readableLineWidth) }
+    }
+
+    /// Write edits to the file on their own shortly after typing pauses. Off (the default), the file
+    /// changes only on File ▸ Save, and closing or quitting with unsaved edits asks first.
+    var autosave: Bool {
+        didSet { defaults.set(autosave, forKey: Key.autosave) }
     }
 
     /// Share of a Split View window's width for the source pane, within `SplitLayout.ratioRange`.
@@ -125,6 +132,7 @@ final class AppSettings {
         continueLists = defaults.object(forKey: Key.continueLists) == nil ? true : defaults.bool(forKey: Key.continueLists)
         showStatusBar = defaults.bool(forKey: Key.showStatusBar)
         readableLineWidth = defaults.object(forKey: Key.readableLineWidth) == nil ? true : defaults.bool(forKey: Key.readableLineWidth)
+        autosave = defaults.bool(forKey: Key.autosave)
         splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
         let storedSize = defaults.integer(forKey: Key.textSize)
         textSize = storedSize == 0 ? nil : min(max(storedSize, Self.textSizeRange.lowerBound), Self.textSizeRange.upperBound)

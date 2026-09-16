@@ -61,7 +61,7 @@ with the other markers, so the comment vanishes and HTML reads bold.
 
 *Expect:* bullets drawn as •, numbers in the accent color, wrapped lines hanging
 under their text, task boxes drawn as squares that toggle on click (undoable,
-saved to the file).
+an edit like typing).
 
 ## Quotes
 

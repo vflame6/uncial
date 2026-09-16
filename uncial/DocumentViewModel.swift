@@ -5,8 +5,10 @@ import UncialCore
 
 /// Owns a document's text, its rendered body, and the file on disk.
 ///
-/// The file is the source of truth: edits are written 0.5 s after typing stops (atomic write),
-/// and external changes flow back in through `FileWatcher` unless local edits are pending.
+/// The file is the source of truth. With `autosaves` on, edits are written 0.5 s after typing stops
+/// (atomic write); off, they wait for `saveNow()` (File ▸ Save) and `needsSavePrompt` tells the
+/// window to ask before closing. External changes flow back in through `FileWatcher` unless local
+/// edits are pending.
 @Observable
 final class DocumentViewModel {
     let fileURL: URL?
@@ -22,6 +24,14 @@ final class DocumentViewModel {
         didSet { if theme != oldValue { render() } }
     }
     var hasUnsavedChanges: Bool { text != diskText }
+    /// Unsaved edits that nothing will write on its own: closing, quitting and reverting ask first.
+    var needsSavePrompt: Bool { !autosaves && hasUnsavedChanges }
+
+    /// Whether edits are written shortly after typing pauses (`AppSettings.autosave`). Changing the
+    /// policy settles the file: what was typed under either promise is written right away.
+    var autosaves = false {
+        didSet { if autosaves != oldValue { saveNow() } }
+    }
 
     /// What we last loaded from or wrote to the file.
     private var diskText: String
@@ -53,7 +63,7 @@ final class DocumentViewModel {
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
-            MainActor.assumeIsolated { self?.saveNow() }
+            MainActor.assumeIsolated { self?.saveIfAutomatic() }
         }
     }
 
@@ -63,12 +73,23 @@ final class DocumentViewModel {
         }
     }
 
-    /// The editor changed. Re-renders shortly and writes the file once typing pauses.
+    /// The editor changed. Re-renders shortly and, when saving is automatic, writes the file once
+    /// typing pauses.
     func updateText(_ newText: String) {
         guard newText != text else { return }
         text = newText
         scheduleRender()
-        scheduleSave()
+        if autosaves {
+            scheduleSave()
+        }
+    }
+
+    /// Writes pending edits now when saving is automatic (leaving an editing mode, closing, quitting);
+    /// a manually saved document keeps them for File ▸ Save.
+    func saveIfAutomatic() {
+        if autosaves {
+            saveNow()
+        }
     }
 
     /// Writes the editor text now when it differs from the file.

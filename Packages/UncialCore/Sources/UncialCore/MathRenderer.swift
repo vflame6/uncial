@@ -4,8 +4,9 @@ import JavaScriptCore
 /// TeX math → MathML through KaTeX (bundled, MIT) in a JavaScriptCore context, so the page needs
 /// no script and Quick Look renders it too. Handles inline `$…$`, display `$$…$$` and
 /// ```` ```math ```` fences; text inside other code is left alone. Bad TeX comes back as KaTeX's
-/// red error span with the source, never as an exception.
-enum MathRenderer {
+/// red error span with the source, never as an exception. `mathML(_:display:)` renders one formula
+/// for the app's editor, which draws it through WebKit.
+public enum MathRenderer {
     /// One KaTeX instance per process. JavaScriptCore serializes calls on a context, and the lock
     /// keeps the render calls from interleaving on top of that.
     private final class Engine: @unchecked Sendable {
@@ -85,7 +86,7 @@ enum MathRenderer {
     }
 
     /// KaTeX's MathML for `tex`; without KaTeX (no resource) the source stays as escaped text.
-    static func mathML(_ tex: String, display: Bool) -> String {
+    public static func mathML(_ tex: String, display: Bool) -> String {
         engine?.render(tex, display: display) ?? HTMLEscaping.escape(display ? "$$\(tex)$$" : "$\(tex)$")
     }
 

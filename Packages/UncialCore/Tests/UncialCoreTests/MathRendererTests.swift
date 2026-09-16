@@ -24,6 +24,12 @@ import Testing
         #expect(!output.contains("<pre"))
     }
 
+    @Test func rendersOneFormulaForTheEditor() {
+        #expect(MathRenderer.mathML("x^2", display: false).hasPrefix("<span class=\"katex\"><math"))
+        #expect(MathRenderer.mathML("x^2", display: true).contains("display=\"block\""))
+        #expect(MathRenderer.mathML("\\frac{1}", display: false).contains("katex-error"))
+    }
+
     @Test func keepsBrokenMathReadable() {
         let output = MathRenderer.render("<p>$\\frac{1}$</p>")
         #expect(output.contains("katex-error") && output.contains("\\frac{1}"))

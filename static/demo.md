@@ -119,11 +119,11 @@ right under "Setext level two" above is a heading underline, not a rule.
 
 ![Uncial icon](icon.png)
 
-A remote image stays as source in Live Preview: ![remote](https://example.com/image.png)
+A remote image: ![Rickrolling QR code](https://upload.wikimedia.org/wikipedia/commons/2/2f/Rickrolling_QR_code.png)
 
 *Expect:* the local icon drawn under its line at 128 pt with the alt text above
-it; the remote line raw. The rendered page embeds the local image and loads
-the remote one only when the network allows.
+it; the remote one appears the same way once it has loaded (Live Preview and the
+rendered page both fetch it; Quick Look has no network and shows nothing).
 
 ## Links and anchors
 

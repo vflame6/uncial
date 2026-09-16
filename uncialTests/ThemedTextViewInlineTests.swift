@@ -136,6 +136,33 @@ import Testing
         #expect(inline.revealed == NSRange(location: 11, length: 4))
     }
 
+    /// Remote images load asynchronously through the injected loader and then hide their markers.
+    @Test func loadsRemoteImagesAsynchronously() async throws {
+        let picture = NSImage(size: NSSize(width: 20, height: 10), flipped: false) { rect in
+            NSColor.red.setFill()
+            rect.fill()
+            return true
+        }
+        var requested: [URL] = []
+        // The loader must be in place before the first render, which is what starts the fetch.
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.presentation = .inline
+        inline.remoteImageLoader = { url, completion in
+            requested.append(url)
+            DispatchQueue.main.async { completion(url.lastPathComponent == "a.png" ? picture : nil) }
+        }
+        inline.replaceText(with: "![r](https://example.com/a.png)\nend")
+        inline.setSelectedRange(NSRange(location: 33, length: 0))
+        #expect(inline.resolvedImages.isEmpty && requested.map(\.absoluteString) == ["https://example.com/a.png"])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(inline.resolvedImages == [0])
+        #expect(inline.markers.isHidden(0) && inline.markers.isHidden(4))
+        inline.rehighlight()
+        #expect(requested.count == 1)
+    }
+
     @Test func clickingATaskBoxTogglesIt() {
         let inline = editor("- [ ] task\nend", presentation: .inline, caret: 12)
         let layoutManager = inline.layoutManager!

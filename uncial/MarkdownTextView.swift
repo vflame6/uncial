@@ -287,6 +287,14 @@ final class ThemedTextView: NSTextView {
 
     private func updateReveal() {
         guard presentation == .inline, markers != .empty, let layoutManager else { return }
+    private var pendingImages: Set<String> = []
+    /// Fetches a remote image and calls back on the main thread; tests inject their own.
+    var remoteImageLoader: (URL, @escaping (NSImage?) -> Void) -> Void = { url, completion in
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            let image = data.flatMap { NSImage(data: $0) }
+            DispatchQueue.main.async { completion(image) }
+        }.resume()
+    }
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
         let previous = revealed
@@ -300,17 +308,37 @@ final class ThemedTextView: NSTextView {
         }
     }
 
-    /// Local images only (a destination without scheme or with `file:`), cached per destination
-    /// including misses; remote and unreadable ones stay as source.
+    /// Local images load right away; http(s) ones are fetched once through `remoteImageLoader`
+    /// and, once here, re-render the text. Every outcome is cached per destination, misses too.
     func image(for destination: String) -> NSImage? {
         if let cached = imageCache[destination] { return cached }
         var loaded: NSImage?
         let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL ?? baseURL?.appendingPathComponent(destination)
-        if let url, url.isFileURL {
-            loaded = NSImage(contentsOf: url)
+        guard let url else {
+            imageCache[destination] = .some(nil)
+            return nil
         }
-        imageCache[destination] = loaded
-        return loaded
+        if url.isFileURL {
+            let loaded = NSImage(contentsOf: url)
+            imageCache[destination] = .some(loaded)
+            return loaded
+        }
+        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), !pendingImages.contains(destination) else {
+            if !url.isFileURL, !pendingImages.contains(destination) { imageCache[destination] = .some(nil) }
+            return nil
+        }
+        pendingImages.insert(destination)
+        remoteImageLoader(url) { [weak self] image in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.pendingImages.remove(destination)
+                self.imageCache[destination] = .some(image)
+                if image != nil, self.presentation == .inline {
+                    self.rehighlight()
+                }
+            }
+        }
+        return nil
     }
 
     /// The column follows the width, and images are fitted to the text width, so a width change

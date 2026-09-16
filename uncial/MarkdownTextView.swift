@@ -7,6 +7,8 @@ import UncialCore
 struct MarkdownTextView: NSViewRepresentable {
     let text: String
     let palette: EditorPalette?
+    /// Body size in points (headings scale from it).
+    let fontSize: CGFloat
     let showsLineNumbers: Bool
     let autoPairing: Bool
     let continueLists: Bool
@@ -66,6 +68,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.readableWidth = readableWidth
         textView.baseURL = baseURL
         textView.string = text
+        textView.fontSize = fontSize
         textView.palette = palette
         scrollView.documentView = textView
         scrollView.hasVerticalRuler = true
@@ -84,6 +87,7 @@ struct MarkdownTextView: NSViewRepresentable {
         guard let textView = scrollView.documentView as? ThemedTextView else { return }
         context.coordinator.onChange = onChange
         context.coordinator.onScroll = onScroll
+        textView.fontSize = fontSize
         if textView.palette != palette {
             textView.palette = palette
         }
@@ -170,6 +174,11 @@ final class ThemedTextView: NSTextView {
         didSet { if palette != oldValue { applyStyle() } }
     }
 
+    /// Body size in points; 13 is the system size.
+    var fontSize: CGFloat = 13 {
+        didSet { if fontSize != oldValue { applyStyle() } }
+    }
+
     /// Set while `scroll(toLine:)` moves the view so the bounds change is not reported as user scrolling.
     private(set) var isProgrammaticScroll = false
     private(set) var style = EditorStyle(palette: nil, isDark: false)
@@ -188,7 +197,7 @@ final class ThemedTextView: NSTextView {
 
     private func applyStyle() {
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        style = EditorStyle(palette: palette, isDark: isDark)
+        style = EditorStyle(palette: palette, isDark: isDark, size: fontSize)
         backgroundColor = style.background
         insertionPointColor = style.foreground
         enclosingScrollView?.backgroundColor = style.background
@@ -278,6 +287,14 @@ final class ThemedTextView: NSTextView {
     /// Locations of the image tokens that loaded and are drawn under their paragraph.
     private(set) var resolvedImages: Set<Int> = []
     private var imageCache: [String: NSImage?] = [:]
+    private var pendingImages: Set<String> = []
+    /// Fetches a remote image and calls back on the main thread; tests inject their own.
+    var remoteImageLoader: (URL, @escaping (NSImage?) -> Void) -> Void = { url, completion in
+        URLSession.shared.dataTask(with: url) { data, _, _ in
+            let image = data.flatMap { NSImage(data: $0) }
+            DispatchQueue.main.async { completion(image) }
+        }.resume()
+    }
     private var layoutWidth: CGFloat = 0
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
     private(set) var revealed = NSRange(location: 0, length: 0) {
@@ -287,14 +304,6 @@ final class ThemedTextView: NSTextView {
 
     private func updateReveal() {
         guard presentation == .inline, markers != .empty, let layoutManager else { return }
-    private var pendingImages: Set<String> = []
-    /// Fetches a remote image and calls back on the main thread; tests inject their own.
-    var remoteImageLoader: (URL, @escaping (NSImage?) -> Void) -> Void = { url, completion in
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            let image = data.flatMap { NSImage(data: $0) }
-            DispatchQueue.main.async { completion(image) }
-        }.resume()
-    }
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
         let previous = revealed
@@ -312,7 +321,6 @@ final class ThemedTextView: NSTextView {
     /// and, once here, re-render the text. Every outcome is cached per destination, misses too.
     func image(for destination: String) -> NSImage? {
         if let cached = imageCache[destination] { return cached }
-        var loaded: NSImage?
         let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL ?? baseURL?.appendingPathComponent(destination)
         guard let url else {
             imageCache[destination] = .some(nil)

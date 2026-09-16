@@ -32,6 +32,27 @@ struct EditorSettingsView: View {
             }
 
             Section {
+                Picker("Text size", selection: Binding(
+                    get: { settings.textSize == nil ? 0 : 1 },
+                    set: { settings.textSize = $0 == 0 ? nil : settings.effectiveTextSize }
+                )) {
+                    Text("System").tag(0)
+                    Text("Custom").tag(1)
+                }
+                .pickerStyle(.segmented)
+                if settings.textSize != nil {
+                    Stepper("\(settings.effectiveTextSize) pt", value: Binding(
+                        get: { settings.effectiveTextSize },
+                        set: { settings.textSize = $0 }
+                    ), in: AppSettings.textSizeRange)
+                }
+            } header: {
+                Text("Text")
+            } footer: {
+                Text("The editor and the rendered page scale together, like zooming: \(AppShortcut.zoomIn.display) and \(AppShortcut.zoomOut.display) in the View menu change the size, \(AppShortcut.actualSize.display) returns to the system size. Quick Look always uses the system size.")
+            }
+
+            Section {
                 Toggle("Show line numbers", isOn: $settings.showLineNumbers)
                 Toggle("Close brackets, quotes and Markdown markers automatically", isOn: $settings.autoPairing)
                 Toggle("Continue lists and quotes on Return", isOn: $settings.continueLists)

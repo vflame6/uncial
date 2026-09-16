@@ -220,7 +220,9 @@ middle of the screen.
   is unknown. macOS takes a few seconds to apply either change.
 
 **Editor**: the mode new windows start in (Read Only, Live Preview, Split View,
-Raw Editor), the status bar, line numbers, automatic closing of brackets, quotes
+Raw Editor), the status bar, the text size (System, or Custom with a stepper;
+View ▸ Zoom In ⌘=, Zoom Out ⌘- and Actual Size ⌘0 change it too, and the editor
+and the rendered page scale together), line numbers, automatic closing of brackets, quotes
 and Markdown markers, list and quote continuation on Return, the readable
 column in Live Preview, whether Split View keeps the source and the rendered
 page scrolled to the same place, and how Split View divides its width between

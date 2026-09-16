@@ -52,7 +52,7 @@ struct InlineStyle {
     }
 
     func headingFont(level: Int) -> NSFont {
-        NSFont.monospacedSystemFont(ofSize: Self.headingSizes[max(1, min(level, 6)) - 1], weight: .bold)
+        NSFont.monospacedSystemFont(ofSize: Self.headingSizes[max(1, min(level, 6)) - 1] * style.scale, weight: .bold)
     }
 
     /// `storage` must already carry the base attributes for its whole text. `images` loads an
@@ -103,7 +103,7 @@ struct InlineStyle {
                 storage.addAttributes([.blockDecoration: "rule", .foregroundColor: style.muted], range: paragraph)
             case .footnoteReference:
                 let label = NSRange(location: token.range.location + 2, length: token.range.length - 3)
-                storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(4), .foregroundColor: style.accent], range: label)
+                storage.addAttributes([.font: superscriptFont, .baselineOffset: CGFloat(4), .foregroundColor: style.accent], range: label)
             case .footnoteDefinition, .linkDefinition:
                 storage.addAttribute(.foregroundColor, value: style.muted, range: token.range)
             case .html(let element, let attributes):
@@ -142,7 +142,7 @@ struct InlineStyle {
         return reserveImages(tokens, in: storage, images: images, textWidth: textWidth)
     }
 
-    static let superscriptFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
+    var superscriptFont: NSFont { NSFont.monospacedSystemFont(ofSize: 10 * style.scale, weight: .bold) }
 
     /// What HTML can look like in a text view: the common inline tags map to font traits, colors
     /// and offsets on the element's content, `align` and `<center>` set the paragraph's alignment,
@@ -176,9 +176,9 @@ struct InlineStyle {
         case "mark":
             storage.addAttribute(.backgroundColor, value: style.accent.withAlphaComponent(0.25), range: content)
         case "sup":
-            storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(4)], range: content)
+            storage.addAttributes([.font: superscriptFont, .baselineOffset: CGFloat(4)], range: content)
         case "sub":
-            storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(-3)], range: content)
+            storage.addAttributes([.font: superscriptFont, .baselineOffset: CGFloat(-3)], range: content)
         case "a":
             storage.addAttribute(.foregroundColor, value: style.accent, range: content)
             if let destination = attributes["href"], !destination.isEmpty {

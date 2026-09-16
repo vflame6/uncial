@@ -17,6 +17,7 @@ final class AppSettings {
         static let showStatusBar = "showStatusBar"
         static let readableLineWidth = "readableLineWidth"
         static let splitRatio = "splitRatio"
+        static let textSize = "textSize"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
     }
 
@@ -70,6 +71,36 @@ final class AppSettings {
         didSet { defaults.set(splitRatio, forKey: Key.splitRatio) }
     }
 
+    /// Custom body size in points, nil for the system size. Editor and rendered page scale from it.
+    var textSize: Int? {
+        didSet {
+            if let textSize {
+                defaults.set(textSize, forKey: Key.textSize)
+            } else {
+                defaults.removeObject(forKey: Key.textSize)
+            }
+        }
+    }
+
+    static let systemTextSize = 13
+    static let textSizeRange = 9...36
+
+    var effectiveTextSize: Int { textSize ?? Self.systemTextSize }
+    /// 1 at the system size; the rendered page zooms by this.
+    var textScale: Double { Double(effectiveTextSize) / Double(Self.systemTextSize) }
+
+    func zoomIn() {
+        textSize = min(effectiveTextSize + 1, Self.textSizeRange.upperBound)
+    }
+
+    func zoomOut() {
+        textSize = max(effectiveTextSize - 1, Self.textSizeRange.lowerBound)
+    }
+
+    func resetTextSize() {
+        textSize = nil
+    }
+
     private(set) var hasCompletedFirstRun: Bool
 
     init(defaults: UserDefaults, applyAppearance: Bool) {
@@ -95,6 +126,8 @@ final class AppSettings {
         showStatusBar = defaults.bool(forKey: Key.showStatusBar)
         readableLineWidth = defaults.object(forKey: Key.readableLineWidth) == nil ? true : defaults.bool(forKey: Key.readableLineWidth)
         splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
+        let storedSize = defaults.integer(forKey: Key.textSize)
+        textSize = storedSize == 0 ? nil : min(max(storedSize, Self.textSizeRange.lowerBound), Self.textSizeRange.upperBound)
         hasCompletedFirstRun = defaults.bool(forKey: Key.hasCompletedFirstRun)
     }
 

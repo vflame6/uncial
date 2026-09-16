@@ -9,6 +9,8 @@ struct WebView: NSViewRepresentable {
     let body: String
     let title: String
     let theme: Theme
+    /// Page zoom, 1 at the system text size.
+    let textScale: Double
     /// Shows the source-line gutter (`data-line` labels from the renderer).
     let lineNumbers: Bool
     let baseURL: URL?
@@ -40,6 +42,7 @@ struct WebView: NSViewRepresentable {
         handle.webView = webView
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
+        context.coordinator.setTextScale(textScale)
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
         context.coordinator.apply(scrollTarget)
         return webView
@@ -48,6 +51,7 @@ struct WebView: NSViewRepresentable {
     func updateNSView(_ webView: WKWebView, context: Context) {
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
+        context.coordinator.setTextScale(textScale)
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
         context.coordinator.apply(scrollTarget)
     }
@@ -82,6 +86,15 @@ struct WebView: NSViewRepresentable {
         private var appliedToken = 0
         private var lastScrollTarget: ScrollTarget?
         private var lineNumbers = false
+        private var textScale = 1.0
+
+        /// Page zoom for the text size; a load resets it, so `didFinish` applies it again.
+        func setTextScale(_ scale: Double) {
+            textScale = scale
+            if !isLoading, let webView, webView.pageZoom != scale {
+                webView.pageZoom = scale
+            }
+        }
 
         /// Turns the source-line gutter on or off in place; body swaps keep the class.
         func setLineNumbers(_ flag: Bool) {
@@ -165,6 +178,9 @@ struct WebView: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             isLoading = false
             applyLineNumbers(in: webView)
+            if webView.pageZoom != textScale {
+                webView.pageZoom = textScale
+            }
             if let scrollY = pendingScrollY {
                 pendingScrollY = nil
                 webView.evaluateJavaScript("window.scrollTo(0, \(scrollY));", completionHandler: nil)

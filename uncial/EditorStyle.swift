@@ -11,18 +11,23 @@ struct EditorStyle {
     let regular: NSFont
     let bold: NSFont
     let italic: NSFont
+    /// Body size in points; everything else scales from it (13 is the system size).
+    let size: CGFloat
 
-    init(palette: EditorPalette?, isDark: Bool) {
+    init(palette: EditorPalette?, isDark: Bool, size: CGFloat = 13) {
+        self.size = size
         let colors = palette.map { isDark ? $0.dark : $0.light }
         background = colors.map { NSColor(rgb: $0.background) } ?? .textBackgroundColor
         foreground = colors.map { NSColor(rgb: $0.foreground) } ?? .textColor
         accent = colors.map { NSColor(rgb: $0.accent) } ?? .linkColor
         muted = colors.map { NSColor(rgb: $0.muted) } ?? .secondaryLabelColor
         code = colors.map { NSColor(rgb: $0.code) } ?? .systemTeal
-        regular = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
-        bold = NSFont.monospacedSystemFont(ofSize: 13, weight: .bold)
+        regular = NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+        bold = NSFont.monospacedSystemFont(ofSize: size, weight: .bold)
         italic = NSFontManager.shared.convert(regular, toHaveTrait: .italicFontMask)
     }
+
+    var scale: CGFloat { size / 13 }
 
     var baseAttributes: [NSAttributedString.Key: Any] {
         [.font: regular, .foregroundColor: foreground]

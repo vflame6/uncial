@@ -1,6 +1,7 @@
 import Testing
 @testable import Uncial
 
+@MainActor
 @Suite struct AppShortcutTests {
     @Test func displaysAreUniqueAndNonEmpty() {
         let displays = AppShortcut.allCases.map(\.display)
@@ -19,7 +20,8 @@ import Testing
 
     @Test func sectionsKeepDeclarationOrder() {
         #expect(AppShortcut.sections == ["File", "View", "Edit", "Uncial"])
-        #expect(AppShortcut.shortcuts(in: "View") == [.readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload])
+        #expect(AppShortcut.shortcuts(in: "View") == [.readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload, .zoomIn, .zoomOut, .actualSize])
+        #expect(AppShortcut.zoomIn.display == "⌘=" && AppShortcut.zoomOut.display == "⌘-" && AppShortcut.actualSize.display == "⌘0")
     }
 
     @Test func findShortcutsMatchTheStandardEditMenu() {

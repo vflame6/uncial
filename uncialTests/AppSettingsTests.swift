@@ -24,6 +24,7 @@ import UncialCore
         #expect(settings.showStatusBar == false)
         #expect(settings.readableLineWidth == true)
         #expect(settings.splitRatio == 0.5)
+        #expect(settings.textSize == nil && settings.effectiveTextSize == 13 && settings.textScale == 1)
         #expect(settings.hasCompletedFirstRun == false)
     }
 
@@ -52,6 +53,29 @@ import UncialCore
         #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.8)
         defaults.set("wide", forKey: "splitRatio")
         #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.5)
+    }
+
+    @Test func zoomsTheTextSizeWithinBounds() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.zoomIn()
+        #expect(settings.textSize == 14 && settings.effectiveTextSize == 14)
+        settings.zoomOut()
+        settings.zoomOut()
+        #expect(settings.textSize == 12)
+        settings.textSize = 36
+        settings.zoomIn()
+        #expect(settings.textSize == 36)
+        settings.textSize = 9
+        settings.zoomOut()
+        #expect(settings.textSize == 9)
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == 9)
+        settings.resetTextSize()
+        #expect(settings.textSize == nil && AppSettings(defaults: defaults, applyAppearance: false).textSize == nil)
+        defaults.set(100, forKey: "textSize")
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == 36)
+        defaults.set(0, forKey: "textSize")
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == nil)
     }
 
     @Test func persistsSyncScrollingOff() {

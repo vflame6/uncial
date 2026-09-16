@@ -72,6 +72,7 @@ struct DocumentView: View {
             MarkdownTextView(
                 text: model.text,
                 palette: settings.theme.editorPalette,
+                fontSize: CGFloat(settings.effectiveTextSize),
                 showsLineNumbers: settings.showLineNumbers,
                 autoPairing: settings.autoPairing,
                 continueLists: settings.continueLists,
@@ -113,6 +114,7 @@ struct DocumentView: View {
                 body: model.body,
                 title: model.title,
                 theme: settings.theme,
+                textScale: settings.textScale,
                 lineNumbers: settings.showLineNumbers,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
                 handle: previewFind.handle,

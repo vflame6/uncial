@@ -65,6 +65,13 @@ struct UncialApp: App {
                 Button("Reload") { reloadDocument?.run() }
                     .keyboardShortcut(.reload)
                     .disabled(reloadDocument == nil)
+                Divider()
+                Button("Zoom In") { AppSettings.shared.zoomIn() }
+                    .keyboardShortcut(.zoomIn)
+                Button("Zoom Out") { AppSettings.shared.zoomOut() }
+                    .keyboardShortcut(.zoomOut)
+                Button("Actual Size") { AppSettings.shared.resetTextSize() }
+                    .keyboardShortcut(.actualSize)
             }
         }
 

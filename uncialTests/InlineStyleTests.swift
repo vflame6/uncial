@@ -130,6 +130,15 @@ import UncialCore
         #expect(color(text, 17) == style.muted && color(text, 23) == style.foreground)
     }
 
+    @Test func fontsFollowTheTextSize() {
+        let big = EditorStyle(palette: nil, isDark: false, size: 26)
+        #expect(big.regular.pointSize == 26 && big.bold.pointSize == 26 && big.italic.pointSize == 26)
+        let inline = InlineStyle(style: big)
+        #expect(inline.headingFont(level: 1).pointSize == 44 && inline.headingFont(level: 6).pointSize == 26)
+        #expect(inline.superscriptFont.pointSize == 20)
+        #expect(InlineStyle(style: EditorStyle(palette: nil, isDark: false)).headingFont(level: 1).pointSize == 22)
+    }
+
     @Test func htmlElementsAreStyledAndAligned() {
         let text = storage("<b>x</b> <i>y</i> <a href=\"u\">z</a> <!-- c --> \\*e\n<div align=\"center\">w</div>\n<kbd>K1</kbd> <mark>M1</mark> <sup>S1</sup> <h2>T1</h2>")
         func at(_ needle: String) -> Int { (text.string as NSString).range(of: needle).location }

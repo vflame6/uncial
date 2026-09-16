@@ -4,7 +4,7 @@ import SwiftUI
 /// custom ones from here; the Shortcuts settings tab lists all of them, so the two never drift.
 enum AppShortcut: CaseIterable, Identifiable {
     case newDocument, open, save, close, closeAll
-    case readOnly, livePreview, splitView, rawEditor, toggleEditorMode, reload
+    case readOnly, livePreview, splitView, rawEditor, toggleEditorMode, reload, zoomIn, zoomOut, actualSize
     case find, findAndReplace, findNext, findPrevious, useSelectionForFind
     case settings, quit
 
@@ -23,6 +23,9 @@ enum AppShortcut: CaseIterable, Identifiable {
         case .rawEditor: "Raw Editor"
         case .toggleEditorMode: "Toggle Editor Mode"
         case .reload: "Reload"
+        case .zoomIn: "Zoom In"
+        case .zoomOut: "Zoom Out"
+        case .actualSize: "Actual Size"
         case .find: "Find…"
         case .findAndReplace: "Find and Replace…"
         case .findNext: "Find Next"
@@ -36,7 +39,7 @@ enum AppShortcut: CaseIterable, Identifiable {
     var section: String {
         switch self {
         case .newDocument, .open, .save, .close, .closeAll: "File"
-        case .readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload: "View"
+        case .readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload, .zoomIn, .zoomOut, .actualSize: "View"
         case .find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind: "Edit"
         case .settings, .quit: "Uncial"
         }
@@ -55,6 +58,9 @@ enum AppShortcut: CaseIterable, Identifiable {
         case .rawEditor: "4"
         case .toggleEditorMode: "e"
         case .reload: "r"
+        case .zoomIn: "="
+        case .zoomOut: "-"
+        case .actualSize: "0"
         case .find, .findAndReplace: "f"
         case .findNext, .findPrevious: "g"
         case .useSelectionForFind: "e"

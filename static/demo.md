@@ -164,12 +164,33 @@ $$
 Preview keeps the TeX in the code color with the dollars hidden off the cursor line
 and tints the `$$` block like code. Bad TeX shows in red with its source.
 
-## Not rendered on purpose
-
-Mermaid fences are not supported:
+## Diagrams
 
 ```mermaid
-graph TD; A-->B;
+graph LR
+  A[Open file] --> B{Changed on disk?}
+  B -->|Yes| C[Re-render]
+  B -->|No| D[Keep going]
+```
+
+```mermaid
+sequenceDiagram
+  Finder->>Uncial: Space
+  Uncial-->>Finder: rendered preview
+```
+
+*Expect:* the rendered page and Quick Look draw the flowchart and the sequence diagram as
+vector graphics in the theme's colors (beautiful-mermaid at render time, no script); Live
+Preview keeps the fences as code. State, class and ER diagrams and XY charts render too.
+
+## Not rendered on purpose
+
+Pie charts, Gantt charts and the other Mermaid types have no renderer here and stay code:
+
+```mermaid
+pie title Pets
+  "Dogs" : 386
+  "Cats" : 85
 ```
 
 Front matter and reference link definitions stay visible but muted.

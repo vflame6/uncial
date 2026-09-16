@@ -15,6 +15,10 @@ on a Markdown file in Finder shows the rendered document instead of raw text.
   and LaTeX math (`$…$`, `$$…$$`, ```` ```math ```` fences) rendered to MathML
   with KaTeX at render time, so no script runs in the page.
 - Automatic re-rendering when the file changes, including atomic saves from
+- Mermaid diagrams: flowcharts, sequence, state, class and ER diagrams and XY
+  charts in ```` ```mermaid ```` fences become inline SVG in the theme's colors
+  (beautiful-mermaid at render time, again without page scripts). Other Mermaid
+  types stay code blocks.
   editors such as VS Code, Vim, or TextEdit. Scroll position is kept.
 - Four editor modes per window: **Read Only**, **Live Preview** (Markdown
   rendered in place, the line with the cursor shows its source), **Split View**

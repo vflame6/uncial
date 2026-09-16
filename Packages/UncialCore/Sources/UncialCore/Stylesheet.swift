@@ -62,6 +62,8 @@ public enum Stylesheet {
     hr { height: .25em; padding: 0; margin: 24px 0; background: var(--border); border: 0; }
     math { font-family: "STIX Two Math", "Latin Modern Math", STIXGeneral, serif; }
     p.math { margin: 16px 0; }
+    figure.mermaid { margin: 16px 0; text-align: center; --diagram-bg: var(--bg); --diagram-fg: var(--fg); --diagram-accent: var(--accent); --diagram-muted: var(--muted); }
+    figure.mermaid svg { max-width: 100%; height: auto; }
     details summary { cursor: pointer; font-weight: 600; }
     mark { background: var(--mark); color: inherit; }
     kbd {

@@ -17,7 +17,10 @@ let package = Package(
                 .product(name: "cmark-gfm", package: "swift-cmark"),
                 .product(name: "cmark-gfm-extensions", package: "swift-cmark"),
             ],
-            resources: [.copy("Resources/katex.min.js"), .copy("Resources/KATEX-LICENSE")]
+            resources: [
+                .copy("Resources/katex.min.js"), .copy("Resources/KATEX-LICENSE"),
+                .copy("Resources/beautiful-mermaid.min.js"), .copy("Resources/BEAUTIFUL-MERMAID-LICENSE"),
+            ]
         ),
         .testTarget(
             name: "UncialCoreTests",

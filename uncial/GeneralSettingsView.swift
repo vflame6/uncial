@@ -43,7 +43,7 @@ struct GeneralSettingsView: View {
             } header: {
                 Text("Quick Look")
             } footer: {
-                Text("Uses the extension inside this copy of Uncial. Keep the app in /Applications.")
+                Text("Previews with Space and thumbnails in Finder, Open panels and Get Info, rendered by the extensions inside this copy of Uncial. Keep the app in /Applications.")
             }
 
             Section {
@@ -78,7 +78,7 @@ struct GeneralSettingsView: View {
 
     private var quickLookStatusText: String {
         switch quickLook.state {
-        case .enabled: "Enabled. Space in Finder renders Markdown."
+        case .enabled: "Enabled. Finder previews and thumbnails render Markdown."
         case .disabled: "Disabled"
         case .unregistered: "Not installed"
         case .unknown: "Status unknown"

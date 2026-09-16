@@ -13,9 +13,22 @@ enum GFMRenderer {
 
     /// - Parameter sourcePositions: adds `data-sourcepos` attributes to block elements.
     static func render(_ markdown: String, sourcePositions: Bool = false) -> String {
+        withDocument(markdown, sourcePositions: sourcePositions) { document, parser in
+            let options = sourcePositions ? self.options | CMARK_OPT_SOURCEPOS : self.options
+            guard let output = cmark_render_html(document, options, cmark_parser_get_syntax_extensions(parser)) else {
+                return ""
+            }
+            defer { free(output) }
+            return String(cString: output)
+        } ?? ""
+    }
+
+    /// Parses `markdown` with the GitHub extensions attached and hands the document tree (and the
+    /// parser, which the HTML renderer needs for the extensions) to `body`; both are freed afterwards.
+    static func withDocument<T>(_ markdown: String, sourcePositions: Bool = false, _ body: (UnsafeMutablePointer<cmark_node>, UnsafeMutablePointer<cmark_parser>) -> T) -> T? {
         _ = registerExtensions
         let options = sourcePositions ? self.options | CMARK_OPT_SOURCEPOS : self.options
-        guard let parser = cmark_parser_new(options) else { return "" }
+        guard let parser = cmark_parser_new(options) else { return nil }
         defer { cmark_parser_free(parser) }
 
         for name in extensionNames {
@@ -29,13 +42,8 @@ enum GFMRenderer {
             cmark_parser_feed(parser, buffer.baseAddress, buffer.count - 1)
         }
 
-        guard let document = cmark_parser_finish(parser) else { return "" }
+        guard let document = cmark_parser_finish(parser) else { return nil }
         defer { cmark_node_free(document) }
-
-        guard let output = cmark_render_html(document, options, cmark_parser_get_syntax_extensions(parser)) else {
-            return ""
-        }
-        defer { free(output) }
-        return String(cString: output)
+        return body(document, parser)
     }
 }

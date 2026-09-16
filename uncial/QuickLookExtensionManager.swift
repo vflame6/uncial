@@ -2,19 +2,23 @@ import Foundation
 import Observation
 import UncialCore
 
-/// Installs (registers + elects) or removes (elects to ignore) the bundled Quick Look extension.
+/// Installs (registers + elects) or removes (elects to ignore) the bundled Quick Look extensions:
+/// the preview (Space in Finder) and the thumbnail (Finder icons, Open panels). The state shown
+/// is the preview's; the thumbnail follows it.
 @Observable
 final class QuickLookExtensionManager {
     static let shared = QuickLookExtensionManager()
 
     static let extensionIdentifier = "com.maksimradaev.uncial.QuickLook"
+    static let thumbnailIdentifier = "com.maksimradaev.uncial.Thumbnail"
 
     private(set) var state: QuickLookExtensionState = .unknown
     private(set) var isBusy = false
     private(set) var errorMessage: String?
 
-    private var appexURL: URL? {
-        Bundle.main.builtInPlugInsURL?.appendingPathComponent("UncialQuickLook.appex")
+    private var appexURLs: [URL] {
+        guard let plugIns = Bundle.main.builtInPlugInsURL else { return [] }
+        return ["UncialQuickLook.appex", "UncialThumbnail.appex"].map { plugIns.appendingPathComponent($0) }
     }
 
     func refresh() async {
@@ -27,20 +31,24 @@ final class QuickLookExtensionManager {
         }
     }
 
-    /// Registers the appex inside this app bundle and elects it for use.
+    /// Registers the appexes inside this app bundle and elects them for use.
     func install() async {
         await perform {
-            if let appexURL = self.appexURL {
+            for appexURL in self.appexURLs where FileManager.default.fileExists(atPath: appexURL.path) {
                 _ = try await ShellCommand.run("/usr/bin/pluginkit", ["-a", appexURL.path])
             }
-            _ = try await ShellCommand.run("/usr/bin/pluginkit", ["-e", "use", "-i", Self.extensionIdentifier])
+            for identifier in [Self.extensionIdentifier, Self.thumbnailIdentifier] {
+                _ = try await ShellCommand.run("/usr/bin/pluginkit", ["-e", "use", "-i", identifier])
+            }
         }
     }
 
-    /// Same as switching the extension off in System Settings.
+    /// Same as switching the extensions off in System Settings.
     func remove() async {
         await perform {
-            _ = try await ShellCommand.run("/usr/bin/pluginkit", ["-e", "ignore", "-i", Self.extensionIdentifier])
+            for identifier in [Self.extensionIdentifier, Self.thumbnailIdentifier] {
+                _ = try await ShellCommand.run("/usr/bin/pluginkit", ["-e", "ignore", "-i", identifier])
+            }
         }
     }
 
@@ -52,6 +60,10 @@ final class QuickLookExtensionManager {
         do {
             try await work()
             _ = try? await ShellCommand.run("/usr/bin/qlmanage", ["-r"])
+            _ = try? await ShellCommand.run("/usr/bin/qlmanage", ["-r", "cache"])
+            // The thumbnail agent lists extensions once at launch and ignores SIGTERM; launchd
+            // brings it back on the next request, now seeing this copy's extension.
+            _ = try? await ShellCommand.run("/usr/bin/killall", ["-KILL", "com.apple.quicklook.ThumbnailsAgent"])
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -23,9 +23,10 @@ install: build
 	open -a /Applications/Uncial.app --background
 	qlmanage -r
 	qlmanage -r cache
+	-killall -KILL com.apple.quicklook.ThumbnailsAgent 2>/dev/null
 	@echo "Installed /Applications/Uncial.app."
-	@echo "If Space in Finder still shows plain text, enable 'Uncial Quick Look' under"
-	@echo "System Settings > General > Login Items & Extensions > Quick Look."
+	@echo "If Space in Finder still shows plain text, enable 'Uncial Quick Look' and"
+	@echo "'Uncial Thumbnails' under System Settings > General > Login Items & Extensions > Quick Look."
 
 uninstall:
 	rm -rf /Applications/Uncial.app

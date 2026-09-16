@@ -13,7 +13,7 @@ struct AboutView: View {
                 .font(.title.weight(.semibold))
             Text("Version \(info.version)")
                 .foregroundStyle(.secondary)
-            Text("A native Markdown reader and editor for macOS, with a Quick Look extension.")
+            Text("A native Markdown reader and editor for macOS, with Quick Look preview and thumbnail extensions.")
                 .multilineTextAlignment(.center)
                 .padding(.top, 6)
             Text("GitHub-flavored Markdown by cmark-gfm, math by KaTeX, diagrams by beautiful-mermaid.")

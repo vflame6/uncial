@@ -12,6 +12,7 @@ final class LineNumberRulerView: NSRulerView {
         clientView = textView
         reservedThicknessForMarkers = 0
         reservedThicknessForAccessoryView = 0
+        clipsToBounds = true
         textView.postsFrameChangedNotifications = true
         let redraw: (Notification) -> Void = { [weak self] _ in
             MainActor.assumeIsolated { self?.needsDisplay = true }
@@ -50,11 +51,14 @@ final class LineNumberRulerView: NSRulerView {
         needsDisplay = true
     }
 
+    /// The scroll view hands a ruler a dirty rect as wide as itself, and since macOS 14 views do not
+    /// clip to their bounds, so painting the whole rect would cover the document.
     override func draw(_ dirtyRect: NSRect) {
         guard let textView else { return }
+        let area = dirtyRect.intersection(bounds)
         textView.style.background.setFill()
-        dirtyRect.fill()
-        drawHashMarksAndLabels(in: dirtyRect)
+        area.fill()
+        drawHashMarksAndLabels(in: area)
     }
 
     override func drawHashMarksAndLabels(in rect: NSRect) {

@@ -1,15 +1,10 @@
 # Uncial
 
-Uncial is a small native macOS Markdown reader and editor. Open a `.md` file and
-it renders GitHub-flavored Markdown right away, follows the system light or dark
-appearance, and re-renders whenever the file changes on disk. Switch to Live
-Preview to edit with the Markdown rendered in place, or to Split View to edit
-the source next to the rendered page; save with ⌘S, or let Uncial write changes
-as you type. It ships with Quick Look extensions, so pressing Space on a Markdown
-file in Finder shows the rendered document instead of raw text, and Finder icons,
-Open panels and Get Info show a thumbnail of the rendered page.
+Uncial is a small native macOS Markdown reader and editor. 
 
 Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
+
+![uncial](static/uncial_demo.png)
 
 ## Features
 
@@ -107,7 +102,7 @@ have Uncial write the file half a second after you stop typing instead, without
 asking. If another program changes the file while you have no unsaved edits, the
 window picks up the new contents.
 
-Live Preview renders Markdown where it stands, the way Obsidian does: headings,
+Live Preview renders Markdown where it stands: headings,
 emphasis, code, links, lists, task boxes, quotes, tables, images, diagrams and
 math, with the markers of the line under the cursor revealed. In Split View the
 source and the rendered page scroll together. Settings ▸ Editor holds the
@@ -122,7 +117,6 @@ search the source, or the rendered page in Read Only.
 make core-test   # unit tests for the renderer and watcher (swift test)
 make test        # core tests + app unit tests via xcodebuild
 make build       # Release build into ./build
-make icon        # regenerate the app icon set from static/icon.png
 make clean
 ```
 
@@ -141,24 +135,8 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 | `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model keeps the editor's text, writes it to the file on ⌘S (or as you type, when automatic saving is on) and reconciles changes that arrive from other programs. A hidden web view runs mermaid.js for the diagram types beautiful-mermaid lacks and draws every diagram to a bitmap for Live Preview. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
 | `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme, and the diagrams mermaid.js drew in the app, from the App Group container the app writes to (WebKit cannot run inside the extension). |
 | `UncialThumbnail` | Quick Look Thumbnail Extension. Draws the document's outline (headings, text, lists, quotes, code, rules, tables) as a small page with AppKit for Finder icons, Open panels and Get Info, in the theme's light colors. |
-| `Casks/uncial.rb` | The Homebrew cask. The repository doubles as the tap, so `brew tap vflame6/uncial <repository URL>` finds it; `make release` keeps its version and checksum current. |
 
-### Releasing
+## Contributing
 
-```sh
-make bump VERSION=1.1.0   # sets the project version; commit it
-make release              # Release build, zip in build/dist, cask updated
-make publish              # commits the cask, tags v1.1.0, pushes, creates the GitHub release
-```
+Feel free to open an issue if something does not work, or if you have any ideas to improve the tool.
 
-`make release` uses the project's automatic signing unless `SIGN_IDENTITY` names
-a *Developer ID Application* certificate, and notarizes the app when
-`NOTARY_PROFILE` names a `notarytool store-credentials` profile:
-
-```sh
-make release SIGN_IDENTITY="Developer ID Application: Your Name (TEAMID)" NOTARY_PROFILE=notary
-```
-
-Without Developer ID signing and notarization, macOS refuses to open the
-downloaded app until it is allowed under System Settings ▸ Privacy & Security
-(or installed with `brew install --cask --no-quarantine uncial`).

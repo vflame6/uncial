@@ -21,13 +21,13 @@ extension Stylesheet {
       --font-size: 15px; --line-height: 1.5; --content-width: 760px; --radius: 6px;
       --heading-weight: 600;
       --h1-size: 26px; --h2-size: 22px; --h3-size: 17px; --h4-size: 15px; --h5-size: 13px; --h6-size: 13px;
-      --h1-border: none; --h2-border: none;
+      --h1-border: 1px solid var(--border-muted); --h2-border: 1px solid var(--border-muted);
     }
     @media (prefers-color-scheme: dark) {
       :root { --code-bg: color-mix(in srgb, -apple-system-label 10%, transparent); }
     }
     body { -webkit-font-smoothing: antialiased; }
-    h1, h2 { padding-bottom: 0; font-weight: 700; }
+    h1, h2 { font-weight: 700; }
     h1 { letter-spacing: -0.02em; }
     h2 { letter-spacing: -0.015em; margin-top: 32px; }
     h3 { letter-spacing: -0.01em; }

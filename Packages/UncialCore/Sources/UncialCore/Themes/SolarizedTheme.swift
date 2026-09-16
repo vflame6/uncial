@@ -12,7 +12,7 @@ extension Stylesheet {
       --font-size: 16px; --line-height: 1.6; --content-width: 820px; --radius: 4px;
       --heading-weight: 600;
       --h1-size: 2em; --h2-size: 1.5em; --h3-size: 1.25em; --h4-size: 1em; --h5-size: .875em; --h6-size: .85em;
-      --h1-border: 1px solid var(--border); --h2-border: none;
+      --h1-border: 1px solid var(--border); --h2-border: 1px solid var(--border);
     }
     @media (prefers-color-scheme: dark) {
       :root {

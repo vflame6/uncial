@@ -31,6 +31,14 @@ import Testing
         #expect(Stylesheet.css(for: .solarized).contains("#002b36"))
     }
 
+    @Test func headingsGetDividersInEveryTheme() {
+        for theme in Theme.allCases {
+            let css = Stylesheet.css(for: theme)
+            #expect(css.contains("--h1-border: 1px solid"), "\(theme) h1 has no divider")
+            #expect(css.contains("--h2-border: 1px solid"), "\(theme) h2 has no divider")
+        }
+    }
+
     @Test func editorPalettes() {
         #expect(Theme.macOS.editorPalette == nil)
         #expect(Theme.github.editorPalette?.light.background == 0xFFFFFF)

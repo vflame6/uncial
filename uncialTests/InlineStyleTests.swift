@@ -130,6 +130,20 @@ import UncialCore
         #expect(color(text, 17) == style.muted && color(text, 23) == style.foreground)
     }
 
+    @Test func htmlElementsAreStyledAndAligned() {
+        let text = storage("<b>x</b> <i>y</i> <a href=\"u\">z</a> <!-- c --> \\*e\n<div align=\"center\">w</div>\n<kbd>K1</kbd> <mark>M1</mark> <sup>S1</sup> <h2>T1</h2>")
+        func at(_ needle: String) -> Int { (text.string as NSString).range(of: needle).location }
+        #expect(font(text, at("x")).fontDescriptor.symbolicTraits.contains(.bold))
+        #expect(font(text, at("y")).fontDescriptor.symbolicTraits.contains(.italic))
+        #expect(color(text, at("z")) == style.accent && text.attribute(.link, at: at("z"), effectiveRange: nil) as? String == "u")
+        #expect(color(text, at("<b>")) == style.muted && color(text, at("<!--")) == style.muted && color(text, at("\\*")) == style.muted)
+        #expect(paragraph(text, at("w"))?.alignment == .center && paragraph(text, at("x"))?.alignment != .center)
+        #expect(color(text, at("K1")) == style.code && text.attribute(.backgroundColor, at: at("K1"), effectiveRange: nil) != nil)
+        #expect(text.attribute(.backgroundColor, at: at("M1"), effectiveRange: nil) != nil && text.attribute(.backgroundColor, at: at("<mark>"), effectiveRange: nil) == nil)
+        #expect(font(text, at("S1")).pointSize == 10 && text.attribute(.baselineOffset, at: at("S1"), effectiveRange: nil) as? CGFloat == 4)
+        #expect(font(text, at("T1")).pointSize == InlineStyle.headingSizes[1])
+    }
+
     @Test func layoutManagerDrawsTaskBoxesOnlyWhileHidden() {
         let view = ThemedTextView.standalone()
         view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)

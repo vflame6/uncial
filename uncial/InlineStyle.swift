@@ -104,8 +104,12 @@ struct InlineStyle {
             case .footnoteReference:
                 let label = NSRange(location: token.range.location + 2, length: token.range.length - 3)
                 storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(4), .foregroundColor: style.accent], range: label)
-            case .footnoteDefinition, .html:
+            case .footnoteDefinition, .linkDefinition:
                 storage.addAttribute(.foregroundColor, value: style.muted, range: token.range)
+            case .html(let element, let attributes):
+                apply(html: element, attributes: attributes, token: token, paragraph: paragraph, to: storage)
+            case .escape:
+                break
             case .tableRow(_, let isHeader, let pipes):
                 for pipe in pipes {
                     storage.addAttribute(.foregroundColor, value: style.muted, range: NSRange(location: pipe, length: 1))
@@ -131,6 +135,61 @@ struct InlineStyle {
     }
 
     static let superscriptFont = NSFont.monospacedSystemFont(ofSize: 10, weight: .bold)
+
+    /// What HTML can look like in a text view: the common inline tags map to font traits, colors
+    /// and offsets on the element's content, `align` and `<center>` set the paragraph's alignment,
+    /// a lone `<hr>` becomes a rule. The tags themselves are markers.
+    private func apply(html element: String?, attributes: [String: String], token: MarkdownHighlighter.Token, paragraph: NSRange, to storage: NSTextStorage) {
+        guard let element else { return }
+        let text = storage.string as NSString
+        let alignments: [String: NSTextAlignment] = ["left": .left, "center": .center, "right": .right]
+        if let alignment = attributes["align"].flatMap({ alignments[$0.lowercased()] }) {
+            setAlignment(alignment, of: paragraph, in: storage)
+        } else if element == "center" {
+            setAlignment(.center, of: paragraph, in: storage)
+        }
+        if element == "hr", text.substring(with: paragraph).trimmingCharacters(in: .whitespacesAndNewlines) == text.substring(with: token.range) {
+            storage.addAttributes([.blockDecoration: "rule"], range: paragraph)
+        }
+        guard token.markers.count == 2 else { return }
+        let content = NSRange(location: NSMaxRange(token.markers[0]), length: token.markers[1].location - NSMaxRange(token.markers[0]))
+        guard content.length > 0 else { return }
+        switch element {
+        case "b", "strong":
+            addTrait(.boldFontMask, to: storage, in: content)
+        case "i", "em", "cite", "dfn", "var":
+            addTrait(.italicFontMask, to: storage, in: content)
+        case "u", "ins":
+            storage.addAttribute(.underlineStyle, value: NSUnderlineStyle.single.rawValue, range: content)
+        case "s", "del", "strike":
+            storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: content)
+        case "code", "kbd", "samp", "tt":
+            storage.addAttributes([.foregroundColor: style.code, .backgroundColor: codeBackground], range: content)
+        case "mark":
+            storage.addAttribute(.backgroundColor, value: style.accent.withAlphaComponent(0.25), range: content)
+        case "sup":
+            storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(4)], range: content)
+        case "sub":
+            storage.addAttributes([.font: Self.superscriptFont, .baselineOffset: CGFloat(-3)], range: content)
+        case "a":
+            storage.addAttribute(.foregroundColor, value: style.accent, range: content)
+            if let destination = attributes["href"], !destination.isEmpty {
+                storage.addAttribute(.link, value: destination, range: content)
+            }
+        case "h1", "h2", "h3", "h4", "h5", "h6":
+            let level = Int(element.dropFirst()) ?? 6
+            storage.addAttributes([.font: headingFont(level: level), .foregroundColor: level == 6 ? style.muted : style.foreground], range: content)
+        default:
+            break
+        }
+    }
+
+    private func setAlignment(_ alignment: NSTextAlignment, of paragraph: NSRange, in storage: NSTextStorage) {
+        let existing = storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle
+        let aligned = (existing?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        aligned.alignment = alignment
+        storage.addAttribute(.paragraphStyle, value: aligned, range: paragraph)
+    }
 
     /// Pads every cell to its column's width with kerning: after the cell's last visible character
     /// for left alignment, after its leading space for right, split for center. SF Mono makes the

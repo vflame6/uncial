@@ -121,10 +121,50 @@ import Testing
     @Test func footnotesAndHtml() {
         let text = "see[^1] and <b>x</b> <!-- c -->\n[^1]: note **b**"
         let tokens = MarkdownHighlighter.tokens(in: text)
-        #expect(tokens.map(\.kind) == [.footnoteReference, .html, .html, .html, .footnoteDefinition, .strong])
+        #expect(tokens.map(\.kind) == [.footnoteReference, .html(element: "b", attributes: [:]), .html(element: nil, attributes: [:]), .footnoteDefinition, .strong])
+        #expect(markers(tokens[1], in: text) == ["<b>", "</b>"] && markers(tokens[2], in: text) == ["<!-- c -->"])
         #expect(markers(tokens[0], in: text) == ["[^", "]"])
-        #expect((text as NSString).substring(with: tokens[4].range) == "[^1]:")
+        #expect((text as NSString).substring(with: tokens[3].range) == "[^1]:")
         #expect(has(text, .link, "[^1]") && has(text, .html, "<b>") && has(text, .link, "[^1]:"))
+    }
+
+    @Test func htmlTagsBecomeMarkersAndImages() {
+        let text = "a <br> <img src=\"i.png\" alt=\"i\"> <div align=\"center\">x</div> <a href='u'>t</a> <i><b>n</b></i> </p>"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [
+            .html(element: "br", attributes: [:]), .image(destination: "i.png"),
+            .html(element: "div", attributes: ["align": "center"]), .html(element: "a", attributes: ["href": "u"]),
+            .html(element: "i", attributes: [:]), .html(element: "b", attributes: [:]), .html(element: "p", attributes: [:]),
+        ])
+        #expect(markers(tokens[0], in: text) == ["<br>"])
+        #expect(markers(tokens[1], in: text) == ["<img src=\"i.png\" alt=\"i\">"])
+        #expect(markers(tokens[2], in: text) == ["<div align=\"center\">", "</div>"])
+        #expect(markers(tokens[4], in: text) == ["<i>", "</i>"] && markers(tokens[5], in: text) == ["<b>", "</b>"])
+        #expect(markers(tokens[6], in: text) == ["</p>"])
+        #expect(has(text, .html, "<div align=\"center\">") && has(text, .html, "</div>") && !has(text, .html, "x"))
+    }
+
+    @Test func referenceLinksResolveAgainstDefinitions() {
+        let text = "[one][Ref] and [two][] and [Three] but [none][x] and ![pic][img]\n\n[ref]: https://a.example\n[two]: /b\n[three]: <c d> 'T'\n[img]: i.png"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [
+            .link(destination: "https://a.example"), .link(destination: "/b"), .link(destination: "c d"), .image(destination: "i.png"),
+            .linkDefinition, .linkDefinition, .linkDefinition, .linkDefinition,
+        ])
+        #expect(markers(tokens[0], in: text) == ["[", "][Ref]"])
+        #expect(markers(tokens[1], in: text) == ["[", "][]"])
+        #expect(markers(tokens[2], in: text) == ["[", "]"])
+        #expect(markers(tokens[3], in: text) == ["![", "][img]"])
+        #expect((text as NSString).substring(with: tokens[4].range) == "[ref]: https://a.example")
+        #expect(has(text, .link, "[one]") && has(text, .url, "[Ref]") && has(text, .link, "[img]: i.png"))
+    }
+
+    @Test func escapesHideTheBackslash() {
+        let text = "3 \\* 4 and \\[x] and \\\\ but a\\b"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.escape, .escape, .escape])
+        #expect(tokens.map { markers($0, in: text) } == [["\\"], ["\\"], ["\\"]])
+        #expect((text as NSString).substring(with: tokens[1].range) == "\\[")
     }
 
     @Test func frontMatterIsNotARule() {

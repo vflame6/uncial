@@ -40,7 +40,13 @@ nonisolated enum MarkdownHighlighter {
             case footnoteReference
             /// The `[^id]:` prefix of a footnote line.
             case footnoteDefinition
-            case html
+            /// An HTML element on one line with both tags as markers, a lone tag (`<br>`, an unmatched
+            /// `<div …>` or `</div>`) or, with `element` nil, a comment. Attribute names are lowercase.
+            case html(element: String?, attributes: [String: String])
+            /// A `[label]: destination` line.
+            case linkDefinition
+            /// A backslash before ASCII punctuation; the backslash is the marker.
+            case escape
             /// `bullet` is the character index of a `-`, `*` or `+` marker (nil for numbered items);
             /// `box` the three characters of a task box `[ ]`/`[x]`, whose brackets are markers.
             case listItem(bullet: Int?, box: NSRange?)
@@ -86,7 +92,13 @@ nonisolated enum MarkdownHighlighter {
     private static let link = regex(#"(!?\[[^\]\n]*\])(\([^)\n]*\))"#)
     private static let autolink = regex(#"<(?:https?|mailto):[^>\s]+>"#)
     private static let footnoteReference = regex(#"\[\^[^\]\s]+\](?!:)"#)
-    private static let html = regex(#"<!--.*?-->|</?[A-Za-z][A-Za-z0-9-]*(?:\s[^<>\n]*)?/?>"#)
+    private static let html = regex(#"<!--.*?-->|<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s[^<>\n]*)?)(/?)>"#)
+    private static let attribute = regex(#"([A-Za-z_:][-A-Za-z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#)
+    /// Tags that never have content: a lone `<br>` needs no `</br>`.
+    private static let voidElements: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
+    private static let linkDefinition = regex(#"^\s{0,3}\[([^\]\n]+)\]:\s*(?:<([^>\n]*)>|(\S+))"#)
+    private static let referenceLink = regex(#"(!?)\[([^\[\]\n]+)\](?:\[([^\[\]\n]*)\])?"#)
+    private static let escape = regex(#"\\[!-/:-@\[-`{-~]"#)
 
     static func spans(in text: String) -> [Span] {
         spans(from: tokens(in: text))
@@ -99,6 +111,7 @@ nonisolated enum MarkdownHighlighter {
         var fenceMarker: String?
         var inFrontMatter = false
         var index = 0
+        let definitions = linkDefinitions(in: lines, source: source)
 
         while index < lines.count {
             let current = index
@@ -145,7 +158,7 @@ nonisolated enum MarkdownHighlighter {
             }
             if let match = heading.firstMatch(in: line, range: whole) {
                 tokens.append(Token(range: contentRange, kind: .heading(level: match.range(at: 1).length), markers: [shifted(match.range)]))
-                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length)
+                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
                 continue
             }
             if let match = quote.firstMatch(in: line, range: whole) {
@@ -162,7 +175,7 @@ nonisolated enum MarkdownHighlighter {
                     position += spaced ? 2 : 1
                 }
                 tokens.append(Token(range: contentRange, kind: .quote(depth: markers.count), markers: markers))
-                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length)
+                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
                 continue
             }
             if let match = listMarker.firstMatch(in: line, range: whole) {
@@ -171,17 +184,21 @@ nonisolated enum MarkdownHighlighter {
                 let box = match.range(at: 2).location == NSNotFound ? nil : shifted(match.range(at: 2))
                 let markers = box.map { [NSRange(location: $0.location, length: 1), NSRange(location: $0.location + 2, length: 1)] } ?? []
                 tokens.append(Token(range: shifted(match.range), kind: .listItem(bullet: isBullet ? lineStart + marker.location : nil, box: box), markers: markers))
-                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length)
+                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
                 continue
             }
-            if line.contains("|"), let table = tableTokens(startingAt: current, lines: lines, source: source) {
+            if line.contains("|"), let table = tableTokens(startingAt: current, lines: lines, source: source, definitions: definitions) {
                 tokens += table.tokens
                 index = table.nextLine
                 continue
             }
             if let match = footnoteDefinition.firstMatch(in: line, range: whole) {
                 tokens.append(Token(range: shifted(match.range), kind: .footnoteDefinition, markers: []))
-                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length)
+                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
+                continue
+            }
+            if linkDefinition.firstMatch(in: line, range: whole) != nil {
+                tokens.append(Token(range: contentRange, kind: .linkDefinition, markers: []))
                 continue
             }
             // Setext heading: a plain, non-empty line whose next line is `===` or `---`.
@@ -189,15 +206,36 @@ nonisolated enum MarkdownHighlighter {
                 let underline = source.substring(with: lines[index])
                 if setextUnderline.firstMatch(in: underline, range: NSRange(location: 0, length: (underline as NSString).length)) != nil {
                     tokens.append(Token(range: contentRange, kind: .heading(level: underline.contains("=") ? 1 : 2), markers: []))
-                    tokens += inlineTokens(in: line, offset: lineStart, from: 0)
+                    tokens += inlineTokens(in: line, offset: lineStart, from: 0, definitions: definitions)
                     tokens.append(Token(range: lines[index], kind: .headingUnderline, markers: [lines[index]]))
                     index += 1
                     continue
                 }
             }
-            tokens += inlineTokens(in: line, offset: lineStart, from: 0)
+            tokens += inlineTokens(in: line, offset: lineStart, from: 0, definitions: definitions)
         }
         return tokens
+    }
+
+    /// Reference link definitions anywhere in the document, keyed by their normalized label
+    /// (case-folded, inner whitespace collapsed), which is how `[text][label]` finds its destination.
+    private static func linkDefinitions(in lines: [NSRange], source: NSString) -> [String: String] {
+        var definitions: [String: String] = [:]
+        for range in lines {
+            let line = source.substring(with: range)
+            guard let match = linkDefinition.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) else { continue }
+            let text = line as NSString
+            let destination = match.range(at: 2).location != NSNotFound ? match.range(at: 2) : match.range(at: 3)
+            let label = normalized(label: text.substring(with: match.range(at: 1)))
+            if definitions[label] == nil {
+                definitions[label] = text.substring(with: destination)
+            }
+        }
+        return definitions
+    }
+
+    private static func normalized(label: String) -> String {
+        label.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     /// Content ranges of every line (without line breaks), in order.
@@ -222,7 +260,7 @@ nonisolated enum MarkdownHighlighter {
 
     /// A header row followed by a delimiter row with the same number of cells, then rows until a
     /// blank line or a line without a pipe. Column widths are the widest visible cell per column.
-    private static func tableTokens(startingAt headerIndex: Int, lines: [NSRange], source: NSString) -> TableParse? {
+    private static func tableTokens(startingAt headerIndex: Int, lines: [NSRange], source: NSString, definitions: [String: String]) -> TableParse? {
         guard headerIndex + 1 < lines.count else { return nil }
         let delimiterRange = lines[headerIndex + 1]
         let delimiter = source.substring(with: delimiterRange)
@@ -265,7 +303,7 @@ nonisolated enum MarkdownHighlighter {
             let local = NSRange(location: 0, length: (line as NSString).length)
             let cells = cellRanges(in: line).map { NSRange(location: range.location + $0.location, length: $0.length) }
             let pipes = pipe.matches(in: line, range: local).map { range.location + $0.range.location }
-            let inline = inlineTokens(in: line, offset: range.location, from: 0)
+            let inline = inlineTokens(in: line, offset: range.location, from: 0, definitions: definitions)
             let hiddenRanges = inline.flatMap(\.markers)
             let visible = cells.map { cell in cell.length - hiddenRanges.reduce(0) { $0 + NSIntersectionRange($1, cell).length } }
             var markers: [NSRange] = []
@@ -324,7 +362,7 @@ nonisolated enum MarkdownHighlighter {
     // MARK: - Inline
 
     /// Inline constructs of `line` from `start` on, in document order, ranges shifted by `offset`.
-    private static func inlineTokens(in line: String, offset: Int, from start: Int) -> [Token] {
+    private static func inlineTokens(in line: String, offset: Int, from start: Int, definitions: [String: String]) -> [Token] {
         let scratch = NSMutableString(string: line)
         let region = NSRange(location: start, length: scratch.length - start)
         var tokens: [Token] = []
@@ -344,15 +382,16 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: .inlineCode, markers: edges(match.range, open: match.range(at: 1).length, close: match.range(at: 2).length)))
             mask(match.range)
         }
+        for match in escape.matches(in: scratch as String, range: region) {
+            tokens.append(Token(range: shifted(match.range), kind: .escape, markers: [NSRange(location: offset + match.range.location, length: 1)]))
+            mask(match.range)
+        }
         for match in autolink.matches(in: scratch as String, range: region) {
             let inner = NSRange(location: match.range.location + 1, length: match.range.length - 2)
             tokens.append(Token(range: shifted(match.range), kind: .autolink(destination: scratch.substring(with: inner)), markers: edges(match.range, open: 1, close: 1)))
             mask(match.range)
         }
-        for match in html.matches(in: scratch as String, range: region) {
-            tokens.append(Token(range: shifted(match.range), kind: .html, markers: []))
-            mask(match.range)
-        }
+        tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask)
         for match in link.matches(in: scratch as String, range: region) {
             let isImage = scratch.character(at: match.range.location) == 0x21 // "!"
             let close = match.range(at: 2)
@@ -367,6 +406,17 @@ nonisolated enum MarkdownHighlighter {
         }
         for match in footnoteReference.matches(in: scratch as String, range: region) {
             tokens.append(Token(range: shifted(match.range), kind: .footnoteReference, markers: edges(match.range, open: 2, close: 1)))
+            mask(match.range)
+        }
+        for match in referenceLink.matches(in: scratch as String, range: region) {
+            let text = match.range(at: 2)
+            let explicit = match.range(at: 3)
+            let label = explicit.location != NSNotFound && explicit.length > 0 ? explicit : text
+            guard let destination = definitions[normalized(label: scratch.substring(with: label))] else { continue }
+            let isImage = match.range(at: 1).length == 1
+            let open = NSRange(location: offset + match.range.location, length: isImage ? 2 : 1)
+            let close = NSRange(location: offset + NSMaxRange(text), length: NSMaxRange(match.range) - NSMaxRange(text))
+            tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination), markers: [open, close]))
             mask(match.range)
         }
         for match in boldItalic.matches(in: scratch as String, range: region) {
@@ -388,6 +438,57 @@ nonisolated enum MarkdownHighlighter {
         return tokens.sorted { $0.range.location < $1.range.location }
     }
 
+    /// Tags of `scratch` within `region`: comments, `<img>` as images, elements whose closing tag is
+    /// on the same line, and every other tag on its own. Each tag is masked; content is not, so the
+    /// Markdown inside an element still parses.
+    private static func htmlTokens(in scratch: NSMutableString, region: NSRange, offset: Int, mask: (NSRange) -> Void) -> [Token] {
+        var tokens: [Token] = []
+        var open: [(name: String, range: NSRange, attributes: [String: String])] = []
+        func lone(_ name: String?, _ attributes: [String: String], _ range: NSRange) -> Token {
+            Token(range: NSRange(location: offset + range.location, length: range.length), kind: .html(element: name, attributes: attributes), markers: [NSRange(location: offset + range.location, length: range.length)])
+        }
+        for match in html.matches(in: scratch as String, range: region) {
+            let range = match.range
+            defer { mask(range) }
+            guard match.range(at: 2).location != NSNotFound else {
+                tokens.append(lone(nil, [:], range))
+                continue
+            }
+            let name = scratch.substring(with: match.range(at: 2)).lowercased()
+            let attributes = self.attributes(in: scratch.substring(with: match.range(at: 3)))
+            let isClosing = match.range(at: 1).length == 1
+            if isClosing {
+                if let index = open.lastIndex(where: { $0.name == name }) {
+                    let opener = open.remove(at: index)
+                    let element = NSRange(location: offset + opener.range.location, length: NSMaxRange(range) - opener.range.location)
+                    let markers = [NSRange(location: offset + opener.range.location, length: opener.range.length), NSRange(location: offset + range.location, length: range.length)]
+                    tokens.append(Token(range: element, kind: .html(element: name, attributes: opener.attributes), markers: markers))
+                } else {
+                    tokens.append(lone(name, [:], range))
+                }
+            } else if name == "img", let source = attributes["src"], !source.isEmpty {
+                tokens.append(Token(range: NSRange(location: offset + range.location, length: range.length), kind: .image(destination: source), markers: [NSRange(location: offset + range.location, length: range.length)]))
+            } else if match.range(at: 4).length == 1 || voidElements.contains(name) {
+                tokens.append(lone(name, attributes, range))
+            } else {
+                open.append((name, range, attributes))
+            }
+        }
+        tokens += open.map { lone($0.name, $0.attributes, $0.range) }
+        return tokens
+    }
+
+    private static func attributes(in text: String) -> [String: String] {
+        var attributes: [String: String] = [:]
+        let source = text as NSString
+        for match in attribute.matches(in: text, range: NSRange(location: 0, length: source.length)) {
+            let name = source.substring(with: match.range(at: 1)).lowercased()
+            let value = (2...4).map { match.range(at: $0) }.first { $0.location != NSNotFound }
+            attributes[name] = value.map { source.substring(with: $0) } ?? ""
+        }
+        return attributes
+    }
+
     static func spans(from tokens: [Token]) -> [Span] {
         var spans: [Span] = []
         for token in tokens {
@@ -399,12 +500,20 @@ nonisolated enum MarkdownHighlighter {
             case .strikethrough: spans.append(Span(range: token.range, kind: .strikethrough))
             case .inlineCode: spans.append(Span(range: token.range, kind: .inlineCode))
             case .link, .image:
+                // An `<img>` tag is one marker and colors like other tags.
+                guard token.markers.count == 2 else {
+                    spans += token.markers.map { Span(range: $0, kind: .html) }
+                    continue
+                }
                 let close = token.markers[1]
                 spans.append(Span(range: NSRange(location: token.range.location, length: close.location + 1 - token.range.location), kind: .link))
                 spans.append(Span(range: NSRange(location: close.location + 1, length: close.length - 1), kind: .url))
             case .autolink: spans.append(Span(range: token.range, kind: .url))
             case .footnoteReference, .footnoteDefinition: spans.append(Span(range: token.range, kind: .link))
-            case .html: spans.append(Span(range: token.range, kind: .html))
+            case .html:
+                for marker in token.markers { spans.append(Span(range: marker, kind: .html)) }
+            case .linkDefinition: spans.append(Span(range: token.range, kind: .link))
+            case .escape: break
             case .listItem: spans.append(Span(range: token.range, kind: .listMarker))
             case .quote: spans.append(Span(range: token.range, kind: .quote))
             case .rule: spans.append(Span(range: token.range, kind: .rule))

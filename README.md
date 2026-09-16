@@ -137,8 +137,12 @@ padded to its widest cell (right- and center-aligned columns follow the
 delimiter row), the header row is bold, the outer pipes hide and the delimiter
 row draws as a rule. Setext headings (`Title` over `===` or `---`) render like
 `#` headings with the underline drawn as a rule, footnote references show as
-small raised labels, and HTML tags are muted. HTML blocks, reference-style
-links and remote images stay as source.
+small raised labels, reference-style links resolve through their definitions,
+escape backslashes hide, and HTML renders as far as a text view can: tags hide,
+`<b>`, `<i>`, `<u>`, `<s>`, `<code>`, `<kbd>`, `<mark>`, `<sup>`, `<sub>`, `<a>`
+and `<h1>`–`<h6>` style their text, an `align` attribute or `<center>` aligns
+the paragraph, `<img>` draws like a Markdown image and comments vanish. Remote
+images, front matter and link definitions stay as source.
 
 In Split View the panes follow each other: scroll the source and the
 rendered page moves to the same block, scroll the page and the source follows.
@@ -260,9 +264,10 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 - No syntax highlighting inside code blocks (the editor colors the Markdown
   itself, not the languages inside fences).
 - Live Preview renders inline Markdown, task boxes, local images, lists,
-  quotes, rules, fenced code, tables (as aligned text), setext headings and
-  footnote marks; HTML blocks, reference-style links and remote images stay as
-  source.
+  quotes, rules, fenced code, tables (as aligned text), setext headings,
+  footnote marks, reference-style links and common HTML (tags hidden, inline
+  tags styled, `align` honored on the tag's own line); HTML tables and lists,
+  remote images, front matter and link definitions stay as source.
 - No Mermaid diagrams or math.
 - The app itself is not sandboxed. That is what lets it read images next to any
   document you open. The Quick Look extension is sandboxed, as macOS requires,

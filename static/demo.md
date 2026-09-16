@@ -41,7 +41,8 @@ A footnote reference[^note] and inline <b>HTML</b> tags <!-- with a comment -->.
 
 *Expect:* markers hidden off the cursor line and shown muted on it; the code
 sits on a tint; the link is in the accent color and ⌘-click opens it; the
-footnote mark is a small raised "note"; HTML tags are muted and never hidden.
+footnote mark is a small raised "note"; escape backslashes and HTML tags hide
+with the other markers, so the comment vanishes and HTML reads bold.
 
 ## Lists
 
@@ -127,11 +128,24 @@ the remote one only when the network allows.
 ## Links and anchors
 
 Jump to [Headings](#headings) or [Table](#table). A reference-style link
-[stays as source][ref] in Live Preview but works in the rendered page.
+[renders like an inline one][ref]; its definition line below stays muted.
 
 [ref]: https://example.com
 
 A link to a local Markdown file opens a new Uncial window: [this file](demo.md).
+
+## HTML
+
+<div align="center">This div is centered in Live Preview and in the rendered page.</div>
+
+Inline tags: <b>bold</b>, <i>italic</i>, <u>underlined</u>, <kbd>⌘</kbd>, H<sub>2</sub>O,
+x<sup>2</sup>, <mark>marked</mark>, <a href="https://example.com">a link</a>, and an image tag:
+
+<img src="icon.png" alt="icon">
+
+*Expect:* tags hidden off the cursor line, the div text centered, the inline tags styled like
+their Markdown equivalents, the image drawn under its line at 128 pt. A multi-line block only
+hides its tag lines; comments and `<br>` leave nothing behind.
 
 ## Not rendered on purpose
 
@@ -141,7 +155,7 @@ Math like $x^2$ and Mermaid fences are not supported:
 graph TD; A-->B;
 ```
 
-<div align="center">An HTML block stays as source in Live Preview.</div>
+Front matter and reference link definitions stay visible but muted.
 
 ## Find and status bar
 

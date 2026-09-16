@@ -179,19 +179,36 @@ sequenceDiagram
   Uncial-->>Finder: rendered preview
 ```
 
-*Expect:* the rendered page and Quick Look draw the flowchart and the sequence diagram as
-vector graphics in the theme's colors (beautiful-mermaid at render time, no script); Live
-Preview keeps the fences as code. State, class and ER diagrams and XY charts render too.
-
-## Not rendered on purpose
-
-Pie charts, Gantt charts and the other Mermaid types have no renderer here and stay code:
-
 ```mermaid
 pie title Pets
   "Dogs" : 386
   "Cats" : 85
 ```
+
+```mermaid
+gantt
+  title Release
+  dateFormat YYYY-MM-DD
+  section Build
+  Tests :a1, 2026-09-01, 5d
+  Ship  :after a1, 2d
+```
+
+```mermaid
+mindmap
+  root((Uncial))
+    Reader
+    Editor
+      Live Preview
+```
+
+*Expect:* every diagram is a vector drawing in the theme's colors: in the rendered page, in Quick
+Look, and in Live Preview, where a fence shows its source only while the caret is inside it.
+Flowcharts, sequence, state, class and ER diagrams and XY charts come from beautiful-mermaid and
+follow the theme live; everything else comes from mermaid.js in a hidden web view, drawn once
+per appearance. No script runs in the page.
+
+## Not rendered on purpose
 
 Front matter and reference link definitions stay visible but muted.
 

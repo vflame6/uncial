@@ -10,7 +10,7 @@ struct DocumentView: View {
     private let settings: AppSettings
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
-        _model = State(initialValue: DocumentViewModel(fileURL: fileURL, initialText: document.text))
+        _model = State(initialValue: DocumentViewModel(fileURL: fileURL, initialText: document.text, theme: settings.theme))
         let preferred = settings.defaultEditorMode
         // An empty read-only window is useless: new documents open with the editor visible.
         _mode = State(initialValue: document.text.isEmpty && preferred == .readOnly ? .split : preferred)
@@ -59,6 +59,7 @@ struct DocumentView: View {
             updateSync()
         }
         .onChange(of: settings.syncScrolling) { updateSync() }
+        .onChange(of: settings.theme) { model.theme = settings.theme }
         .onAppear { updateSync() }
         .onDisappear { model.saveNow() }
     }

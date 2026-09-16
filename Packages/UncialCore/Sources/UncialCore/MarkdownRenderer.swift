@@ -6,13 +6,14 @@ public struct MarkdownRenderer: Sendable {
     /// GitHub-flavored Markdown → HTML fragment. Front matter is shown as a block ahead of the body.
     /// With a `baseURL` (the document file or its directory), relative images become `data:` URIs.
     /// With `sourcePositions`, block elements carry `data-sourcepos` line ranges of the full document
-    /// and `data-line` labels for the gutter (`SourcePositions.annotate`).
-    public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false) -> String {
+    /// and `data-line` labels for the gutter (`SourcePositions.annotate`). `diagrams` holds the mermaid
+    /// fences drawn ahead of time by mermaid.js (see `MermaidRenderer.unsupportedFences`), keyed by source.
+    public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false, diagrams: [String: PreRenderedDiagram] = [:]) -> String {
         let (frontMatter, body) = FrontMatter.split(markdown)
         var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
         html = HeadingAnchors.addIDs(to: html)
         html = MathRenderer.render(html)
-        html = MermaidRenderer.render(html)
+        html = MermaidRenderer.render(html, diagrams: diagrams)
         if sourcePositions {
             if frontMatter != nil {
                 html = SourcePositions.shift(html, by: FrontMatter.bodyLineOffset(of: markdown))
@@ -29,7 +30,7 @@ public struct MarkdownRenderer: Sendable {
     }
 
     /// Standalone HTML page with the theme's CSS inlined.
-    public func renderDocument(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default) -> String {
-        HTMLDocument.wrap(body: renderBody(markdown, baseURL: baseURL), title: title, theme: theme)
+    public func renderDocument(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default, diagrams: [String: PreRenderedDiagram] = [:]) -> String {
+        HTMLDocument.wrap(body: renderBody(markdown, baseURL: baseURL, diagrams: diagrams), title: title, theme: theme)
     }
 }

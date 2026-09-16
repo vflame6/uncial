@@ -17,6 +17,10 @@ final class DocumentViewModel {
     private(set) var saveError: String?
 
     var title: String { fileURL?.lastPathComponent ?? "Markdown" }
+    /// The document theme: mermaid.js bakes its colors into the diagrams it draws, so a change re-renders.
+    var theme: Theme {
+        didSet { if theme != oldValue { render() } }
+    }
     var hasUnsavedChanges: Bool { text != diskText }
 
     /// What we last loaded from or wrote to the file.
@@ -33,10 +37,12 @@ final class DocumentViewModel {
     init(
         fileURL: URL?,
         initialText: String,
+        theme: Theme = .default,
         renderDelay: Duration = .milliseconds(150),
         saveDelay: Duration = .milliseconds(500)
     ) {
         self.fileURL = fileURL
+        self.theme = theme
         self.renderDelay = renderDelay
         self.saveDelay = saveDelay
         text = initialText
@@ -152,8 +158,12 @@ final class DocumentViewModel {
         let renderer = renderer
         let text = text
         let baseURL = fileURL
+        let theme = theme
         Task.detached(priority: .userInitiated) {
-            let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true)
+            // Diagrams beautiful-mermaid cannot draw go through mermaid.js in the hidden web view first.
+            let sources = MermaidRenderer.unsupportedFences(in: text)
+            let diagrams = sources.isEmpty ? [:] : await DiagramWebRenderer.shared.render(sources, theme: theme)
+            let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true, diagrams: diagrams)
             let statistics = DocumentStatistics(text: text)
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }

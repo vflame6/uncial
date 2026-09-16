@@ -15,10 +15,13 @@ Open panels and Get Info show a thumbnail of the rendered page.
   autolinks, footnotes, fenced code, raw HTML (dangerous tags are filtered),
   and LaTeX math (`$…$`, `$$…$$`, ```` ```math ```` fences) rendered to MathML
   with KaTeX at render time, so no script runs in the page.
-- Mermaid diagrams: flowcharts, sequence, state, class and ER diagrams and XY
-  charts in ```` ```mermaid ```` fences become inline SVG in the theme's colors
-  (beautiful-mermaid at render time, again without page scripts). Other Mermaid
-  types stay code blocks.
+- Mermaid diagrams of every type in ```` ```mermaid ```` fences, as inline SVG.
+  Flowcharts, sequence, state, class and ER diagrams and XY charts come from
+  beautiful-mermaid at render time and follow the theme live; pie, gantt,
+  mindmap, timeline, journey, quadrant, git graphs, requirement, C4, sankey,
+  block, packet, kanban, architecture, radar and treemap diagrams come from the
+  official mermaid.js running in a hidden web view, drawn once in the theme's
+  light and dark colors. Either way no script runs in the page.
 - Automatic re-rendering when the file changes, including atomic saves from
   editors such as VS Code, Vim, or TextEdit. Scroll position is kept.
 - Four editor modes per window: **Read Only**, **Live Preview** (Markdown
@@ -254,8 +257,8 @@ defaults delete com.maksimradaev.uncial hasCompletedFirstRun
 | Part | What it does |
 |---|---|
 | `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, math (KaTeX) and diagrams (beautiful-mermaid) rendered through JavaScriptCore at render time, image inlining, and the three themes as CSS. Also the file watcher and the block outline the thumbnails draw. |
-| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model writes edits through to the file and reconciles changes that arrive from other programs. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
-| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme from the App Group container the app writes to. |
+| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model writes edits through to the file and reconciles changes that arrive from other programs. A hidden web view runs mermaid.js for the diagram types beautiful-mermaid lacks and draws every diagram to a bitmap for Live Preview. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
+| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme, and the diagrams mermaid.js drew in the app, from the App Group container the app writes to (WebKit cannot run inside the extension). |
 | `UncialThumbnail` | Quick Look Thumbnail Extension. Draws the document's outline (headings, text, lists, quotes, code, rules, tables) as a small page with AppKit for Finder icons, Open panels and Get Info, in the theme's light colors. |
 
 ## Development
@@ -282,12 +285,16 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 - Live Preview renders inline Markdown, task boxes, local images, lists,
   quotes, rules, fenced code, tables (as aligned text), setext headings,
   footnote marks, reference-style links and common HTML (tags hidden, inline
-  tags styled, `align` honored on the tag's own line); HTML tables and lists,
+  tags styled, `align` honored on the tag's own line) and diagrams (a mermaid
+  fence shows its source while the caret is inside it); HTML tables and lists,
   front matter and link definitions stay as source, and math shows as TeX.
-- Mermaid: flowcharts, sequence, state, class and ER diagrams and XY charts
-  render; pie, gantt, mindmap, timeline and the other types stay code blocks,
-  and so does a diagram the renderer cannot parse. Live Preview shows every
-  fence as code.
+- Diagrams drawn by mermaid.js (everything but flowcharts, sequence, state,
+  class, ER and XY charts) have their colors baked in per theme and appearance
+  and take a moment the first time a document needs one; a fence neither engine
+  accepts stays a code block. Quick Look shows them for documents Uncial has
+  rendered before (the app keeps the last 400 diagrams in its App Group
+  container, because WebKit cannot run inside a Quick Look extension); in a
+  document the app has never opened they stay code blocks.
 - Thumbnails show the page's text and structure only: no images, math or
   diagrams, and always the light variant of the theme.
 - The app itself is not sandboxed. That is what lets it read images next to any

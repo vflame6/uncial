@@ -16,7 +16,7 @@ struct AboutView: View {
             Text("A native Markdown reader and editor for macOS, with Quick Look preview and thumbnail extensions.")
                 .multilineTextAlignment(.center)
                 .padding(.top, 6)
-            Text("GitHub-flavored Markdown by cmark-gfm, math by KaTeX, diagrams by beautiful-mermaid.")
+            Text("GitHub-flavored Markdown by cmark-gfm, math by KaTeX, diagrams by beautiful-mermaid and mermaid.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             Link("View on GitHub", destination: AppInfo.repositoryURL)

@@ -1,4 +1,5 @@
 import AppKit
+import UncialCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let openPanels = OpenPanelPlacement()
@@ -11,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         openPanels.start()
+        // Diagrams mermaid.js draws here are shared with Quick Look, which cannot run WebKit.
+        DiagramWebRenderer.shared.store = DiagramStore.shared
         AppSettings.shared.applyAppearance()
         AppSettings.shared.publishTheme()
     }

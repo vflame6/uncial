@@ -64,6 +64,8 @@ public enum Stylesheet {
     p.math { margin: 16px 0; }
     figure.mermaid { margin: 16px 0; text-align: center; --diagram-bg: var(--bg); --diagram-fg: var(--fg); --diagram-accent: var(--accent); --diagram-muted: var(--muted); }
     figure.mermaid svg { max-width: 100%; height: auto; }
+    figure.mermaid .dark { display: none; }
+    @media (prefers-color-scheme: dark) { figure.mermaid .light { display: none; } figure.mermaid .dark { display: block; } }
     details summary { cursor: pointer; font-weight: 600; }
     mark { background: var(--mark); color: inherit; }
     kbd {

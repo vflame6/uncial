@@ -280,7 +280,9 @@ final class ThemedTextView: NSTextView {
     private var imageCache: [String: NSImage?] = [:]
     private var layoutWidth: CGFloat = 0
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
-    private(set) var revealed = NSRange(location: 0, length: 0)
+    private(set) var revealed = NSRange(location: 0, length: 0) {
+        didSet { (layoutManager as? InlineLayoutManager)?.revealed = revealed }
+    }
     private var bulletCache: (font: NSFont, glyph: CGGlyph?)?
 
     private func updateReveal() {

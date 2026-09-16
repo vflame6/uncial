@@ -105,6 +105,37 @@ import Testing
         #expect(!isBlue(pixel(3, 9)) && !isRed(pixel(100, 9)))
     }
 
+    /// A revealed rule line (setext underline, `---`, table delimiter) shows its raw text, not the rule.
+    @Test func revealedRulesAreNotDrawn() {
+        let text = "Title\n===\n\n---\nend"
+        let inline = editor(text, presentation: .inline, caret: 0)
+        let layoutManager = inline.layoutManager as! InlineLayoutManager
+        layoutManager.lineColor = .blue
+        func ruleDrawn(on line: Int) -> Bool {
+            layout(inline)
+            let newline = NSMaxRange(inline.lineIndex.range(ofLine: line))
+            let fragment = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: newline), effectiveRange: nil)
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            let context = NSGraphicsContext(bitmapImageRep: rep)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            NSColor.white.setFill()
+            NSRect(x: 0, y: 0, width: 400, height: 200).fill()
+            context.cgContext.translateBy(x: 0, y: 200)
+            context.cgContext.scaleBy(x: 1, y: -1)
+            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
+            NSGraphicsContext.restoreGraphicsState()
+            let color = rep.colorAt(x: Int(inline.textContainerOrigin.x + 100), y: Int(inline.textContainerOrigin.y + floor(fragment.midY)))
+            return color.map { $0.blueComponent > 0.9 && $0.redComponent < 0.1 } ?? false
+        }
+        #expect(ruleDrawn(on: 1) && ruleDrawn(on: 3))
+        inline.setSelectedRange(NSRange(location: 6, length: 0))
+        #expect(!ruleDrawn(on: 1) && ruleDrawn(on: 3))
+        inline.setSelectedRange(NSRange(location: 11, length: 0))
+        #expect(ruleDrawn(on: 1) && !ruleDrawn(on: 3))
+        #expect(inline.revealed == NSRange(location: 11, length: 4))
+    }
+
     @Test func clickingATaskBoxTogglesIt() {
         let inline = editor("- [ ] task\nend", presentation: .inline, caret: 12)
         let layoutManager = inline.layoutManager!

@@ -10,6 +10,8 @@ final class InlineLayoutManager: NSLayoutManager {
     var codeBackground: NSColor = .clear
     var lineColor: NSColor = .clear
     var accent: NSColor = .clear
+    /// The paragraphs whose markers are shown; a rule there gives way to its raw text.
+    var revealed = NSRange(location: 0, length: 0)
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
@@ -52,6 +54,7 @@ final class InlineLayoutManager: NSLayoutManager {
             let isLast = after != "code" && NSMaxRange(fragment) >= NSMaxRange(paragraph)
             fillCode(box, roundTop: isFirst, roundBottom: isLast)
         case "rule":
+            guard !NSLocationInRange(paragraph.location, revealed) else { return }
             lineColor.setFill()
             NSRect(x: box.minX, y: floor(box.midY), width: box.width, height: 1).fill()
         default:

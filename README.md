@@ -9,6 +9,8 @@ as you type. It ships with Quick Look extensions, so pressing Space on a Markdow
 file in Finder shows the rendered document instead of raw text, and Finder icons,
 Open panels and Get Info show a thumbnail of the rendered page.
 
+Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
+
 ## Features
 
 - GitHub-flavored Markdown: tables, task lists, strikethrough, autolinks,

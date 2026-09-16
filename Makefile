@@ -5,11 +5,16 @@ CONFIG ?= Release
 BUILD_DIR ?= build
 XCODEBUILD = xcodebuild -project uncial.xcodeproj -scheme uncial -derivedDataPath $(BUILD_DIR)
 APP = $(BUILD_DIR)/Build/Products/$(CONFIG)/Uncial.app
+# The version comes from the project (MARKETING_VERSION); `make bump VERSION=x.y.z` changes it.
+VERSION ?= $(shell sed -n 's/.*MARKETING_VERSION = \(.*\);/\1/p' uncial.xcodeproj/project.pbxproj | head -1)
+# Set SIGN_IDENTITY to a "Developer ID Application: …" identity for a build other Macs can open
+# without a Gatekeeper override; NOTARY_PROFILE (a `notarytool store-credentials` profile) notarizes it.
+SIGN_FLAGS = $(if $(SIGN_IDENTITY),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" OTHER_CODE_SIGN_FLAGS=--timestamp,)
 
-.PHONY: build test core-test install uninstall icon clean
+.PHONY: build test core-test install uninstall icon clean bump release publish
 
 build:
-	$(XCODEBUILD) -configuration $(CONFIG) build
+	$(XCODEBUILD) -configuration $(CONFIG) build $(SIGN_FLAGS)
 
 core-test:
 	cd Packages/UncialCore && swift test
@@ -34,6 +39,19 @@ uninstall:
 
 icon:
 	swift scripts/make-icon.swift static/icon.png uncial/Assets.xcassets/AppIcon.appiconset
+
+# Release: `make bump VERSION=1.1.0`, commit, `make release` (build, notarize if NOTARY_PROFILE is
+# set, zip, update the cask), then `make publish` (commit the cask, tag, push, GitHub release).
+bump:
+	@test -n "$(VERSION)" || (echo "make bump VERSION=x.y.z" && exit 1)
+	sed -i '' 's/MARKETING_VERSION = .*;/MARKETING_VERSION = $(VERSION);/' uncial.xcodeproj/project.pbxproj
+	@echo "Project version is now $(VERSION)."
+
+release: build
+	scripts/release.sh package "$(VERSION)" "$(APP)"
+
+publish:
+	scripts/release.sh publish "$(VERSION)"
 
 clean:
 	rm -rf $(BUILD_DIR)

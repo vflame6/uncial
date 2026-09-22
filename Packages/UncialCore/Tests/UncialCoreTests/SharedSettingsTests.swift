@@ -31,6 +31,18 @@ import Testing
         #expect(SharedSettings.readTheme(from: dir) == nil)
     }
 
+    @Test func roundTripsRemoteContent() throws {
+        let dir = try directory()
+        #expect(SharedSettings.readRemoteContent(from: dir) == nil)
+        try SharedSettings.write(theme: .github, remoteContent: true, to: dir)
+        #expect(SharedSettings.readRemoteContent(from: dir) == true)
+        #expect(SharedSettings.readTheme(from: dir) == .github)
+        try SharedSettings.write(theme: .solarized, to: dir)
+        #expect(SharedSettings.readRemoteContent(from: dir) == true, "writing the theme alone keeps the choice")
+        try SharedSettings.write(theme: .solarized, remoteContent: false, to: dir)
+        #expect(SharedSettings.readRemoteContent(from: dir) == false)
+    }
+
     @Test func groupIdentifierIsTeamPrefixed() {
         #expect(SharedSettings.groupIdentifier == "XWTLHG45H7.com.maksimradaev.uncial")
     }

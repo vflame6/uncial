@@ -1,7 +1,7 @@
 import SwiftUI
 import UncialCore
 
-/// General tab: appearance, theme, Quick Look extension, default app. Also shown in the Welcome window.
+/// General tab: appearance, theme, remote content, Quick Look extension, default app. Also shown in the Welcome window.
 struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
     var quickLook: QuickLookExtensionManager
@@ -21,6 +21,14 @@ struct GeneralSettingsView: View {
                         Text(theme.title).tag(theme)
                     }
                 }
+            }
+
+            Section {
+                Toggle("Load images and other files from the web", isOn: $settings.loadRemoteContent)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("Off, a document's references to the web (images, media, style sheets) stay unloaded in the window, in Live Preview and in Quick Look, so opening a file tells no server about it. Links still open in your browser when you click them.")
             }
 
             Section {

@@ -15,7 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Diagrams mermaid.js draws here are shared with Quick Look, which cannot run WebKit.
         DiagramWebRenderer.shared.store = DiagramStore.shared
         AppSettings.shared.applyAppearance()
-        AppSettings.shared.publishTheme()
+        AppSettings.shared.publishShared()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

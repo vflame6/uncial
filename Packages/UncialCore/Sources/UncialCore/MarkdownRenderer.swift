@@ -8,8 +8,10 @@ public struct MarkdownRenderer: Sendable {
     /// With `sourcePositions`, block elements carry `data-sourcepos` line ranges of the full document
     /// and `data-line` labels for the gutter (`SourcePositions.annotate`). `diagrams` holds the mermaid
     /// fences drawn ahead of time by mermaid.js (see `MermaidRenderer.unsupportedFences`), keyed by source.
-    /// Fenced code in a language `CodeHighlighter` knows comes back with highlight.js spans.
-    public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false, diagrams: [String: PreRenderedDiagram] = [:]) -> String {
+    /// Fenced code in a language `CodeHighlighter` knows comes back with highlight.js spans. Unless
+    /// `remoteContent` is allowed, references to the web on media and resource elements are disarmed
+    /// (`RemoteContent.block`); links stay.
+    public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false, diagrams: [String: PreRenderedDiagram] = [:], remoteContent: Bool = false) -> String {
         let (frontMatter, body) = FrontMatter.split(markdown)
         var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
         html = HeadingAnchors.addIDs(to: html)
@@ -28,11 +30,14 @@ public struct MarkdownRenderer: Sendable {
         if let baseURL {
             html = ImageInliner(baseURL: baseURL).inline(html)
         }
+        if !remoteContent {
+            html = RemoteContent.block(in: html)
+        }
         return html
     }
 
     /// Standalone HTML page with the theme's CSS inlined.
-    public func renderDocument(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default, diagrams: [String: PreRenderedDiagram] = [:]) -> String {
-        HTMLDocument.wrap(body: renderBody(markdown, baseURL: baseURL, diagrams: diagrams), title: title, theme: theme)
+    public func renderDocument(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default, diagrams: [String: PreRenderedDiagram] = [:], remoteContent: Bool = false) -> String {
+        HTMLDocument.wrap(body: renderBody(markdown, baseURL: baseURL, diagrams: diagrams, remoteContent: remoteContent), title: title, theme: theme)
     }
 }

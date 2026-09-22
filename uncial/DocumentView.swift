@@ -13,6 +13,8 @@ struct DocumentView: View {
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
         let model = DocumentViewModel(fileURL: fileURL, initialText: document.text, theme: settings.theme)
         model.autosaves = settings.autosave
+        model.externalChangePolicy = settings.externalChangePolicy
+        model.remoteContent = settings.loadRemoteContent
         _model = State(initialValue: model)
         let preferred = settings.defaultEditorMode
         // An empty read-only window is useless: new documents open with the editor visible.
@@ -65,6 +67,8 @@ struct DocumentView: View {
         .onChange(of: settings.syncScrolling) { updateSync() }
         .onChange(of: settings.theme) { model.theme = settings.theme }
         .onChange(of: settings.autosave) { model.autosaves = settings.autosave }
+        .onChange(of: settings.externalChangePolicy) { model.externalChangePolicy = settings.externalChangePolicy }
+        .onChange(of: settings.loadRemoteContent) { model.remoteContent = settings.loadRemoteContent }
         .onAppear { updateSync() }
         .onDisappear { model.saveIfAutomatic() }
     }
@@ -95,6 +99,7 @@ struct DocumentView: View {
                 presentation: mode.presentation,
                 readableWidth: settings.readableLineWidth,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
+                loadsRemoteImages: settings.loadRemoteContent,
                 scrollTarget: sync.editorTarget,
                 handle: editorHandle,
                 onChange: { model.updateText($0) },
@@ -133,6 +138,7 @@ struct DocumentView: View {
                 textScale: settings.textScale,
                 lineNumbers: settings.showLineNumbers,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
+                remoteContent: settings.loadRemoteContent,
                 handle: previewFind.handle,
                 scrollTarget: sync.previewTarget,
                 onScroll: { sync.previewDidScroll(toLine: $0) }

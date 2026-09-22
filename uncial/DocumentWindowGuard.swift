@@ -3,8 +3,9 @@ import ObjectiveC
 import SwiftUI
 
 /// Stands between a document window and the unsaved edits of a manually saved document: shows the
-/// edited dot in the close button, asks before the window closes or the document reverts, and lists
-/// the windows the app must ask about before it quits.
+/// edited dot in the close button, asks before the window closes or the document reverts, asks what
+/// to do when another program changes the file, and lists the windows the app must ask about before
+/// it quits.
 ///
 /// Installed as the window's delegate in front of SwiftUI's own window controller, which was the
 /// delegate before (probed 2026-09-16: `AppKitWindowController`, and it answers `windowShouldClose`);
@@ -21,12 +22,15 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
     /// The window's guard, created on first use, now watching `model`.
     @discardableResult
     static func install(on window: NSWindow, model: DocumentViewModel) -> DocumentWindowGuard {
+        let guardian: DocumentWindowGuard
         if let existing = installed(on: window) {
             existing.model = model
-            return existing
+            guardian = existing
+        } else {
+            guardian = DocumentWindowGuard(window: window, model: model)
+            objc_setAssociatedObject(window, associationKey, guardian, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
-        let guardian = DocumentWindowGuard(window: window, model: model)
-        objc_setAssociatedObject(window, associationKey, guardian, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        model.externalChangeResolver = { [weak guardian] _ in await guardian?.askExternalChange() ?? .keepLocal }
         return guardian
     }
 
@@ -63,6 +67,14 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
     func setEdited(_ edited: Bool) {
         guard let window, window.isDocumentEdited != edited else { return }
         window.isDocumentEdited = edited
+    }
+
+    /// The Ask policy's question, on a sheet, when another program changed the file under unsaved
+    /// edits. With a sheet already up, or no window on screen, the edits stay and nothing is written
+    /// until the user acts.
+    func askExternalChange() async -> ExternalChangeChoice {
+        guard let model, let window, window.isVisible, window.attachedSheet == nil else { return .keepLocal }
+        return await UnsavedChangesAlert.askExternalChange(documentName: model.title, in: window)
     }
 
     /// View ▸ Reload: confirms first when unsaved edits would be dropped.

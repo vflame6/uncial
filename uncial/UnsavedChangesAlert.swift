@@ -2,7 +2,8 @@ import AppKit
 
 /// The sheets a manually saved document shows before unsaved edits could be lost: the standard
 /// Save / Cancel / Don't Save question when a window closes or the app quits, and a Revert / Cancel
-/// question before View ▸ Reload adopts the disk text.
+/// question before View ▸ Reload adopts the disk text, and the Keep My Edits / Reload question when
+/// another program changed the file (the Ask policy).
 enum UnsavedChangesAlert {
     enum Choice: Equatable {
         case save, discard, cancel
@@ -31,6 +32,18 @@ enum UnsavedChangesAlert {
         return alert
     }
 
+    /// The file changed under a window with unsaved edits (the Ask policy): Keep My Edits (default)
+    /// or Reload, which drops them.
+    static func makeExternalChangeAlert(documentName: String) -> NSAlert {
+        let alert = NSAlert()
+        alert.messageText = "The file “\(documentName)” was changed by another application."
+        alert.informativeText = "This window has unsaved edits. Keep them, and the file’s new contents are replaced when you save; or reload the file and lose the edits."
+        alert.addButton(withTitle: "Keep My Edits")
+        let reload = alert.addButton(withTitle: "Reload")
+        reload.hasDestructiveAction = true
+        return alert
+    }
+
     static func choice(for response: NSApplication.ModalResponse) -> Choice {
         switch response {
         case .alertFirstButtonReturn: .save
@@ -44,6 +57,15 @@ enum UnsavedChangesAlert {
         await withCheckedContinuation { continuation in
             makeAlert(documentName: documentName).beginSheetModal(for: window) { response in
                 continuation.resume(returning: choice(for: response))
+            }
+        }
+    }
+
+    /// Keep the edits or reload the file, asked on a sheet over `window`.
+    static func askExternalChange(documentName: String, in window: NSWindow) async -> ExternalChangeChoice {
+        await withCheckedContinuation { continuation in
+            makeExternalChangeAlert(documentName: documentName).beginSheetModal(for: window) { response in
+                continuation.resume(returning: response == .alertSecondButtonReturn ? .reload : .keepLocal)
             }
         }
     }

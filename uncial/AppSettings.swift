@@ -17,6 +17,8 @@ final class AppSettings {
         static let showStatusBar = "showStatusBar"
         static let readableLineWidth = "readableLineWidth"
         static let autosave = "autosave"
+        static let externalChangePolicy = "externalChangePolicy"
+        static let loadRemoteContent = "loadRemoteContent"
         static let splitRatio = "splitRatio"
         static let textSize = "textSize"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
@@ -35,7 +37,7 @@ final class AppSettings {
     var theme: Theme {
         didSet {
             defaults.set(theme.rawValue, forKey: Key.theme)
-            publishTheme()
+            publishShared()
         }
     }
 
@@ -71,6 +73,21 @@ final class AppSettings {
     /// changes only on File ▸ Save, and closing or quitting with unsaved edits asks first.
     var autosave: Bool {
         didSet { defaults.set(autosave, forKey: Key.autosave) }
+    }
+
+    /// What happens when the file changes on disk while a window holds unsaved edits.
+    var externalChangePolicy: ExternalChangePolicy {
+        didSet { defaults.set(externalChangePolicy.rawValue, forKey: Key.externalChangePolicy) }
+    }
+
+    /// Let documents load images and other files from the web. Off (the default), nothing is fetched
+    /// on a document's behalf, in the window, in Live Preview or in Quick Look; links still open on a
+    /// click. Shared with the Quick Look extension.
+    var loadRemoteContent: Bool {
+        didSet {
+            defaults.set(loadRemoteContent, forKey: Key.loadRemoteContent)
+            publishShared()
+        }
     }
 
     /// Share of a Split View window's width for the source pane, within `SplitLayout.ratioRange`.
@@ -133,6 +150,8 @@ final class AppSettings {
         showStatusBar = defaults.bool(forKey: Key.showStatusBar)
         readableLineWidth = defaults.object(forKey: Key.readableLineWidth) == nil ? true : defaults.bool(forKey: Key.readableLineWidth)
         autosave = defaults.bool(forKey: Key.autosave)
+        externalChangePolicy = ExternalChangePolicy(rawValue: defaults.string(forKey: Key.externalChangePolicy) ?? "") ?? .ask
+        loadRemoteContent = defaults.bool(forKey: Key.loadRemoteContent)
         splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
         let storedSize = defaults.integer(forKey: Key.textSize)
         textSize = storedSize == 0 ? nil : min(max(storedSize, Self.textSizeRange.lowerBound), Self.textSizeRange.upperBound)
@@ -144,11 +163,11 @@ final class AppSettings {
         defaults.set(true, forKey: Key.hasCompletedFirstRun)
     }
 
-    /// Hands the theme to the Quick Look extension through the App Group container. Best effort;
-    /// only the real app instance does it (tests pass `applyAppearance: false`).
-    func publishTheme() {
+    /// Hands the theme and the remote-content choice to the Quick Look extension through the App
+    /// Group container. Best effort; only the real app instance does it (tests pass `applyAppearance: false`).
+    func publishShared() {
         guard appliesAppearance, let directory = SharedSettings.containerURL() else { return }
-        try? SharedSettings.write(theme: theme, to: directory)
+        try? SharedSettings.write(theme: theme, remoteContent: loadRemoteContent, to: directory)
     }
 
     /// Re-themes every window. WKWebView follows its effective appearance, so rendered

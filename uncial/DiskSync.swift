@@ -19,3 +19,26 @@ nonisolated enum DiskSync {
         return .keepLocal
     }
 }
+
+/// What happens when the file changes on disk while the window holds unsaved edits
+/// (`AppSettings.externalChangePolicy`): ask on a sheet, keep the edits (the file's new contents are
+/// replaced at the next save, right away with automatic saving), or reload the file and drop them.
+/// Without unsaved edits the window always follows the file.
+nonisolated enum ExternalChangePolicy: String, CaseIterable, Identifiable {
+    case ask, keepLocal, reload
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ask: "Ask"
+        case .keepLocal: "Keep my edits"
+        case .reload: "Reload the file"
+        }
+    }
+}
+
+/// The answer to the Ask policy's question.
+nonisolated enum ExternalChangeChoice: Equatable {
+    case keepLocal, reload
+}

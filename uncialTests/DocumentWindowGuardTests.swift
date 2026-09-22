@@ -68,6 +68,44 @@ import Testing
         let alert = UnsavedChangesAlert.makeAlert(documentName: "notes.md")
         #expect(alert.buttons.map(\.title) == ["Save", "Cancel", "Don't Save"])
         #expect(alert.messageText.contains("notes.md"))
+        let change = UnsavedChangesAlert.makeExternalChangeAlert(documentName: "notes.md")
+        #expect(change.buttons.map(\.title) == ["Keep My Edits", "Reload"])
+        #expect(change.messageText.contains("notes.md"))
+    }
+
+    @Test func asksWhenTheFileChangesUnderUnsavedEdits() async throws {
+        let file = try temporaryFile("one")
+        let (window, guardian) = try await open(file)
+        let model = try #require(guardian.model)
+        model.autosaves = false
+        model.externalChangePolicy = .ask
+        model.updateText("mine")
+        try await settle()
+        try Data("theirs".utf8).write(to: file)
+        for _ in 0..<40 where window.attachedSheet == nil {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(window.attachedSheet != nil)
+        #expect(model.pendingExternalChange == "theirs")
+        try click("Keep My Edits", onSheetOf: window)
+        try await settle()
+        #expect(model.text == "mine")
+        #expect(model.needsSavePrompt == true)
+        #expect(try contents(of: file) == "theirs")
+        try await waitForSheetToGo(on: window)
+        try Data("theirs again".utf8).write(to: file)
+        for _ in 0..<40 where window.attachedSheet == nil {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(window.attachedSheet != nil)
+        try click("Reload", onSheetOf: window)
+        try await settle()
+        #expect(model.text == "theirs again")
+        #expect(model.needsSavePrompt == false)
+        try await waitForSheetToGo(on: window)
+        window.performClose(nil)
+        try await settle()
+        #expect(window.isVisible == false)
     }
 
     @Test func closesACleanWindowWithoutAsking() async throws {

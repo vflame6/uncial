@@ -24,9 +24,24 @@ import UncialCore
         #expect(settings.showStatusBar == false)
         #expect(settings.readableLineWidth == true)
         #expect(settings.autosave == false)
+        #expect(settings.externalChangePolicy == .ask)
+        #expect(settings.loadRemoteContent == false)
         #expect(settings.splitRatio == 0.5)
         #expect(settings.textSize == nil && settings.effectiveTextSize == 13 && settings.textScale == 1)
         #expect(settings.hasCompletedFirstRun == false)
+    }
+
+    @Test func persistsRemoteContentAndExternalChangePolicy() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.loadRemoteContent = true
+        settings.externalChangePolicy = .reload
+        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
+        #expect(reloaded.loadRemoteContent == true)
+        #expect(reloaded.externalChangePolicy == .reload)
+        defaults.set("bogus", forKey: AppSettings.Key.externalChangePolicy)
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).externalChangePolicy == .ask)
+        #expect(ExternalChangePolicy.allCases.map(\.title) == ["Ask", "Keep my edits", "Reload the file"])
     }
 
     @Test func persistsEditorConveniences() {

@@ -150,6 +150,7 @@ import UncialCore
         inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
         inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
         inline.presentation = .inline
+        inline.loadsRemoteImages = true
         inline.remoteImageLoader = { url, completion in
             requested.append(url)
             DispatchQueue.main.async { completion(url.lastPathComponent == "a.png" ? picture : nil) }
@@ -162,6 +163,23 @@ import UncialCore
         #expect(inline.markers.isHidden(0) && inline.markers.isHidden(4))
         inline.rehighlight()
         #expect(requested.count == 1)
+    }
+
+    /// Off by default: no fetch, the image stays source; turning it on fetches.
+    @Test func leavesRemoteImagesAloneUnlessAllowed() {
+        var requested = 0
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.presentation = .inline
+        inline.remoteImageLoader = { _, _ in requested += 1 }
+        inline.replaceText(with: "![r](https://example.com/a.png)\nend")
+        inline.setSelectedRange(NSRange(location: 33, length: 0))
+        #expect(inline.loadsRemoteImages == false)
+        #expect(requested == 0 && inline.resolvedImages.isEmpty)
+        #expect(!inline.markers.isHidden(0))
+        inline.loadsRemoteImages = true
+        #expect(requested == 1)
     }
 
     @Test func drawsDiagramsUnlessTheCaretIsInside() async throws {

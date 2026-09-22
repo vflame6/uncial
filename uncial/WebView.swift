@@ -4,7 +4,8 @@ import WebKit
 
 /// Shows the rendered document. Page JavaScript is off (Markdown is untrusted input); only
 /// app-authored scripts run: scroll position save/restore, the article body swap, the scroll
-/// observer user script and scroll-to-line (see `PreviewScripts`).
+/// observer user script and scroll-to-line (see `PreviewScripts`). Navigation is the app's own or a
+/// click, and with remote content off a content rule list keeps every load off the web.
 struct WebView: NSViewRepresentable {
     let body: String
     let title: String
@@ -14,6 +15,8 @@ struct WebView: NSViewRepresentable {
     /// Shows the source-line gutter (`data-line` labels from the renderer).
     let lineNumbers: Bool
     let baseURL: URL?
+    /// Whether the page may load from the web; off, `RemoteContentBlocker`'s rule list is installed first.
+    let remoteContent: Bool
     /// Receives the web view so the find bar and menu commands can address it.
     let handle: PreviewHandle
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
@@ -43,7 +46,7 @@ struct WebView: NSViewRepresentable {
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.setTextScale(textScale)
-        context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
+        context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL, remoteContent: remoteContent)
         context.coordinator.apply(scrollTarget)
         return webView
     }
@@ -52,7 +55,7 @@ struct WebView: NSViewRepresentable {
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.setTextScale(textScale)
-        context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL)
+        context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL, remoteContent: remoteContent)
         context.coordinator.apply(scrollTarget)
     }
 
@@ -74,6 +77,7 @@ struct WebView: NSViewRepresentable {
             let title: String
             let theme: Theme
             let baseURL: URL?
+            let remoteContent: Bool
         }
 
         weak var webView: WKWebView?
@@ -87,6 +91,8 @@ struct WebView: NSViewRepresentable {
         private var lastScrollTarget: ScrollTarget?
         private var lineNumbers = false
         private var textScale = 1.0
+        /// The rule list installed on the web view while remote content is off.
+        private var blocker: WKContentRuleList?
 
         /// Page zoom for the text size; a load resets it, so `didFinish` applies it again.
         func setTextScale(_ scale: Double) {
@@ -133,9 +139,9 @@ struct WebView: NSViewRepresentable {
             webView.evaluateJavaScript(PreviewScripts.scrollToLine(lastScrollTarget.line), completionHandler: nil)
         }
 
-        func show(body: String, title: String, theme: Theme, baseURL: URL?) {
+        func show(body: String, title: String, theme: Theme, baseURL: URL?, remoteContent: Bool) {
             guard let webView else { return }
-            let newPage = Page(title: title, theme: theme, baseURL: baseURL)
+            let newPage = Page(title: title, theme: theme, baseURL: baseURL, remoteContent: remoteContent)
             if page != newPage {
                 let isFirstLoad = page == nil
                 page = newPage
@@ -162,10 +168,27 @@ struct WebView: NSViewRepresentable {
             }
         }
 
+        /// Loads the page once the web view's rule list matches `page.remoteContent`: the blocker is
+        /// added before a page that must stay off the web and removed before one that may load from it.
         private func loadPage(in webView: WKWebView) {
             guard let page else { return }
             let html = HTMLDocument.wrap(body: currentBody ?? "", title: page.title, theme: page.theme, lineNumbers: lineNumbers)
-            webView.loadHTMLString(html, baseURL: page.baseURL)
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let controller = webView.configuration.userContentController
+                if page.remoteContent {
+                    if let blocker {
+                        controller.remove(blocker)
+                        self.blocker = nil
+                    }
+                } else if blocker == nil, let list = await RemoteContentBlocker.shared.ruleList() {
+                    controller.add(list)
+                    blocker = list
+                }
+                // A newer page may have been requested while the list was compiling.
+                guard self.page == page else { return }
+                webView.loadHTMLString(html, baseURL: page.baseURL)
+            }
         }
 
         private func replaceBody(_ body: String, in webView: WKWebView) {
@@ -206,16 +229,23 @@ struct WebView: NSViewRepresentable {
             decidePolicyFor navigationAction: WKNavigationAction,
             decisionHandler: @escaping (WKNavigationActionPolicy) -> Void
         ) {
-            guard navigationAction.navigationType == .linkActivated, let url = navigationAction.request.url else {
+            guard let url = navigationAction.request.url else {
                 decisionHandler(.allow)
                 return
             }
-            if url.fragment != nil, Self.withoutFragment(url) == webView.url.map(Self.withoutFragment) {
-                decisionHandler(.allow)
+            if navigationAction.navigationType == .linkActivated {
+                if url.fragment != nil, Self.withoutFragment(url) == webView.url.map(Self.withoutFragment) {
+                    decisionHandler(.allow)
+                } else {
+                    decisionHandler(.cancel)
+                    LinkOpener.open(url)
+                }
                 return
             }
-            decisionHandler(.cancel)
-            LinkOpener.open(url)
+            // Only the app's own loads pass (loadHTMLString: about:blank, or the document's directory
+            // as the base): a document cannot send the view elsewhere, a meta refresh for one, and
+            // nothing opens on its behalf.
+            decisionHandler(["about", "file"].contains(url.scheme?.lowercased() ?? "") ? .allow : .cancel)
         }
 
         func webView(

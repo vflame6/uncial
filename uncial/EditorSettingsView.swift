@@ -25,10 +25,15 @@ struct EditorSettingsView: View {
 
             Section {
                 Toggle("Save changes automatically", isOn: $settings.autosave)
+                Picker("If the file changes while you have unsaved edits", selection: $settings.externalChangePolicy) {
+                    ForEach(ExternalChangePolicy.allCases) { policy in
+                        Text(policy.title).tag(policy)
+                    }
+                }
             } header: {
                 Text("Saving")
             } footer: {
-                Text("Off, the file changes only when you save with \(AppShortcut.save.display), and closing a window, quitting or reloading with unsaved changes asks first. On, edits are written to the file half a second after you stop typing, without asking.")
+                Text("Off, the file changes only when you save with \(AppShortcut.save.display), and closing a window, quitting or reloading with unsaved changes asks first. On, edits are written to the file half a second after you stop typing, without asking. Another program (Git, a sync service, an editor) can rewrite the file while you edit: Ask shows a sheet with Keep My Edits and Reload; Keep my edits replaces the file's new contents at your next save, right away with automatic saving; Reload drops your edits. A window without unsaved edits always follows the file.")
             }
 
             Section {

@@ -19,6 +19,8 @@ struct MarkdownTextView: NSViewRepresentable {
     let readableWidth: Bool
     /// The document's directory, for relative link and image destinations.
     let baseURL: URL?
+    /// Whether http(s) images are fetched for Live Preview (`AppSettings.loadRemoteContent`).
+    let loadsRemoteImages: Bool
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     /// Receives the text view so menu commands (Edit ▸ Find) can address it.
@@ -69,6 +71,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.presentation = presentation
         textView.readableWidth = readableWidth
         textView.baseURL = baseURL
+        textView.loadsRemoteImages = loadsRemoteImages
         textView.theme = theme
         textView.string = text
         textView.fontSize = fontSize
@@ -100,6 +103,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
         textView.baseURL = baseURL
+        textView.loadsRemoteImages = loadsRemoteImages
         textView.theme = theme
         textView.readableWidth = readableWidth
         if textView.presentation != presentation {
@@ -300,6 +304,15 @@ final class ThemedTextView: NSTextView {
             if presentation == .inline { rehighlight() }
         }
     }
+    /// Whether http(s) image destinations are fetched (`AppSettings.loadRemoteContent`); off, they
+    /// stay source in Live Preview, like a file that is missing.
+    var loadsRemoteImages = false {
+        didSet {
+            guard loadsRemoteImages != oldValue else { return }
+            imageCache.removeAll()
+            if presentation == .inline { rehighlight() }
+        }
+    }
     private(set) var markers = MarkerIndex.empty
     /// Locations of the image tokens that loaded and are drawn under their paragraph.
     private(set) var resolvedImages: Set<Int> = []
@@ -365,8 +378,9 @@ final class ThemedTextView: NSTextView {
         }
     }
 
-    /// Local images load right away; http(s) ones are fetched once through `remoteImageLoader`
-    /// and, once here, re-render the text. Every outcome is cached per destination, misses too.
+    /// Local images load right away; http(s) ones are fetched once through `remoteImageLoader` (only
+    /// with `loadsRemoteImages`) and, once here, re-render the text. Every outcome is cached per
+    /// destination, misses too.
     func image(for destination: String) -> NSImage? {
         if let cached = imageCache[destination] { return cached }
         let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL ?? baseURL?.appendingPathComponent(destination)
@@ -379,7 +393,7 @@ final class ThemedTextView: NSTextView {
             imageCache[destination] = .some(loaded)
             return loaded
         }
-        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), !pendingImages.contains(destination) else {
+        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), loadsRemoteImages, !pendingImages.contains(destination) else {
             if !url.isFileURL, !pendingImages.contains(destination) { imageCache[destination] = .some(nil) }
             return nil
         }

@@ -24,8 +24,11 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   in Split View.
 - Save with ⌘S, or let Uncial save as you type.
 - Re-rendering when the file changes on disk, scroll position kept.
-- Local and remote images, heading anchors, YAML front matter, and links that
-  open in the browser or, for local Markdown files, in a new window.
+- Local images, heading anchors, YAML front matter, and links that open in the
+  browser or, for local Markdown files, in a new window. Nothing is loaded from
+  the web unless you allow it in Settings ▸ General: remote images and other
+  references stay unloaded in the window, in Live Preview and in Quick Look, so
+  opening a file tells no server about it.
 - Quick Look preview and thumbnails for Markdown files.
 - Optional status bar with line, word and character counts. Pinch to zoom.
 
@@ -83,9 +86,9 @@ Marked, …), disable it in the same settings pane or macOS may keep using it.
 - File ▸ Open (⌘O) and Open Recent work as in any document app. File ▸ New… (⌘N)
   asks where to create an empty Markdown file and opens it.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.
-- Settings (⌘,) has General (appearance, theme, Quick Look, default app), Editor,
-  Shortcuts and About tabs; the General controls are offered once in a Welcome
-  window on first launch.
+- Settings (⌘,) has General (appearance, theme, loading from the web, Quick Look,
+  default app), Editor, Shortcuts and About tabs; the General controls are offered
+  once in a Welcome window on first launch.
 
 ### Editing
 
@@ -107,7 +110,10 @@ shows the dot in its close button, and closing it, quitting or reloading asks
 whether to save. Turn on *Save changes automatically* in Settings ▸ Editor to
 have Uncial write the file half a second after you stop typing instead, without
 asking. If another program changes the file while you have no unsaved edits, the
-window picks up the new contents.
+window picks up the new contents. With unsaved edits, Uncial asks whether to keep
+them or reload the file (Settings ▸ Editor can make it keep or reload without
+asking), and before every save it re-reads the file, so a change made by Git, a
+sync service or another editor in the meantime is never overwritten blindly.
 
 Live Preview renders Markdown where it stands: headings,
 emphasis, code, links, lists, task boxes, quotes, tables, images, diagrams and

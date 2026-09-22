@@ -83,6 +83,100 @@ import Testing
         #expect(try contents(of: file) == "mine")
     }
 
+    @Test func externalChangeUnderUnsavedEditsAsksAndCanReload() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .milliseconds(300))
+        model.autosaves = true
+        var asked: [String] = []
+        model.externalChangeResolver = { name in
+            asked.append(name)
+            return .reload
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        model.updateText("mine")
+        try Data("theirs".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(700))
+        #expect(asked == ["doc.md"])
+        #expect(model.text == "theirs")
+        #expect(model.hasUnsavedChanges == false)
+        #expect(model.pendingExternalChange == nil)
+        #expect(try contents(of: file) == "theirs")
+    }
+
+    @Test func keptEditsAreWrittenOnlyAfterTheAnswer() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .milliseconds(50))
+        model.autosaves = true
+        model.externalChangeResolver = { _ in
+            try? await Task.sleep(for: .milliseconds(400))
+            return .keepLocal
+        }
+        try await Task.sleep(for: .milliseconds(150))
+        model.updateText("mine")
+        try Data("theirs".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(300))
+        // The question is open: the pending save is held, the file keeps the other program's text.
+        #expect(model.pendingExternalChange == "theirs")
+        #expect(model.text == "mine" && model.hasUnsavedChanges == true && model.needsSavePrompt == true)
+        #expect(try contents(of: file) == "theirs")
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(model.pendingExternalChange == nil)
+        #expect(try contents(of: file) == "mine")
+        #expect(model.hasUnsavedChanges == false && model.needsSavePrompt == false)
+    }
+
+    @Test func saveChecksTheFileBeforeWriting() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))
+        var asked = 0
+        model.externalChangeResolver = { _ in
+            asked += 1
+            return .keepLocal
+        }
+        model.updateText("mine")
+        // Written behind the watcher's back: the save must not land before the question is asked.
+        try Data("theirs".utf8).write(to: file)
+        model.saveNow()
+        #expect(try contents(of: file) == "theirs")
+        #expect(model.pendingExternalChange == "theirs")
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(asked == 1)
+        #expect(model.pendingExternalChange == nil && model.text == "mine" && model.hasUnsavedChanges == true)
+        model.saveNow()
+        #expect(try contents(of: file) == "mine")
+    }
+
+    @Test func silentPoliciesKeepOrReloadWithoutAsking() async throws {
+        for policy in [ExternalChangePolicy.keepLocal, .reload] {
+            let file = try temporaryFile("one")
+            let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))
+            model.externalChangePolicy = policy
+            var asked = 0
+            model.externalChangeResolver = { _ in
+                asked += 1
+                return .reload
+            }
+            try await Task.sleep(for: .milliseconds(150))
+            model.updateText("mine")
+            try Data("theirs".utf8).write(to: file)
+            try await Task.sleep(for: .milliseconds(500))
+            #expect(asked == 0, "\(policy)")
+            #expect(model.text == (policy == .reload ? "theirs" : "mine"), "\(policy)")
+            #expect(model.hasUnsavedChanges == (policy == .keepLocal), "\(policy)")
+        }
+    }
+
+    @Test func remoteContentIsDisarmedUnlessAllowed() async throws {
+        let markdown = "![a](https://x.test/a.png)"
+        let file = try temporaryFile(markdown)
+        let model = DocumentViewModel(fileURL: file, initialText: markdown, renderDelay: .milliseconds(20))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.body.contains("data-blocked-src=\"https://x.test/a.png\""))
+        model.remoteContent = true
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.body.contains("<img src=\"https://x.test/a.png\""))
+    }
+
     @Test func reloadAdoptsDiskAndDropsPendingEdits() async throws {
         let file = try temporaryFile("one")
         let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))

@@ -1,7 +1,7 @@
 import SwiftUI
 import UncialCore
 
-/// General tab: appearance, theme, remote content, attachments, Quick Look extension, default app. Also shown in the Welcome window.
+/// General tab: appearance, theme, Quick Look extension, default app, attachments, remote content. Also shown in the Welcome window.
 struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
     var quickLook: QuickLookExtensionManager
@@ -21,34 +21,6 @@ struct GeneralSettingsView: View {
                         Text(theme.title).tag(theme)
                     }
                 }
-            }
-
-            Section {
-                Toggle("Load images and other files from the web", isOn: $settings.loadRemoteContent)
-            } header: {
-                Text("Privacy")
-            } footer: {
-                Text("Off, a document's references to the web (images, media, style sheets) stay unloaded in the window, in Live Preview and in Quick Look, so opening a file tells no server about it. Links still open in your browser when you click them.")
-            }
-
-            Section {
-                TextField("Attachments folder", text: $settings.attachmentsDirectory, prompt: Text(AttachmentSearch.defaultDirectoryName))
-                Toggle("Search the folders above the document", isOn: $settings.searchesParentsForAttachments)
-                Picker("Stop at", selection: $settings.attachmentSearchBoundary) {
-                    ForEach(AttachmentSearch.Boundary.allCases, id: \.self) { boundary in
-                        Text(boundary.title).tag(boundary)
-                    }
-                }
-                .disabled(!settings.searchesParentsForAttachments)
-                Picker("New attachments go to", selection: $settings.attachmentDestination) {
-                    ForEach(AttachmentImporter.Destination.allCases, id: \.self) { destination in
-                        Text(destination.title).tag(destination)
-                    }
-                }
-            } header: {
-                Text("Attachments")
-            } footer: {
-                Text("An image or linked file that is not where the document says is looked for in the attachments folder next to the document and then, folder by folder, above the document: in each folder itself and in its attachments folder, up to your home folder or the root of the disk. A document outside your home folder is searched in its own folder only while the search stops at home. Leave the folder name empty to look in the folders themselves only; new attachments then go to the document's folder. A file or picture pasted or dropped into the editor is copied where new attachments go (the folder is created as needed) and inserted as a link, or as an image for pictures; a file the document already reaches, and any Markdown file, is linked where it is. Quick Look can read nothing but the document, so its previews show no attachments.")
             }
 
             Section {
@@ -96,6 +68,37 @@ struct GeneralSettingsView: View {
             } footer: {
                 Text("Applies to .md, .markdown and related files. Changing the default can take a few seconds.")
             }
+
+            Section {
+                TextField("Attachments folder", text: $settings.attachmentsDirectory, prompt: Text(AttachmentSearch.defaultDirectoryName))
+                Toggle("Search the folders above the document", isOn: $settings.searchesParentsForAttachments)
+                if settings.searchesParentsForAttachments {
+                    Picker("Stop at", selection: $settings.attachmentSearchBoundary) {
+                        ForEach(AttachmentSearch.Boundary.allCases, id: \.self) { boundary in
+                            Text(boundary.title).tag(boundary)
+                        }
+                    }
+                }
+                if !settings.attachmentSearch.directoryName.isEmpty {
+                    Picker("New attachments go to", selection: $settings.attachmentDestination) {
+                        ForEach(AttachmentImporter.Destination.allCases, id: \.self) { destination in
+                            Text(destination.title).tag(destination)
+                        }
+                    }
+                }
+            } header: {
+                Text("Attachments")
+            } footer: {
+                Text(Self.attachmentsFooter(for: settings.attachmentSearch, destination: settings.attachmentDestination))
+            }
+
+            Section {
+                Toggle("Load images and other files from the web", isOn: $settings.loadRemoteContent)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("Off, a document's references to the web (images, media, style sheets) stay unloaded in the window, in Live Preview and in Quick Look, so opening a file tells no server about it. Links still open in your browser when you click them.")
+            }
         }
         .formStyle(.grouped)
         .task {
@@ -119,6 +122,31 @@ struct GeneralSettingsView: View {
         case .some(false): "Default app: \(defaultApp.currentDefaultName ?? "none")"
         case .none: "Checking…"
         }
+    }
+
+    /// The Attachments footer: where a missing file is looked for and where pasted files go, for the chosen settings.
+    static func attachmentsFooter(for search: AttachmentSearch, destination: AttachmentImporter.Destination) -> String {
+        let name = search.directoryName.isEmpty ? nil : "“\(search.directoryName)”"
+        let limit = search.boundary == .home ? "your home folder" : "the root of the disk"
+        let lookup = switch (name, search.searchesParents) {
+        case (let name?, true):
+            "A missing image or linked file is looked for in the \(name) folder next to the document, then in the folders above it and their \(name) folders, up to \(limit)."
+        case (let name?, false):
+            "A missing image or linked file is looked for in the \(name) folder next to the document."
+        case (nil, true):
+            "A missing image or linked file is looked for in the folders above the document, up to \(limit)."
+        case (nil, false):
+            "A missing image or linked file is not looked for elsewhere."
+        }
+        let pasted = switch (name, destination) {
+        case (let name?, .nearestAttachmentsFolder) where search.searchesParents:
+            "Pasted or dropped files and pictures go to the first \(name) folder found above the document, or to one created next to it, and are inserted as links or images."
+        case (let name?, .attachmentsFolder), (let name?, .nearestAttachmentsFolder):
+            "Pasted or dropped files and pictures go to the \(name) folder next to the document, created as needed, and are inserted as links or images."
+        case (nil, _), (_, .documentFolder):
+            "Pasted or dropped files and pictures go next to the document and are inserted as links or images."
+        }
+        return lookup + " " + pasted
     }
 }
 

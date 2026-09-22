@@ -94,9 +94,9 @@ Marked, …), disable it in the same settings pane or macOS may keep using it.
 - File ▸ Open (⌘O) and Open Recent work as in any document app. File ▸ New… (⌘N)
   asks where to create an empty Markdown file and opens it.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.
-- Settings (⌘,) has General (appearance, theme, loading from the web, attachments,
-  Quick Look, default app), Editor, Shortcuts and About tabs; the General controls
-  are offered once in a Welcome window on first launch.
+- Settings (⌘,) opens on General (appearance, theme, Quick Look, default app,
+  attachments, loading from the web); the other tabs are Editor, Shortcuts and
+  About. The General controls are offered once in a Welcome window on first launch.
 
 ### Editing
 

@@ -33,7 +33,7 @@ struct EditorSettingsView: View {
             } header: {
                 Text("Saving")
             } footer: {
-                Text("Off, the file changes only when you save with \(AppShortcut.save.display), and closing a window, quitting or reloading with unsaved changes asks first. On, edits are written to the file half a second after you stop typing, without asking. Another program (Git, a sync service, an editor) can rewrite the file while you edit: Ask shows a sheet with Keep My Edits and Reload; Keep my edits replaces the file's new contents at your next save, right away with automatic saving; Reload drops your edits. A window without unsaved edits always follows the file.")
+                Text(Self.savingFooter(autosave: settings.autosave, policy: settings.externalChangePolicy))
             }
 
             Section {
@@ -72,7 +72,7 @@ struct EditorSettingsView: View {
             } header: {
                 Text("Source")
             } footer: {
-                Text("Typing ( [ { ` * _ or \" inserts the closing character after the cursor; typing it again skips over it, Backspace inside an empty pair removes both, and a selection gets wrapped. Press Return between ``` and ``` to start a code block. Return inside a list item or quote starts the next one; Return on an empty item ends it. Line numbers show in the source and, as source lines, in the rendered page.")
+                Text("Closing brackets, quotes and markers are inserted after the cursor and typed over when you reach them. Return in a list or quote starts the next item and ends an empty one. Line numbers also show in the rendered page.")
             }
 
             Section {
@@ -99,6 +99,19 @@ struct EditorSettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    /// The Saving footer: when the file is written and what happens to unsaved edits when another program changes it.
+    static func savingFooter(autosave: Bool, policy: ExternalChangePolicy) -> String {
+        let saving = autosave
+            ? "Edits are written to the file half a second after you stop typing."
+            : "Edits are written when you save with \(AppShortcut.save.display). Closing a window, quitting or reloading with unsaved edits asks first."
+        let external = switch policy {
+        case .ask: "If another program changes the file while you have unsaved edits, Uncial asks whether to keep them or reload."
+        case .keepLocal: "If another program changes the file while you have unsaved edits, your edits replace its new contents at the next save."
+        case .reload: "If another program changes the file while you have unsaved edits, the file's new contents replace them."
+        }
+        return saving + " " + external
     }
 
     private func percent(_ share: Double) -> String {

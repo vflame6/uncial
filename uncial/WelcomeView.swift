@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// First-run setup: the same settings as ⌘, plus Skip / Done.
+/// First-run setup: the same settings as ⌘, plus Skip / Done. The form scrolls: the frame fits three of its five sections.
 struct WelcomeView: View {
     let finish: () -> Void
 
@@ -21,7 +21,6 @@ struct WelcomeView: View {
             .padding(.horizontal, 32)
 
             GeneralSettingsView(settings: .shared, quickLook: .shared, defaultApp: .shared)
-                .scrollDisabled(true)
 
             HStack {
                 Button("Skip", action: finish)

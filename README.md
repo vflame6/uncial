@@ -115,9 +115,11 @@ them or reload the file (Settings ▸ Editor can make it keep or reload without
 asking), and before every save it re-reads the file, so a change made by Git, a
 sync service or another editor in the meantime is never overwritten blindly.
 
-Live Preview renders Markdown where it stands: headings,
-emphasis, code, links, lists, task boxes, quotes, tables, images, diagrams and
-math, with the markers of the line under the cursor revealed. In Split View the
+Live Preview renders Markdown where it stands, in the theme's page fonts and
+sizes: headings, emphasis, code, links, lists, task boxes, quotes, tables,
+images, diagrams and math. The line under the cursor (or the fenced block it is
+in) shows its source instead, in the Raw Editor's monospace look with every
+marker, and returns to the rendered look when the cursor leaves. In Split View the
 source and the rendered page scroll together. Settings ▸ Editor holds the
 editor options: line numbers, auto-closing of brackets and Markdown markers,
 list and quote continuation, text size, the readable column in Live Preview,

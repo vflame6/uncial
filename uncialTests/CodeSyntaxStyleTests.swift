@@ -5,7 +5,7 @@ import UncialCore
 
 @MainActor
 @Suite struct CodeSyntaxStyleTests {
-    private let style = EditorStyle(palette: Theme.github.editorPalette, syntax: Theme.github.syntaxPalette, isDark: false)
+    private let style = EditorStyle(theme: .github, isDark: false)
 
     private func storage(_ text: String, inline: Bool = false) -> NSTextStorage {
         let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
@@ -73,9 +73,9 @@ import UncialCore
     }
 
     @Test func stylesFollowTheThemeAndAppearance() {
-        #expect(EditorStyle(palette: nil, isDark: false).color(for: .keyword) == NSColor(rgb: 0x9B2393))
-        #expect(EditorStyle(palette: nil, isDark: true).color(for: .keyword) == NSColor(rgb: 0xFC5FA3))
-        #expect(EditorStyle(palette: Theme.solarized.editorPalette, syntax: Theme.solarized.syntaxPalette, isDark: true).color(for: .string) == NSColor(rgb: 0x2AA198))
+        #expect(EditorStyle(theme: .macOS, isDark: false).color(for: .keyword) == NSColor(rgb: 0x9B2393))
+        #expect(EditorStyle(theme: .macOS, isDark: true).color(for: .keyword) == NSColor(rgb: 0xFC5FA3))
+        #expect(EditorStyle(theme: .solarized, isDark: true).color(for: .string) == NSColor(rgb: 0x2AA198))
     }
 
     @Test func textViewColorsCodeInBothPresentations() {

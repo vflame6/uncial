@@ -90,7 +90,6 @@ struct DocumentView: View {
         VStack(spacing: 0) {
             MarkdownTextView(
                 text: model.text,
-                palette: settings.theme.editorPalette,
                 theme: settings.theme,
                 fontSize: CGFloat(settings.effectiveTextSize),
                 showsLineNumbers: settings.showLineNumbers,

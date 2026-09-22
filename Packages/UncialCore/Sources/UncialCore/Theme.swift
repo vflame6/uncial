@@ -36,6 +36,19 @@ public enum Theme: String, CaseIterable, Identifiable, Sendable {
 }
 
 extension Theme {
+    /// The page's type scale in CSS pixels at the system size, for an editor that renders Markdown in
+    /// place: the body and heading sizes and line heights the theme's stylesheet sets.
+    public var typography: PageTypography {
+        switch self {
+        case .macOS:
+            PageTypography(bodySize: 15, lineHeight: 1.5, headingSizes: [26, 22, 17, 15, 13, 13], boldTopHeadings: true)
+        case .github:
+            PageTypography(bodySize: 16, lineHeight: 1.5, headingSizes: [32, 24, 20, 16, 14, 13.6], boldTopHeadings: false)
+        case .solarized:
+            PageTypography(bodySize: 16, lineHeight: 1.6, headingSizes: [32, 24, 20, 16, 14, 13.6], boldTopHeadings: false)
+        }
+    }
+
     /// Colors for highlighted code, the same values the theme's stylesheet sets as `--code-…`
     /// variables: Xcode's for the macOS theme, Primer's for GitHub, the Solarized accents.
     public var syntaxPalette: SyntaxPalette {
@@ -105,6 +118,30 @@ public struct DiagramPalette: Equatable, Sendable {
     public init(light: Colors, dark: Colors) {
         self.light = light
         self.dark = dark
+    }
+}
+
+/// A theme's type scale as the stylesheet sets it, in CSS pixels at the system size: what an editor
+/// that renders Markdown in place needs to match the page. Foundation-only.
+public struct PageTypography: Equatable, Sendable {
+    /// `--font-size`.
+    public let bodySize: Double
+    /// `--line-height`, a multiple of the body size.
+    public let lineHeight: Double
+    /// `--h1-size` … `--h6-size`.
+    public let headingSizes: [Double]
+    /// Whether h1 and h2 are bold (700) rather than semibold (600).
+    public let boldTopHeadings: Bool
+    /// The base sheet's line height for headings and for code blocks, and code's size relative to its text.
+    public static let headingLineHeight = 1.25
+    public static let codeLineHeight = 1.45
+    public static let codeScale = 0.85
+
+    public init(bodySize: Double, lineHeight: Double, headingSizes: [Double], boldTopHeadings: Bool) {
+        self.bodySize = bodySize
+        self.lineHeight = lineHeight
+        self.headingSizes = headingSizes
+        self.boldTopHeadings = boldTopHeadings
     }
 }
 

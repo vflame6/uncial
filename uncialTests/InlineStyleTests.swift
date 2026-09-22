@@ -5,7 +5,7 @@ import UncialCore
 
 @MainActor
 @Suite struct InlineStyleTests {
-    private let style = EditorStyle(palette: Theme.github.editorPalette, isDark: false)
+    private let style = EditorStyle(theme: .github, isDark: false)
 
     private func storage(_ text: String) -> NSTextStorage {
         let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
@@ -27,6 +27,10 @@ import UncialCore
 
     private func decoration(_ storage: NSTextStorage, _ index: Int) -> String? {
         storage.attribute(.blockDecoration, at: index, effectiveRange: nil) as? String
+    }
+
+    private func width(_ text: String, _ font: NSFont) -> CGFloat {
+        InlineStyle.width(of: text, in: font)
     }
 
     @Test func listsFencedBlocks() {
@@ -67,36 +71,65 @@ import UncialCore
         #expect(none.math == [8: 8, 14: 24] && shown.attribute(.mathPicture, at: 2, effectiveRange: nil) == nil)
     }
 
-    @Test func headingsGrowAndKeepMonospace() {
-        let text = storage("# Title *em*\n###### six")
-        #expect(font(text, 2).pointSize == 22 && font(text, 2).fontDescriptor.symbolicTraits.contains(.bold))
-        #expect(font(text, 2).isFixedPitch)
-        #expect(font(text, 9).fontDescriptor.symbolicTraits.contains(.italic) && font(text, 9).pointSize == 22)
-        #expect(color(text, 0) == style.muted && color(text, 20) == style.muted)
-        #expect(font(text, 20).pointSize == 13)
+    /// Outside the caret's line the text takes the page's look: the system font at the theme's
+    /// body and heading sizes, its line height, a divider under h1 and h2.
+    @Test func rendersHeadingsAndTextLikeThePage() {
+        // "# Title *em* `c`" 0–15 (em 9–10, c 14), "###### six" 17–26 (six 24–26).
+        let text = storage("# Title *em* `c`\n###### six")
+        let h1 = font(text, 2)
+        #expect(h1.pointSize == 32 && !h1.isFixedPitch && NSFontManager.shared.weight(of: h1) >= 8)
+        #expect(font(text, 9).fontDescriptor.symbolicTraits.contains(.italic) && font(text, 9).pointSize == 32)
+        #expect(font(text, 14).isFixedPitch && abs(font(text, 14).pointSize - 32 * 0.85) < 0.01)
+        #expect(color(text, 0) == style.muted && color(text, 17) == style.muted)
+        #expect(abs(font(text, 24).pointSize - 13.6) < 0.01 && color(text, 24) == style.muted)
+        #expect(decoration(text, 0) == "heading" && decoration(text, 17) == nil)
+        #expect((paragraph(text, 0)?.paragraphSpacing ?? 0) == 10 && (paragraph(text, 17)?.paragraphSpacing ?? 0) == 0)
+        let plain = storage("plain")
+        #expect(font(plain, 0) == style.body && style.body.pointSize == 16 && !style.body.isFixedPitch)
+        #expect(abs((paragraph(plain, 0)?.lineHeightMultiple ?? 0) - style.lineHeightMultiple(for: style.body, lineHeight: 1.5)) < 0.001)
+    }
+
+    /// The caret's lines keep the source look: SF Mono, the source coloring, nothing hidden by attributes.
+    @Test func revealedLinesKeepTheSourceLook() {
+        // "# Title\n" 0–7, "text `c`\n" 8–16, "- item" 17–22.
+        let text = "# Title\ntext `c`\n- item"
+        let shown = NSTextStorage(string: text, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: shown, revealed: NSRange(location: 8, length: 9))
+        #expect(font(shown, 2).pointSize == 32 && font(shown, 20) == style.body)
+        #expect(font(shown, 8) == style.regular && font(shown, 14) == style.regular)
+        #expect(color(shown, 14) == style.code && shown.attribute(.backgroundColor, at: 14, effectiveRange: nil) == nil)
+        #expect(paragraph(shown, 8) == nil && paragraph(shown, 17)?.headIndent ?? 0 > 0)
+        let heading = NSTextStorage(string: text, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: heading, revealed: NSRange(location: 0, length: 8))
+        #expect(font(heading, 2) == style.bold && color(heading, 0) == style.accent && decoration(heading, 0) == nil)
+        #expect(InlineStyle.complement(of: NSRange(location: 8, length: 9), in: NSRange(location: 0, length: 23)) == [NSRange(location: 0, length: 8), NSRange(location: 17, length: 6)])
+        #expect(InlineStyle.complement(of: NSRange(location: 0, length: 0), in: NSRange(location: 0, length: 23)) == [NSRange(location: 0, length: 23)])
     }
 
     @Test func inlineConstructsStyleTheirText() {
         let text = storage("**b** ~~s~~ `c` [t](https://x) <https://y>")
-        #expect(font(text, 2).fontDescriptor.symbolicTraits.contains(.bold) && color(text, 0) == style.muted)
+        #expect(font(text, 2).fontDescriptor.symbolicTraits.contains(.bold) && color(text, 0) == style.muted && !font(text, 2).isFixedPitch)
         #expect(text.attribute(.strikethroughStyle, at: 8, effectiveRange: nil) as? Int == NSUnderlineStyle.single.rawValue)
-        #expect(color(text, 13) == style.code && text.attribute(.backgroundColor, at: 13, effectiveRange: nil) != nil)
+        #expect(color(text, 13) == style.foreground && font(text, 13).isFixedPitch && text.attribute(.backgroundColor, at: 13, effectiveRange: nil) != nil)
         #expect(text.attribute(.link, at: 17, effectiveRange: nil) as? String == "https://x" && color(text, 17) == style.accent)
         #expect(text.attribute(.link, at: 31, effectiveRange: nil) as? String == "https://y")
     }
 
     @Test func listsHangQuotesIndentCodeDecorates() {
-        let inline = InlineStyle(style: style)
+        // "- item\n" 0–6, "> q\n" 7–10, "```\n" 11–14, "x\n" 15–16, "```\n" 17–20, "---\n" 21–24, "- [x] done" 25–34 (box 27–29).
         let text = storage("- item\n> q\n```\nx\n```\n---\n- [x] done")
-        #expect(paragraph(text, 3)?.headIndent == inline.characterWidth * 2 && paragraph(text, 3)?.firstLineHeadIndent == 0)
-        #expect(color(text, 0) == style.accent)
+        #expect(abs((paragraph(text, 3)?.headIndent ?? 0) - width("• ", style.body)) < 0.01 && paragraph(text, 3)?.firstLineHeadIndent == 0)
+        #expect(color(text, 0) == style.foreground)
         #expect(paragraph(text, 9)?.firstLineHeadIndent == InlineStyle.quoteIndent && decoration(text, 9) == "quote:1")
-        #expect(decoration(text, 15) == "code" && color(text, 15) == style.code)
+        #expect(decoration(text, 15) == "code" && color(text, 15) == style.foreground && font(text, 15).isFixedPitch)
         #expect(decoration(text, 11) == "code" && color(text, 11) == style.muted)
         #expect(paragraph(text, 15)?.headIndent == InlineStyle.codeIndent)
         #expect(decoration(text, 21) == "rule")
-        #expect(text.attribute(.taskBox, at: 28, effectiveRange: nil) as? String == "checked")
-        #expect(paragraph(text, 31)?.headIndent == inline.characterWidth * 4)
+        #expect(text.attribute(.taskBox, at: 27, effectiveRange: nil) as? String == "checked")
+        // The box's middle character is kerned out to the box's room; the item hangs by the visible prefix plus that room.
+        let kern = text.attribute(.kern, at: 28, effectiveRange: nil) as? CGFloat
+        #expect(abs((kern ?? 0) - (InlineStyle.taskBoxWidth - width("x", style.body))) < 0.001)
+        #expect(abs((paragraph(text, 31)?.headIndent ?? 0) - (width("• x ", style.body) + (kern ?? 0))) < 0.01)
     }
 
     @Test func imagesReserveSpaceAndHideMarkers() {
@@ -114,6 +147,10 @@ import UncialCore
         InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: narrow, images: provider, textWidth: 100)
         #expect((narrow.attribute(.inlineImage, at: 0, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 100, height: 50))
         #expect(paragraph(narrow, 0)?.paragraphSpacing == 58)
+        // A revealed paragraph is source: no picture.
+        let shown = NSTextStorage(string: text, attributes: style.baseAttributes)
+        let none = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: shown, images: provider, revealed: NSRange(location: 0, length: 14), textWidth: 400)
+        #expect(none.images.isEmpty && shown.attribute(.inlineImage, at: 0, effectiveRange: nil) == nil)
     }
 
     @Test func layoutManagerDrawsImagesUnderTheirLine() {
@@ -130,8 +167,9 @@ import UncialCore
         let container = NSTextContainer(size: NSSize(width: 400, height: 1000))
         layoutManager.addTextContainer(container)
         layoutManager.ensureLayout(for: container)
+        // The page's line height (16 px × 1.5) plus the picture and its gap.
         let first = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
-        #expect(abs(first.height - 44) < 0.5)
+        #expect(abs(first.height - (24 + 28)) < 1, "first line \(first.height)")
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         let context = NSGraphicsContext(bitmapImageRep: rep)!
         NSGraphicsContext.saveGraphicsState()
@@ -143,38 +181,50 @@ import UncialCore
         layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
         NSGraphicsContext.restoreGraphicsState()
         func isRed(_ x: Int, _ y: Int) -> Bool { rep.colorAt(x: x, y: y).map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
-        #expect(isRed(20, 30) && isRed(40, 22) && isRed(20, 38))
-        #expect(!isRed(20, 8) && !isRed(20, 50) && !isRed(60, 30))
+        let top = Int(first.height - InlineStyle.imageGap / 2 - 20)
+        #expect(isRed(20, top + 2) && isRed(39, top + 10) && isRed(20, top + 18))
+        #expect(!isRed(20, top - 4) && !isRed(20, top + 24) && !isRed(60, top + 10))
     }
 
     @Test func tablesAlignByKerningAndStyleTheHeader() {
-        let inline = InlineStyle(style: style)
+        // Lines: "| a | **b** |" 0–12, "|:--|--:|" 14–22, "| cc | d |" 24–33, "| e | ffff |" 35–46.
         let text = storage("| a | **b** |\n|:--|--:|\n| cc | d |\n| e | ffff |")
+        let bold = NSFontManager.shared.convert(style.body, toHaveTrait: .boldFontMask)
         func kern(_ index: Int) -> CGFloat? { text.attribute(.kern, at: index, effectiveRange: nil) as? CGFloat }
-        #expect(kern(3) == inline.characterWidth)
-        #expect(kern(5) == 3 * inline.characterWidth)
-        #expect(kern(28) == nil && kern(30) == 3 * inline.characterWidth)
-        #expect(kern(38) == inline.characterWidth && kern(45) == nil)
+        let column0 = max(width(" a ", bold), width(" cc ", style.body), width(" e ", style.body))
+        let column1 = max(width(" b ", bold), width(" d ", style.body), width(" ffff ", style.body))
+        // Padding in points: after the last visible character (left), on the leading space (right).
+        #expect(abs((kern(3) ?? 0) - (column0 - width(" a ", bold))) < 0.01)
+        #expect(abs((kern(5) ?? 0) - (column1 - width(" b ", bold))) < 0.01)
+        #expect(kern(28) == nil && abs((kern(30) ?? 0) - (column1 - width(" d ", style.body))) < 0.01)
+        #expect(abs((kern(38) ?? 0) - (column0 - width(" e ", style.body))) < 0.01 && kern(45) == nil)
         #expect(font(text, 2).fontDescriptor.symbolicTraits.contains(.bold) && !font(text, 26).fontDescriptor.symbolicTraits.contains(.bold))
         #expect(color(text, 4) == style.muted && color(text, 0) == style.muted)
         #expect(decoration(text, 14) == "rule" && color(text, 14) == style.muted)
+        // A revealed row is raw and unpadded; the others keep their columns.
+        let shown = NSTextStorage(string: text.string, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text.string), to: shown, revealed: NSRange(location: 0, length: 14))
+        #expect(shown.attribute(.kern, at: 3, effectiveRange: nil) == nil)
+        #expect(shown.attribute(.kern, at: 30, effectiveRange: nil) as? CGFloat == kern(30))
     }
 
     @Test func footnotesAndHtmlAreStyled() {
         let text = storage("see[^1] <b>x</b>\n[^1]: note")
-        #expect(font(text, 5).pointSize == 10 && text.attribute(.baselineOffset, at: 5, effectiveRange: nil) as? CGFloat == 4)
+        #expect(font(text, 5).pointSize == 11 && text.attribute(.baselineOffset, at: 5, effectiveRange: nil) as? CGFloat == 5)
         #expect(color(text, 5) == style.accent && color(text, 3) == style.muted)
-        #expect(color(text, 8) == style.muted && font(text, 11).pointSize == 13)
+        #expect(color(text, 8) == style.muted && font(text, 11).pointSize == 16)
         #expect(color(text, 17) == style.muted && color(text, 23) == style.foreground)
     }
 
     @Test func fontsFollowTheTextSize() {
-        let big = EditorStyle(palette: nil, isDark: false, size: 26)
+        let big = EditorStyle(theme: .macOS, isDark: false, size: 26)
         #expect(big.regular.pointSize == 26 && big.bold.pointSize == 26 && big.italic.pointSize == 26)
-        let inline = InlineStyle(style: big)
-        #expect(inline.headingFont(level: 1).pointSize == 44 && inline.headingFont(level: 6).pointSize == 26)
-        #expect(inline.superscriptFont.pointSize == 20)
-        #expect(InlineStyle(style: EditorStyle(palette: nil, isDark: false)).headingFont(level: 1).pointSize == 22)
+        #expect(big.body.pointSize == 30 && big.heading(level: 1).pointSize == 52 && big.heading(level: 6).pointSize == 26)
+        #expect(big.codeFont(within: big.body).pointSize == 25.5)
+        let normal = EditorStyle(theme: .macOS, isDark: false)
+        #expect(normal.body.pointSize == 15 && normal.heading(level: 1).pointSize == 26 && normal.heading(level: 3).pointSize == 17)
+        #expect(NSFontManager.shared.weight(of: normal.heading(level: 1)) > NSFontManager.shared.weight(of: normal.heading(level: 3)))
+        #expect(EditorStyle(theme: .github, isDark: false).heading(level: 2).pointSize == 24)
     }
 
     @Test func htmlElementsAreStyledAndAligned() {
@@ -185,10 +235,10 @@ import UncialCore
         #expect(color(text, at("z")) == style.accent && text.attribute(.link, at: at("z"), effectiveRange: nil) as? String == "u")
         #expect(color(text, at("<b>")) == style.muted && color(text, at("<!--")) == style.muted && color(text, at("\\*")) == style.muted)
         #expect(paragraph(text, at("w"))?.alignment == .center && paragraph(text, at("x"))?.alignment != .center)
-        #expect(color(text, at("K1")) == style.code && text.attribute(.backgroundColor, at: at("K1"), effectiveRange: nil) != nil)
+        #expect(font(text, at("K1")).isFixedPitch && text.attribute(.backgroundColor, at: at("K1"), effectiveRange: nil) != nil)
         #expect(text.attribute(.backgroundColor, at: at("M1"), effectiveRange: nil) != nil && text.attribute(.backgroundColor, at: at("<mark>"), effectiveRange: nil) == nil)
-        #expect(font(text, at("S1")).pointSize == 10 && text.attribute(.baselineOffset, at: at("S1"), effectiveRange: nil) as? CGFloat == 4)
-        #expect(font(text, at("T1")).pointSize == InlineStyle.headingSizes[1])
+        #expect(font(text, at("S1")).pointSize == 11 && text.attribute(.baselineOffset, at: at("S1"), effectiveRange: nil) as? CGFloat == 5)
+        #expect(font(text, at("T1")).pointSize == 24)
     }
 
     @Test func layoutManagerDrawsTaskBoxesOnlyWhileHidden() {
@@ -215,26 +265,35 @@ import UncialCore
             NSGraphicsContext.restoreGraphicsState()
             return rep
         }
+        /// The middle of a line's fragment, found from its line break (hidden glyphs at a line start sit on the previous fragment).
+        func mid(_ line: Int) -> Int {
+            let newline = NSMaxRange(view.lineIndex.range(ofLine: line))
+            let glyph = layoutManager.glyphIndexForCharacter(at: min(newline, (view.string as NSString).length - 1))
+            return Int(layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil).midY + view.textContainerOrigin.y)
+        }
         let left = Int(view.textContainerOrigin.x)
-        func hasBlue(_ rep: NSBitmapImageRep, y: Int) -> Bool {
-            (16...34).contains { x in rep.colorAt(x: left + x, y: y).map { $0.blueComponent > 0.6 && $0.redComponent < 0.6 } ?? false }
+        func columns(_ rep: NSBitmapImageRep, y: Int, _ test: (NSColor) -> Bool) -> [Int] {
+            (0..<80).filter { x in rep.colorAt(x: left + x, y: y).map(test) ?? false }
         }
-        func isGreen(_ rep: NSBitmapImageRep, x: Int, y: Int) -> Bool {
-            rep.colorAt(x: x, y: y).map { $0.greenComponent > 0.9 && $0.redComponent < 0.1 } ?? false
-        }
+        let blue: (NSColor) -> Bool = { $0.blueComponent > 0.6 && $0.redComponent < 0.6 }
+        let green: (NSColor) -> Bool = { $0.greenComponent > 0.9 && $0.redComponent < 0.1 }
         let hidden = render()
-        let advance = InlineStyle(style: view.style).characterWidth
-        let middleX = left + Int(5 + 2.5 * advance)
-        #expect(hasBlue(hidden, y: 8))
-        #expect(isGreen(hidden, x: middleX, y: 20))
-        #expect(!isGreen(hidden, x: middleX, y: 8))
+        // Line 0: the outline's two sides; line 1: a filled square about 14 pt wide, after the bullet.
+        let sides = columns(hidden, y: mid(0), blue)
+        #expect(sides.count >= 2 && (sides.last ?? 0) - (sides.first ?? 0) > 10, "\(sides)")
+        // The white check mark cuts through the green at mid height, so the run is measured by its ends.
+        let filled = columns(hidden, y: mid(1), green)
+        #expect(filled.count >= 4 && (filled.last ?? 0) - (filled.first ?? 0) >= 9 && (filled.first ?? 0) > 5, "\(filled)")
+        #expect(columns(hidden, y: mid(0), green).isEmpty)
         view.setSelectedRange(NSRange(location: 6, length: 0))
         let revealed = render()
-        #expect(!hasBlue(revealed, y: 8))
-        #expect(isGreen(revealed, x: middleX, y: 20))
+        #expect(columns(revealed, y: mid(0), blue).isEmpty)
+        let still = columns(revealed, y: mid(1), green)
+        #expect(still.count >= 4 && (still.last ?? 0) - (still.first ?? 0) >= 9, "\(still)")
     }
 
     @Test func layoutManagerPaintsDecorationsBehindTheRightLines() {
+        // Lines end at 5, 9, 14, 18, 22, 26 (their line breaks) and 31 (the last character).
         let text = "plain\n```\ncode\n```\n> q\n---\nafter"
         let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
         InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage)
@@ -245,19 +304,20 @@ import UncialCore
         let container = NSTextContainer(size: NSSize(width: 200, height: 1000))
         layoutManager.addTextContainer(container)
         layoutManager.ensureLayout(for: container)
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 140, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         let context = NSGraphicsContext(bitmapImageRep: rep)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 200, height: 140).fill()
-        context.cgContext.translateBy(x: 0, y: 140)
+        NSRect(x: 0, y: 0, width: 200, height: 200).fill()
+        context.cgContext.translateBy(x: 0, y: 200)
         context.cgContext.scaleBy(x: 1, y: -1)
         layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
         NSGraphicsContext.restoreGraphicsState()
-        let lineHeight = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
+        let ends = [5, 9, 14, 18, 22, 26, 31]
         func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
-            rep.colorAt(x: Int(x), y: Int(lineHeight * (CGFloat(line) + fraction)))
+            let rect = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: ends[line]), effectiveRange: nil)
+            return rep.colorAt(x: Int(x), y: Int(rect.minY + rect.height * fraction))
         }
         func isRed(_ color: NSColor?) -> Bool { color.map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
         func isBlue(_ color: NSColor?) -> Bool { color.map { $0.blueComponent > 0.9 && $0.redComponent < 0.1 } ?? false }

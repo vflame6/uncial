@@ -33,33 +33,36 @@ import UncialCore
         return view.layoutManager!.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil).width
     }
 
+    /// The caret's line is raw (SF Mono, as in the source presentation) and every other line rendered.
     @Test func hidesMarkersExceptOnTheCaretLine() {
         let source = editor(sample, presentation: .source, caret: 32)
         let inline = editor(sample, presentation: .inline, caret: 32)
-        let advance = InlineStyle(style: inline.style).characterWidth
-        let hiddenHeading = width(inline, line: 0)
-        let hiddenBold = width(inline, line: 1)
-        #expect(abs(hiddenBold - (width(source, line: 1) - 4 * advance)) < 0.5)
-        #expect(abs(width(inline, line: 2) - width(source, line: 2)) < 0.5)
-        #expect(width(inline, line: 3) < width(source, line: 3) - 2 * advance)
         #expect(inline.revealed == NSRange(location: 30, length: 7))
+        #expect(abs(width(inline, line: 2) - width(source, line: 2)) < 0.5)
+        #expect(inline.markers.isHidden(0) && inline.markers.isHidden(16) && !inline.markers.isHidden(30))
+        let renderedHeading = width(inline, line: 0)
+        let renderedBold = width(inline, line: 1)
+        #expect(abs(renderedBold - width(source, line: 1)) > 0.5)
+        #expect(!(inline.textStorage!.attribute(.font, at: 11, effectiveRange: nil) as! NSFont).isFixedPitch)
+        #expect((inline.textStorage!.attribute(.font, at: 30, effectiveRange: nil) as! NSFont).isFixedPitch)
 
         inline.setSelectedRange(NSRange(location: 20, length: 0))
         layout(inline)
         #expect(inline.revealed == NSRange(location: 11, length: 19))
         #expect(abs(width(inline, line: 1) - width(source, line: 1)) < 0.5)
-        #expect(abs(width(inline, line: 0) - hiddenHeading) < 0.5)
+        #expect(abs(width(inline, line: 0) - renderedHeading) < 0.5)
+        #expect((inline.textStorage!.attribute(.font, at: 11, effectiveRange: nil) as! NSFont).isFixedPitch)
 
         inline.setSelectedRange(NSRange(location: 2, length: 0))
         layout(inline)
-        #expect(width(inline, line: 0) > hiddenHeading + 2 * advance)
-        #expect(abs(width(inline, line: 1) - hiddenBold) < 0.5)
+        #expect(abs(width(inline, line: 0) - width(source, line: 0)) < 0.5)
+        #expect(abs(width(inline, line: 1) - renderedBold) < 0.5)
 
         inline.setSelectedRange(NSRange(location: 43, length: 0))
         layout(inline)
         #expect(inline.revealed == NSRange(location: 37, length: 17))
         #expect(abs(width(inline, line: 3) - width(source, line: 3)) < 0.5)
-        #expect(abs(width(inline, line: 0) - hiddenHeading) < 0.5)
+        #expect(abs(width(inline, line: 0) - renderedHeading) < 0.5)
     }
 
     @Test func drawsBulletsAndSwitchesBack() {
@@ -82,20 +85,23 @@ import UncialCore
         layoutManager.codeBackground = .red
         layoutManager.lineColor = .blue
         layout(inline)
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 300, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
         let context = NSGraphicsContext(bitmapImageRep: rep)!
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 400, height: 200).fill()
-        context.cgContext.translateBy(x: 0, y: 200)
+        NSRect(x: 0, y: 0, width: 400, height: 300).fill()
+        context.cgContext.translateBy(x: 0, y: 300)
         context.cgContext.scaleBy(x: 1, y: -1)
         layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
         NSGraphicsContext.restoreGraphicsState()
-        let lineHeight = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil).height
         let left = inline.textContainerOrigin.x
+        // Lines differ in height now (code is smaller), so each is found from its line break.
         func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
-            rep.colorAt(x: Int(left + x), y: Int(lineHeight * (CGFloat(line) + fraction)))
+            let newline = NSMaxRange(inline.lineIndex.range(ofLine: line))
+            let glyph = layoutManager.glyphIndexForCharacter(at: min(newline, (text as NSString).length - 1))
+            let rect = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            return rep.colorAt(x: Int(left + x), y: Int(inline.textContainerOrigin.y + rect.minY + rect.height * fraction))
         }
         func isRed(_ color: NSColor?) -> Bool { color.map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
         func isBlue(_ color: NSColor?) -> Bool { color.map { $0.blueComponent > 0.9 && $0.redComponent < 0.1 } ?? false }
@@ -210,15 +216,18 @@ import UncialCore
         #expect((storage.attribute(.inlineImage, at: 34, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 100, height: 40))
         #expect(storage.attribute(.blockDecoration, at: 6, effectiveRange: nil) == nil)
         layout(inline)
-        let lineHeight = inline.layoutManager!.lineFragmentUsedRect(forGlyphAt: 0, effectiveRange: nil).height
+        // A rendered line's height ("after"; the caret's line is raw and shorter).
+        let lineHeight = inline.layoutManager!.lineFragmentRect(forGlyphAt: inline.layoutManager!.glyphIndexForCharacter(at: 37), effectiveRange: nil).height
         let height = inline.layoutManager!.usedRect(for: inline.textContainer!).height
         // intro, the block's one blank line, after: three lines plus the picture and its gap.
         #expect(height > 2.5 * lineHeight + 40 && height < 3.5 * lineHeight + 40 + InlineStyle.imageGap, "height \(height) for lines of \(lineHeight)")
-        // The caret inside the block reveals the source and drops the picture.
+        // The caret inside the block reveals the source (the raw look, no decoration) and drops the picture.
         inline.setSelectedRange(NSRange(location: 17, length: 0))
         #expect(inline.revealed == NSRange(location: 6, length: 29))
         #expect(storage.attribute(.inlineImage, at: 34, effectiveRange: nil) == nil)
-        #expect(storage.attribute(.blockDecoration, at: 6, effectiveRange: nil) as? String == "code")
+        #expect(storage.attribute(.blockDecoration, at: 6, effectiveRange: nil) == nil)
+        #expect((storage.attribute(.font, at: 17, effectiveRange: nil) as? NSFont) == inline.style.regular)
+        #expect((storage.attribute(.foregroundColor, at: 17, effectiveRange: nil) as? NSColor) == inline.style.code)
         #expect(inline.resolvedDiagrams.isEmpty && requests.count == 1)
         // Leaving brings the picture back from the cache.
         inline.setSelectedRange(NSRange(location: 37, length: 0))
@@ -246,7 +255,7 @@ import UncialCore
         inline.replaceText(with: "intro\nSay $x^2$ now\n$$\ny\n$$\nafter")
         inline.setSelectedRange(NSRange(location: 0, length: 0))
         #expect(inline.resolvedMath.isEmpty)
-        #expect(requests.map(\.tex) == ["x^2", "y"] && requests.map(\.display) == [false, true] && requests.first?.fontSize == 13)
+        #expect(requests.map(\.tex) == ["x^2", "y"] && requests.map(\.display) == [false, true] && requests.first?.fontSize == inline.style.body.pointSize)
         try await Task.sleep(for: .milliseconds(200))
         #expect(inline.resolvedMath == [10: 10, 20: 25])
         #expect(inline.markers.isAnchor(10) && inline.markers.isHidden(11) && inline.markers.isHidden(14) && !inline.markers.isHidden(15))
@@ -271,10 +280,11 @@ import UncialCore
         inline.setSelectedRange(NSRange(location: 8, length: 0))
         #expect(inline.resolvedMath == [20: 25] && !inline.markers.isAnchor(10) && inline.markers.isHidden(10) && !inline.markers.isHidden(11))
         #expect(storage.attribute(.mathPicture, at: 10, effectiveRange: nil) == nil)
-        // Inside the block the whole block is source again, and the other formula a picture.
+        // Inside the block the whole block is source again (the raw look), and the other formula a picture.
         inline.setSelectedRange(NSRange(location: 23, length: 0))
         #expect(inline.revealed == NSRange(location: 20, length: 8) && inline.resolvedMath == [10: 10])
-        #expect(storage.attribute(.blockDecoration, at: 23, effectiveRange: nil) as? String == "code")
+        #expect(storage.attribute(.blockDecoration, at: 23, effectiveRange: nil) == nil)
+        #expect((storage.attribute(.font, at: 23, effectiveRange: nil) as? NSFont) == inline.style.regular)
         #expect(storage.attribute(.mathPicture, at: 25, effectiveRange: nil) == nil)
         // Leaving brings both back from the cache.
         inline.setSelectedRange(NSRange(location: 30, length: 0))
@@ -319,7 +329,7 @@ import UncialCore
         layout(inline)
         #expect(inline.markers.isHidden(0) && !inline.markers.isHidden(15))
         #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 18)
-        #expect(inline.textStorage!.attribute(.paragraphStyle, at: 15, effectiveRange: nil) == nil)
+        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 15, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
     }
 
     @Test func centersAReadableColumn() {
@@ -340,9 +350,12 @@ import UncialCore
         let inline = editor(text, presentation: .inline, caret: 36)
         let layoutManager = inline.layoutManager!
         func x(_ index: Int) -> CGFloat { layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: index)).x }
-        #expect(abs(x(4) - x(29)) < 0.5)
-        #expect(x(29) > x(28) && x(4) > x(3) + 1.5 * InlineStyle(style: inline.style).characterWidth)
-        #expect(width(inline, line: 1) < width(inline, line: 0) - 2 * InlineStyle(style: inline.style).characterWidth)
+        // The pipes after column 0 line up across rows, padded in points behind the shorter cell.
+        #expect(abs(x(4) - x(29)) < 1, "\(x(4)) vs \(x(29))")
+        let space = InlineStyle.width(of: " ", in: inline.style.body)
+        #expect(x(29) > x(28) && x(4) > x(3) + 2 * space)
+        // The delimiter row is hidden whole: only the container's padding remains.
+        #expect(width(inline, line: 1) <= 2 * inline.textContainer!.lineFragmentPadding + 0.5)
     }
 
     @Test func plainClickOnALinkPlacesTheCaret() {

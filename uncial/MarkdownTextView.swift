@@ -6,8 +6,7 @@ import UncialCore
 /// Markdown-aware coloring, optional line numbers, and scroll reporting for Split View sync.
 struct MarkdownTextView: NSViewRepresentable {
     let text: String
-    let palette: EditorPalette?
-    /// Colors and cache key for the diagrams drawn in Live Preview.
+    /// Colors, fonts and the cache key of the diagrams drawn in Live Preview.
     let theme: Theme
     /// Body size in points (headings scale from it).
     let fontSize: CGFloat
@@ -75,7 +74,6 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.theme = theme
         textView.string = text
         textView.fontSize = fontSize
-        textView.palette = palette
         scrollView.documentView = textView
         scrollView.hasVerticalRuler = true
         scrollView.verticalRulerView = LineNumberRulerView(textView: textView, scrollView: scrollView)
@@ -94,9 +92,6 @@ struct MarkdownTextView: NSViewRepresentable {
         context.coordinator.onChange = onChange
         context.coordinator.onScroll = onScroll
         textView.fontSize = fontSize
-        if textView.palette != palette {
-            textView.palette = palette
-        }
         if scrollView.rulersVisible != showsLineNumbers {
             scrollView.rulersVisible = showsLineNumbers
         }
@@ -178,10 +173,6 @@ final class ThemedTextView: NSTextView {
         return textView
     }
 
-    var palette: EditorPalette? {
-        didSet { if palette != oldValue { applyStyle() } }
-    }
-
     /// Body size in points; 13 is the system size.
     var fontSize: CGFloat = 13 {
         didSet { if fontSize != oldValue { applyStyle() } }
@@ -189,7 +180,9 @@ final class ThemedTextView: NSTextView {
 
     /// Set while `scroll(toLine:)` moves the view so the bounds change is not reported as user scrolling.
     private(set) var isProgrammaticScroll = false
-    private(set) var style = EditorStyle(palette: nil, isDark: false)
+    private(set) var style = EditorStyle(theme: .default, isDark: false)
+    /// Set while `rehighlight()` runs: a selection change it causes must not start another pass.
+    private var isRehighlighting = false
     private(set) var lineIndex = LineIndex(text: "")
     private var lineNumberView: LineNumberRulerView? { enclosingScrollView?.verticalRulerView as? LineNumberRulerView }
 
@@ -205,7 +198,7 @@ final class ThemedTextView: NSTextView {
 
     private func applyStyle() {
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        style = EditorStyle(palette: palette, syntax: theme.syntaxPalette, isDark: isDark, size: fontSize)
+        style = EditorStyle(theme: theme, isDark: isDark, size: fontSize)
         backgroundColor = style.background
         insertionPointColor = style.foreground
         enclosingScrollView?.backgroundColor = style.background
@@ -214,6 +207,7 @@ final class ThemedTextView: NSTextView {
             layoutManager.codeBackground = InlineStyle(style: style).codeBackground
             layoutManager.lineColor = style.muted
             layoutManager.accent = style.accent
+            layoutManager.separatorColor = style.muted.withAlphaComponent(0.35)
         }
         rehighlight()
     }
@@ -232,10 +226,15 @@ final class ThemedTextView: NSTextView {
     }
 
     /// Re-applies base attributes and, per presentation, the Markdown coloring or the inline
-    /// rendering, then the code inside fenced blocks (`CodeSyntaxStyle`). Attribute-only, so undo is untouched. Inline: every glyph is invalidated so markers
-    /// that appeared or vanished anywhere are hidden or shown correctly (regenerated lazily).
+    /// rendering (the page's look outside the revealed lines, the source look inside them), then the
+    /// code inside fenced blocks (`CodeSyntaxStyle`). Attribute-only, so undo is untouched. Inline:
+    /// every glyph is invalidated so markers that appeared or vanished anywhere are hidden or shown
+    /// correctly (regenerated lazily), and the same pass runs when the caret moves to another
+    /// paragraph, since the raw look moves with it.
     func rehighlight() {
-        guard let textStorage else { return }
+        guard let textStorage, !isRehighlighting else { return }
+        isRehighlighting = true
+        defer { isRehighlighting = false }
         let text = string
         lineIndex = LineIndex(text: text)
         let full = NSRange(location: 0, length: textStorage.length)
@@ -262,6 +261,7 @@ final class ThemedTextView: NSTextView {
                 resolvedMath = resolved.math
                 markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, pictureBlocks: resolved.pictureBlocks,
                                       resolvedDiagrams: resolvedDiagrams, resolvedMath: resolvedMath)
+                revealed = markers.revealedRange(for: selectedRange(), in: text as NSString)
             }
             CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)
         } else {
@@ -274,8 +274,7 @@ final class ThemedTextView: NSTextView {
         }
         textStorage.endEditing()
         typingAttributes = style.baseAttributes
-        if hadMarkers || markers != .empty {
-            revealed = markers.revealedRange(for: selectedRange(), in: currentText)
+        if presentation == .inline || hadMarkers {
             layoutManager?.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
             layoutManager?.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
         }
@@ -358,24 +357,15 @@ final class ThemedTextView: NSTextView {
     }
     private var bulletCache: (font: NSFont, glyph: CGGlyph?)?
 
-    private func updateReveal() {
-        guard presentation == .inline, markers != .empty, let layoutManager else { return }
+    /// The raw look follows the caret: when it enters another paragraph, the paragraph it left goes
+    /// back to the rendered look and the new one to the source look, which is the same attribute
+    /// pass as after an edit. Not while a drag is still selecting.
+    private func updateReveal(stillSelecting: Bool = false) {
+        guard presentation == .inline, !stillSelecting, !isRehighlighting, let textStorage,
+              textStorage.length <= Self.highlightingLimit else { return }
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
-        let previous = revealed
-        if markers.hasPicture(touching: previous) || markers.hasPicture(touching: next) {
-            // The picture gives way to the source and back: attributes, not just glyphs, change.
-            rehighlight()
-            return
-        }
-        revealed = next
-        let whole = NSRange(location: 0, length: currentText.length)
-        for range in [previous, next] {
-            let clamped = NSIntersectionRange(range, whole)
-            guard clamped.length > 0 else { continue }
-            layoutManager.invalidateGlyphs(forCharacterRange: clamped, changeInLength: 0, actualCharacterRange: nil)
-            layoutManager.invalidateLayout(forCharacterRange: clamped, actualCharacterRange: nil)
-        }
+        rehighlight()
     }
 
     /// Local images load right away; http(s) ones are fetched once through `remoteImageLoader` (only
@@ -436,7 +426,7 @@ final class ThemedTextView: NSTextView {
     /// starts the drawing and re-renders the text when it lands (one pass however many land
     /// together). Every outcome is cached, misses too.
     func picture(forMath tex: String, display: Bool) -> MathPicture? {
-        let request = MathRequest(tex: tex, display: display, theme: theme, dark: style.isDark, fontSize: style.regular.pointSize)
+        let request = MathRequest(tex: tex, display: display, theme: theme, dark: style.isDark, fontSize: style.body.pointSize)
         if let cached = mathCache[request] { return cached }
         guard !pendingMath.contains(request) else { return nil }
         pendingMath.insert(request)
@@ -606,7 +596,7 @@ final class ThemedTextView: NSTextView {
         if !isApplyingPairEdit, let range = ranges.first?.rangeValue {
             pairing.selectionChanged(to: range)
         }
-        updateReveal()
+        updateReveal(stillSelecting: stillSelectingFlag)
     }
 
     /// Every character change NSTextView makes for the user (typing, paste, delete, drag, undo, find

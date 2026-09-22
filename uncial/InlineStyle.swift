@@ -2,7 +2,8 @@ import AppKit
 import UncialCore
 
 extension NSAttributedString.Key {
-    /// Paragraph decoration drawn by `InlineLayoutManager`: "code", "quote:N" or "rule".
+    /// Paragraph decoration drawn by `InlineLayoutManager`: "code", "quote:N", "rule" or "heading"
+    /// (a divider under an h1 or h2, as the page draws).
     static let blockDecoration = NSAttributedString.Key("uncialBlockDecoration")
     /// A task box `[ ]`/`[x]` drawn by `InlineLayoutManager`: "unchecked" or "checked".
     static let taskBox = NSAttributedString.Key("uncialTaskBox")
@@ -44,15 +45,21 @@ final class MathPicture: NSObject {
     }
 }
 
-/// Attributes for the inline presentation: headings sized, markers muted, code on a background,
-/// list items hanging, quotes indented behind a border, links in the accent color. Attribute-only,
-/// so undo never sees it; the fonts stay SF Mono.
+/// Attributes for the inline presentation. Outside the revealed lines the text takes the rendered
+/// page's look (`EditorStyle.renderedAttributes`): the theme's body font and line height, headings
+/// at the page's sizes with a divider under h1 and h2, code in the mono font at 85% on a background,
+/// list items hanging by their marker's width, quotes indented behind a border, links in the accent
+/// color, markers muted (and hidden by `ThemedTextView`). The revealed lines, the caret's paragraph
+/// or its fenced block, keep the source look: SF Mono and the source presentation's coloring, no
+/// decorations, no pictures. Attribute-only, so undo never sees it.
 struct InlineStyle {
-    static let headingSizes: [CGFloat] = [22, 19, 16, 14, 13, 13]
     static let quoteIndent: CGFloat = 16
     static let codeIndent: CGFloat = 12
+    /// Room a task box gets on its line: the square plus a little air on each side.
+    static let taskBoxWidth: CGFloat = 18
     static let maximumImageHeight: CGFloat = 480
     static let maximumDiagramHeight: CGFloat = 800
+    /// Room kept between a paragraph's last line and the image drawn under it.
     static let imageGap: CGFloat = 8
     /// Room kept between a formula's picture and the lines around it.
     static let mathGap: CGFloat = 2
@@ -90,6 +97,7 @@ struct InlineStyle {
     }
 
     let style: EditorStyle
+    /// The advance of one character of the mono font.
     let characterWidth: CGFloat
 
     var codeBackground: NSColor { style.foreground.withAlphaComponent(0.06) }
@@ -110,8 +118,14 @@ struct InlineStyle {
         return CTFontGetAdvancesForGlyphs(font as CTFont, .horizontal, &glyphs, &advances, glyphs.count)
     }
 
+    /// The width `text` takes laid out in `font`: what indents and table padding are measured in.
+    static func width(of text: String, in font: NSFont) -> CGFloat {
+        guard !text.isEmpty else { return 0 }
+        return (text as NSString).size(withAttributes: [.font: font]).width
+    }
+
     func headingFont(level: Int) -> NSFont {
-        NSFont.monospacedSystemFont(ofSize: Self.headingSizes[max(1, min(level, 6)) - 1] * style.scale, weight: .bold)
+        style.heading(level: level)
     }
 
     /// `storage` must already carry the base attributes for its whole text. `images` loads an
@@ -123,11 +137,31 @@ struct InlineStyle {
                diagrams: (String) -> NSImage? = { _ in nil }, math: (String, Bool) -> MathPicture? = { _, _ in nil },
                revealed: NSRange = NSRange(location: 0, length: 0), textWidth: CGFloat = .greatestFiniteMagnitude) -> Resolved {
         let text = storage.string as NSString
-        for token in tokens {
+        // The rendered look everywhere but the revealed lines, which keep the source look and get
+        // the source presentation's coloring.
+        for range in Self.complement(of: revealed, in: NSRange(location: 0, length: text.length)) where range.length > 0 {
+            storage.addAttributes(style.renderedAttributes, range: range)
+        }
+        if revealed.length > 0 {
+            for span in MarkdownHighlighter.spans(from: tokens) where NSLocationInRange(span.range.location, revealed) && NSMaxRange(span.range) <= text.length {
+                storage.addAttributes(style.attributes(for: span.kind), range: span.range)
+            }
+        }
+        for token in tokens where !NSLocationInRange(token.range.location, revealed) {
             let paragraph = text.paragraphRange(for: token.range)
             switch token.kind {
             case .heading(let level):
-                storage.addAttributes([.font: headingFont(level: level), .foregroundColor: level == 6 ? style.muted : style.foreground], range: token.range)
+                let font = headingFont(level: level)
+                let spaced = mutableParagraphStyle(at: paragraph.location, in: storage)
+                spaced.lineHeightMultiple = style.lineHeightMultiple(for: font, lineHeight: PageTypography.headingLineHeight)
+                var attributes: [NSAttributedString.Key: Any] = [.paragraphStyle: spaced]
+                if level <= 2 {
+                    // The page draws a divider under h1 and h2, with a little padding above it.
+                    spaced.paragraphSpacing = (font.pointSize * 0.3).rounded()
+                    attributes[.blockDecoration] = "heading"
+                }
+                storage.addAttributes(attributes, range: paragraph)
+                storage.addAttributes([.font: font, .foregroundColor: level == 6 ? style.muted : style.foreground], range: token.range)
             case .strong:
                 addTrait(.boldFontMask, to: storage, in: token.range)
             case .emphasis:
@@ -135,9 +169,10 @@ struct InlineStyle {
             case .strikethrough:
                 storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: token.range)
             case .inlineCode:
+                // Mono at 85% of the surrounding text, in the text's color, like the page's `code`.
                 // The tint stays off the backticks: a hidden marker at a paragraph start is laid out at
                 // the end of the previous line, and a background there would fill that line to its edge.
-                storage.addAttribute(.foregroundColor, value: style.code, range: token.range)
+                storage.addAttribute(.font, value: style.codeFont(within: font(at: token.range.location, in: storage)), range: token.range)
                 let open = token.markers.first?.length ?? 0
                 let close = token.markers.last?.length ?? 0
                 let content = NSRange(location: token.range.location + open, length: max(0, token.range.length - open - close))
@@ -146,18 +181,24 @@ struct InlineStyle {
                 storage.addAttributes([.foregroundColor: style.accent, .link: destination], range: token.range)
             case .image:
                 storage.addAttribute(.foregroundColor, value: style.accent, range: token.range)
-            case .listItem(_, let box):
-                storage.addAttribute(.foregroundColor, value: style.accent, range: token.range)
+            case .listItem(let bullet, let box):
+                // The item hangs by the width of its visible prefix (indentation, bullet or number,
+                // and a task box's room); the box's brackets are hidden and its middle character is
+                // kerned out to the box's width.
+                var hanging = Self.width(of: visiblePrefix(of: token, bullet: bullet, box: box, from: paragraph.location, in: text), in: style.body)
                 if let box {
                     let checked = text.character(at: box.location + 1) != 0x20
                     storage.addAttribute(.taskBox, value: checked ? "checked" : "unchecked", range: box)
+                    let middle = NSRange(location: box.location + 1, length: 1)
+                    let kern = max(0, Self.taskBoxWidth - Self.width(of: text.substring(with: middle), in: style.body))
+                    storage.addAttribute(.kern, value: kern, range: middle)
+                    hanging += kern
                 }
-                // The box's brackets are hidden, so the visible prefix is two characters shorter.
-                let hanging = NSMutableParagraphStyle()
-                hanging.headIndent = characterWidth * CGFloat(token.range.length - (box == nil ? 0 : 2))
-                storage.addAttribute(.paragraphStyle, value: hanging, range: paragraph)
+                let hangingStyle = mutableParagraphStyle(at: paragraph.location, in: storage)
+                hangingStyle.headIndent = hanging
+                storage.addAttribute(.paragraphStyle, value: hangingStyle, range: paragraph)
             case .quote(let depth):
-                let indented = NSMutableParagraphStyle()
+                let indented = mutableParagraphStyle(at: paragraph.location, in: storage)
                 indented.firstLineHeadIndent = Self.quoteIndent * CGFloat(depth)
                 indented.headIndent = indented.firstLineHeadIndent
                 storage.addAttributes([.paragraphStyle: indented, .blockDecoration: "quote:\(depth)", .foregroundColor: style.muted], range: paragraph)
@@ -165,7 +206,9 @@ struct InlineStyle {
                 storage.addAttributes([.blockDecoration: "rule", .foregroundColor: style.muted], range: paragraph)
             case .footnoteReference:
                 let label = NSRange(location: token.range.location + 2, length: token.range.length - 3)
-                storage.addAttributes([.font: superscriptFont, .baselineOffset: CGFloat(4), .foregroundColor: style.accent], range: label)
+                var attributes = style.scriptAttributes(within: font(at: label.location, in: storage))
+                attributes[.foregroundColor] = style.accent
+                storage.addAttributes(attributes, range: label)
             case .footnoteDefinition, .linkDefinition:
                 storage.addAttribute(.foregroundColor, value: style.muted, range: token.range)
             case .html(let element, let attributes):
@@ -180,40 +223,80 @@ struct InlineStyle {
                     addTrait(.boldFontMask, to: storage, in: token.range)
                 }
             case .fence, .code, .mathFence:
-                let inset = NSMutableParagraphStyle()
+                let codeFont = style.codeFont(within: style.body)
+                let inset = mutableParagraphStyle(at: paragraph.location, in: storage)
+                inset.lineHeightMultiple = style.lineHeightMultiple(for: codeFont, lineHeight: PageTypography.codeLineHeight)
                 inset.firstLineHeadIndent = Self.codeIndent
                 inset.headIndent = Self.codeIndent
-                storage.addAttributes([.paragraphStyle: inset, .blockDecoration: "code"], range: paragraph)
-                storage.addAttribute(.foregroundColor, value: token.kind == .code ? style.code : style.muted, range: token.range)
+                storage.addAttributes([.paragraphStyle: inset, .blockDecoration: "code", .font: codeFont], range: paragraph)
+                storage.addAttribute(.foregroundColor, value: token.kind == .code ? style.foreground : style.muted, range: token.range)
             case .math(let display):
+                let codeFont = style.codeFont(within: display && token.markers.isEmpty ? style.body : font(at: token.range.location, in: storage))
                 if display, token.markers.isEmpty {
-                    let inset = NSMutableParagraphStyle()
+                    let inset = mutableParagraphStyle(at: paragraph.location, in: storage)
+                    inset.lineHeightMultiple = style.lineHeightMultiple(for: codeFont, lineHeight: PageTypography.codeLineHeight)
                     inset.firstLineHeadIndent = Self.codeIndent
                     inset.headIndent = Self.codeIndent
                     storage.addAttributes([.paragraphStyle: inset, .blockDecoration: "code"], range: paragraph)
                 }
-                storage.addAttribute(.foregroundColor, value: style.code, range: token.range)
+                storage.addAttributes([.font: codeFont, .foregroundColor: style.code], range: token.range)
             case .frontMatter:
-                storage.addAttribute(.foregroundColor, value: style.muted, range: token.range)
+                storage.addAttributes([.font: style.codeFont(within: style.body), .foregroundColor: style.muted], range: token.range)
             }
             for marker in token.markers {
                 storage.addAttribute(.foregroundColor, value: style.muted, range: marker)
             }
         }
-        alignTables(tokens, in: storage)
+        alignTables(tokens, in: storage, revealed: revealed)
         let blocks = Self.fencedBlocks(in: tokens, text: text)
-        return Resolved(images: reserveImages(tokens, in: storage, images: images, textWidth: textWidth),
+        return Resolved(images: reserveImages(tokens, in: storage, images: images, revealed: revealed, textWidth: textWidth),
                         diagrams: reserveDiagrams(blocks, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth),
                         math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth),
                         pictureBlocks: blocks.filter { $0.isDiagram || $0.isMath }.map(\.range))
     }
 
-    /// Whether the revealed range reaches into `range`.
-    private static func touches(_ revealed: NSRange, _ range: NSRange) -> Bool {
-        NSIntersectionRange(range, revealed).length > 0 || NSLocationInRange(revealed.location, range)
+    /// The parts of `whole` outside `range`: where the rendered look goes.
+    static func complement(of range: NSRange, in whole: NSRange) -> [NSRange] {
+        let clamped = NSIntersectionRange(range, whole)
+        guard clamped.length > 0 else { return [whole] }
+        return [NSRange(location: whole.location, length: clamped.location - whole.location),
+                NSRange(location: NSMaxRange(clamped), length: NSMaxRange(whole) - NSMaxRange(clamped))]
     }
 
-    var superscriptFont: NSFont { NSFont.monospacedSystemFont(ofSize: 10 * style.scale, weight: .bold) }
+    /// Whether the revealed range reaches into `range`; an empty one (nothing revealed) never does.
+    private static func touches(_ revealed: NSRange, _ range: NSRange) -> Bool {
+        revealed.length > 0 && (NSIntersectionRange(range, revealed).length > 0 || NSLocationInRange(revealed.location, range))
+    }
+
+    private func font(at index: Int, in storage: NSTextStorage) -> NSFont {
+        guard index < storage.length else { return style.body }
+        return storage.attribute(.font, at: index, effectiveRange: nil) as? NSFont ?? style.body
+    }
+
+    /// A copy of the paragraph style in force at `index` (the rendered base, or what an earlier token set).
+    private func mutableParagraphStyle(at index: Int, in storage: NSTextStorage) -> NSMutableParagraphStyle {
+        guard index < storage.length,
+              let existing = storage.attribute(.paragraphStyle, at: index, effectiveRange: nil) as? NSParagraphStyle,
+              let copy = existing.mutableCopy() as? NSMutableParagraphStyle else {
+            return style.paragraphStyle(for: style.body, lineHeight: style.typography.lineHeight)
+        }
+        return copy
+    }
+
+    /// A list item's prefix as it shows: from the line start through the marker and its spacing,
+    /// without a task box's brackets, the bullet as the bullet glyph it is drawn with.
+    private func visiblePrefix(of token: MarkdownHighlighter.Token, bullet: Int?, box: NSRange?, from lineStart: Int, in text: NSString) -> String {
+        var prefix = ""
+        for index in lineStart..<NSMaxRange(token.range) {
+            if let box, index == box.location || index == NSMaxRange(box) - 1 { continue }
+            if index == bullet {
+                prefix.append("•")
+            } else {
+                prefix.append(Character(UnicodeScalar(text.character(at: index)) ?? " "))
+            }
+        }
+        return prefix
+    }
 
     /// What HTML can look like in a text view: the common inline tags map to font traits, colors
     /// and offsets on the element's content, `align` and `<center>` set the paragraph's alignment,
@@ -243,13 +326,13 @@ struct InlineStyle {
         case "s", "del", "strike":
             storage.addAttribute(.strikethroughStyle, value: NSUnderlineStyle.single.rawValue, range: content)
         case "code", "kbd", "samp", "tt":
-            storage.addAttributes([.foregroundColor: style.code, .backgroundColor: codeBackground], range: content)
+            storage.addAttributes([.font: style.codeFont(within: font(at: content.location, in: storage)), .backgroundColor: codeBackground], range: content)
         case "mark":
             storage.addAttribute(.backgroundColor, value: style.accent.withAlphaComponent(0.25), range: content)
         case "sup":
-            storage.addAttributes([.font: superscriptFont, .baselineOffset: CGFloat(4)], range: content)
+            storage.addAttributes(style.scriptAttributes(within: font(at: content.location, in: storage)), range: content)
         case "sub":
-            storage.addAttributes([.font: superscriptFont, .baselineOffset: CGFloat(-3)], range: content)
+            storage.addAttributes(style.scriptAttributes(within: font(at: content.location, in: storage), lowered: true), range: content)
         case "a":
             storage.addAttribute(.foregroundColor, value: style.accent, range: content)
             if let destination = attributes["href"], !destination.isEmpty {
@@ -264,38 +347,109 @@ struct InlineStyle {
     }
 
     private func setAlignment(_ alignment: NSTextAlignment, of paragraph: NSRange, in storage: NSTextStorage) {
-        let existing = storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle
-        let aligned = (existing?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+        let aligned = mutableParagraphStyle(at: paragraph.location, in: storage)
         aligned.alignment = alignment
         storage.addAttribute(.paragraphStyle, value: aligned, range: paragraph)
     }
 
-    /// Pads every cell to its column's width with kerning: after the cell's last visible character
-    /// for left alignment, after its leading space for right, split for center. SF Mono makes the
-    /// padding an exact number of character cells.
-    private func alignTables(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage) {
+    /// Pads every cell of a rendered row to its column's width with kerning, in points: after the
+    /// cell's last visible character for left alignment, after its leading space for right, split
+    /// for center. Column widths come from every row's rendered width, revealed rows included, so
+    /// the caret entering a row moves nothing else.
+    private func alignTables(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, revealed: NSRange) {
         let markers = MarkerIndex(tokens: tokens)
         let text = storage.string as NSString
-        for token in tokens {
-            guard case .tableRow(let cells, _, _) = token.kind else { continue }
-            for cell in cells {
-                let padding = cell.columnWidth - cell.visibleWidth
-                guard padding > 0 else { continue }
-                let before: Int
-                switch cell.alignment {
-                case .left: before = 0
-                case .right: before = padding
-                case .center: before = padding / 2
-                }
-                let after = padding - before
-                if after > 0, let last = lastVisibleCharacter(in: cell.range, markers: markers) {
-                    storage.addAttribute(.kern, value: characterWidth * CGFloat(after), range: NSRange(location: last, length: 1))
-                }
-                if before > 0, cell.range.length > 0, text.character(at: cell.range.location) == 0x20, !markers.isHidden(cell.range.location) {
-                    storage.addAttribute(.kern, value: characterWidth * CGFloat(before), range: NSRange(location: cell.range.location, length: 1))
+        for table in Self.tables(in: tokens) {
+            let widths = table.map { row in row.cells.map { renderedWidth(of: $0, header: row.isHeader, in: row.range, tokens: tokens, markers: markers, text: text) } }
+            let columns = widths.map(\.count).max() ?? 0
+            let columnWidths = (0..<columns).map { column in widths.compactMap { $0.indices.contains(column) ? $0[column] : nil }.max() ?? 0 }
+            for (row, rowWidths) in zip(table, widths) where !NSLocationInRange(row.range.location, revealed) {
+                for (cell, width) in zip(row.cells, rowWidths) {
+                    guard let index = row.cells.firstIndex(where: { $0.range == cell.range }) else { continue }
+                    let padding = columnWidths[index] - width
+                    guard padding > 0.5 else { continue }
+                    let before: CGFloat
+                    switch cell.alignment {
+                    case .left: before = 0
+                    case .right: before = padding
+                    case .center: before = (padding / 2).rounded()
+                    }
+                    let after = padding - before
+                    if after > 0, let last = lastVisibleCharacter(in: cell.range, markers: markers) {
+                        storage.addAttribute(.kern, value: after, range: NSRange(location: last, length: 1))
+                    }
+                    if before > 0, cell.range.length > 0, text.character(at: cell.range.location) == 0x20, !markers.isHidden(cell.range.location) {
+                        storage.addAttribute(.kern, value: before, range: NSRange(location: cell.range.location, length: 1))
+                    }
                 }
             }
         }
+    }
+
+    private struct TableRow {
+        let range: NSRange
+        let cells: [MarkdownHighlighter.TableCell]
+        let isHeader: Bool
+    }
+
+    /// Rows on consecutive lines (with the delimiter between them) form one table.
+    private static func tables(in tokens: [MarkdownHighlighter.Token]) -> [[TableRow]] {
+        var tables: [[TableRow]] = []
+        var current: [TableRow] = []
+        var lastEnd = Int.min
+        for token in tokens {
+            switch token.kind {
+            case .tableRow(let cells, let isHeader, _):
+                if token.range.location != lastEnd + 1, !current.isEmpty {
+                    tables.append(current)
+                    current = []
+                }
+                current.append(TableRow(range: token.range, cells: cells, isHeader: isHeader))
+                lastEnd = NSMaxRange(token.range)
+            case .tableDelimiter:
+                lastEnd = NSMaxRange(token.range)
+            default:
+                continue
+            }
+        }
+        if !current.isEmpty { tables.append(current) }
+        return tables
+    }
+
+    /// The width a cell takes once rendered: its visible characters in the body font, bold in the
+    /// header row or inside `**…**`, the mono code font inside backticks.
+    private func renderedWidth(of cell: MarkdownHighlighter.TableCell, header: Bool, in row: NSRange, tokens: [MarkdownHighlighter.Token], markers: MarkerIndex, text: NSString) -> CGFloat {
+        let bold = NSFontManager.shared.convert(style.body, toHaveTrait: .boldFontMask)
+        let code = style.codeFont(within: style.body)
+        var codeRanges: [NSRange] = []
+        var boldRanges: [NSRange] = []
+        for token in tokens where NSIntersectionRange(token.range, row).length > 0 {
+            switch token.kind {
+            case .inlineCode: codeRanges.append(token.range)
+            case .strong: boldRanges.append(token.range)
+            default: break
+            }
+        }
+        func font(at index: Int) -> NSFont {
+            if codeRanges.contains(where: { NSLocationInRange(index, $0) }) { return code }
+            if header || boldRanges.contains(where: { NSLocationInRange(index, $0) }) { return bold }
+            return style.body
+        }
+        var width: CGFloat = 0
+        var index = cell.range.location
+        let end = NSMaxRange(cell.range)
+        while index < end {
+            guard !markers.isHidden(index) else {
+                index += 1
+                continue
+            }
+            let runFont = font(at: index)
+            var runEnd = index + 1
+            while runEnd < end, !markers.isHidden(runEnd), font(at: runEnd) == runFont { runEnd += 1 }
+            width += Self.width(of: text.substring(with: NSRange(location: index, length: runEnd - index)), in: runFont)
+            index = runEnd
+        }
+        return width
     }
 
     /// The last character of the cell that is not a hidden marker; for an empty cell, the pipe before it.
@@ -308,22 +462,22 @@ struct InlineStyle {
         return range.location > 0 && !markers.isHidden(range.location - 1) ? range.location - 1 : nil
     }
 
-    /// The first image of a paragraph that loads gets drawn under it: the paragraph's spacing
-    /// grows by the fitted height plus a gap, and the picture rides along as an attribute.
-    private func reserveImages(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, images: (String) -> NSImage?, textWidth: CGFloat) -> Set<Int> {
+    /// The first image of a rendered paragraph that loads gets drawn under it: the paragraph's
+    /// spacing grows by the fitted height plus a gap, and the picture rides along as an attribute.
+    private func reserveImages(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, images: (String) -> NSImage?, revealed: NSRange, textWidth: CGFloat) -> Set<Int> {
         let text = storage.string as NSString
         var resolved: Set<Int> = []
         var decorated: Set<Int> = []
         for token in tokens {
             guard case .image(let destination) = token.kind else { continue }
             let paragraph = text.paragraphRange(for: token.range)
-            guard !decorated.contains(paragraph.location), let image = images(destination),
+            guard !decorated.contains(paragraph.location), !Self.touches(revealed, paragraph), let image = images(destination),
                   image.size.width > 0, image.size.height > 0 else { continue }
             let existing = storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle
             let available = max(40, textWidth - (existing?.headIndent ?? 0))
             let scale = min(1, available / image.size.width, Self.maximumImageHeight / image.size.height)
             let size = NSSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
-            let spaced = (existing?.mutableCopy() as? NSMutableParagraphStyle) ?? NSMutableParagraphStyle()
+            let spaced = mutableParagraphStyle(at: paragraph.location, in: storage)
             spaced.paragraphSpacing = size.height + Self.imageGap
             storage.addAttributes([.paragraphStyle: spaced, .inlineImage: InlineImage(image: image, size: size)], range: paragraph)
             decorated.insert(paragraph.location)
@@ -346,7 +500,7 @@ struct InlineStyle {
             let size = NSSize(width: floor(image.size.width * scale), height: floor(image.size.height * scale))
             storage.removeAttribute(.blockDecoration, range: text.paragraphRange(for: block.range))
             let last = text.paragraphRange(for: NSRange(location: NSMaxRange(block.range) - 1, length: 0))
-            let spaced = NSMutableParagraphStyle()
+            let spaced = mutableParagraphStyle(at: last.location, in: storage)
             spaced.paragraphSpacing = size.height + Self.imageGap
             storage.addAttributes([.paragraphStyle: spaced, .inlineImage: InlineImage(image: image, size: size)], range: last)
             resolved.insert(block.range.location)
@@ -382,7 +536,7 @@ struct InlineStyle {
             guard let closing = block.closing, !tex.isEmpty, !Self.touches(revealed, block.range), let picture = math(tex, true) else { continue }
             let paragraphs = text.paragraphRange(for: block.range)
             storage.removeAttribute(.blockDecoration, range: paragraphs)
-            let centered = NSMutableParagraphStyle()
+            let centered = mutableParagraphStyle(at: paragraphs.location, in: storage)
             centered.alignment = .center
             storage.addAttribute(.paragraphStyle, value: centered, range: paragraphs)
             storage.addAttribute(.mathPicture, value: picture.fitted(to: max(40, textWidth)), range: NSRange(location: closing, length: 1))

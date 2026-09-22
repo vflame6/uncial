@@ -23,10 +23,11 @@ Setext level one
 Setext level two
 ----------------
 
-*Expect:* Live Preview sizes the six levels 22/19/16/14/13/13 pt in SF Mono bold,
-hides the `#` markers on every line but the cursor's, and draws setext
-underlines as rules. The rendered page uses the theme's heading sizes and
-borders under level one and two.
+*Expect:* Live Preview shows the headings like the rendered page: the system
+font at the theme's sizes (26/22/17/15/13/13 for macOS, 2em down to .85em of
+the body for GitHub and Solarized), level six muted, a divider under level one
+and two, setext underlines drawn as rules, the `#` markers hidden. Only the
+cursor's line shows its source, in SF Mono like the Raw Editor.
 
 ## Inline styles
 
@@ -39,8 +40,9 @@ A footnote reference[^note] and inline <b>HTML</b> tags <!-- with a comment -->.
 
 [^note]: Footnote definitions render on their own line.
 
-*Expect:* markers hidden off the cursor line and shown muted on it; the code
-sits on a tint; the link is in the accent color and ⌘-click opens it; the
+*Expect:* markers hidden off the cursor line; the cursor's line is the raw
+source, colored like the Raw Editor; body text in the theme's page font, the code
+in the mono font on a tint; the link is in the accent color and ⌘-click opens it; the
 footnote mark is a small raised "note"; escape backslashes and HTML tags hide
 with the other markers, so the comment vanishes and HTML reads bold.
 
@@ -59,9 +61,9 @@ with the other markers, so the comment vanishes and HTML reads bold.
 - [x] Done task
 - [ ] Task with *emphasis* and a [link](https://example.com)
 
-*Expect:* bullets drawn as •, numbers in the accent color, wrapped lines hanging
-under their text, task boxes drawn as squares that toggle on click (undoable,
-an edit like typing).
+*Expect:* bullets drawn as •, numbers in the text color like the page, wrapped
+lines hanging under their text, task boxes drawn as squares that toggle on click
+(undoable, an edit like typing).
 
 ## Quotes
 
@@ -109,7 +111,7 @@ hidden except the info string, keywords, strings, numbers and comments in the
 theme's syntax colors (the same colors in the rendered page and in Quick Look;
 the docstring stays one color across its two lines, the diff lines get a green
 and a red tint), the tilde fence in the plain code color. Put the cursor inside
-a block: the whole block reveals.
+a block: the whole block shows its source like the Raw Editor, without the tint.
 
 ## Table
 
@@ -120,8 +122,8 @@ a block: the whole block reveals.
 | Cherry | 100 | 12.00 | [link](https://example.com) |
 
 *Expect:* columns aligned (Qty right, Price centered), header bold, delimiter
-row drawn as a rule, outer pipes hidden, inner pipes muted; a revealed row
-shows its raw pipes and stays padded.
+row drawn as a rule, outer pipes hidden, inner pipes muted; the cursor's row
+shows its raw pipes in SF Mono, unpadded, and the other rows keep their columns.
 
 ## Rules
 

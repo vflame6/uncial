@@ -1,7 +1,8 @@
 import AppKit
 
 /// Draws the inline presentation's block decorations behind the text: a rounded background
-/// across a fenced code block, a left border per quote level, a rule line. Driven by the
+/// across a fenced code block, a left border per quote level, a rule line, a divider under an h1
+/// or h2. Driven by the
 /// `.blockDecoration` paragraph attribute, so it needs no NSTextBlock and adds no padding. Also
 /// draws the pictures: images under their paragraph, formulas on their anchor glyph.
 final class InlineLayoutManager: NSLayoutManager {
@@ -11,6 +12,8 @@ final class InlineLayoutManager: NSLayoutManager {
     var codeBackground: NSColor = .clear
     var lineColor: NSColor = .clear
     var accent: NSColor = .clear
+    /// The divider under a rendered h1 or h2.
+    var separatorColor: NSColor = .clear
     /// The paragraphs whose markers are shown; a rule there gives way to its raw text.
     var revealed = NSRange(location: 0, length: 0)
 
@@ -76,6 +79,11 @@ final class InlineLayoutManager: NSLayoutManager {
             guard !NSLocationInRange(paragraph.location, revealed) else { return }
             lineColor.setFill()
             NSRect(x: box.minX, y: floor(box.midY), width: box.width, height: 1).fill()
+        case "heading":
+            // Under the paragraph's last fragment, whose rect includes the paragraph spacing above the line.
+            guard NSMaxRange(fragment) >= NSMaxRange(paragraph) else { return }
+            separatorColor.setFill()
+            NSRect(x: box.minX, y: box.maxY - 1, width: box.width, height: 1).fill()
         default:
             guard decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) else { return }
             lineColor.setFill()
@@ -85,14 +93,20 @@ final class InlineLayoutManager: NSLayoutManager {
         }
     }
 
-    /// A rounded square centered on the box's middle character, drawn only while the brackets
-    /// are hidden (a revealed line shows the raw `[ ]`).
+    /// A rounded square centered in the room of the box's middle character (kerned out to
+    /// `InlineStyle.taskBoxWidth`), drawn only while the brackets are hidden (a revealed line shows
+    /// the raw `[ ]`). The room ends where the glyph after the hidden `]` starts.
     private func drawTaskBoxes(in fragment: NSRange, lineRect: NSRect, container: NSTextContainer, origin: NSPoint, storage: NSTextStorage) {
         storage.enumerateAttribute(.taskBox, in: fragment, options: []) { value, range, _ in
             guard let state = value as? String, range.length == 3,
                   propertyForGlyph(at: glyphIndexForCharacter(at: range.location)) == .null else { return }
             let middle = glyphIndexForCharacter(at: range.location + 1)
-            let cell = boundingRect(forGlyphRange: NSRange(location: middle, length: 1), in: container).offsetBy(dx: origin.x, dy: origin.y)
+            var fragmentGlyphs = NSRange()
+            let fragmentRect = lineFragmentRect(forGlyphAt: middle, effectiveRange: &fragmentGlyphs)
+            let start = location(forGlyphAt: middle).x
+            let after = middle + 2
+            let end = after < NSMaxRange(fragmentGlyphs) ? location(forGlyphAt: after).x : start + InlineStyle.taskBoxWidth
+            let cell = NSRect(x: origin.x + fragmentRect.minX + start, y: lineRect.minY, width: max(end - start, 1), height: lineRect.height)
             let side = min(14, lineRect.height - 5)
             let square = NSRect(x: cell.midX - side / 2, y: cell.midY - side / 2, width: side, height: side)
             let outline = NSBezierPath(roundedRect: square.insetBy(dx: 0.5, dy: 0.5), xRadius: 2, yRadius: 2)

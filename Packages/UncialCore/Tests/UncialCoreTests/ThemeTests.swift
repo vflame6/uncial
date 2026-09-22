@@ -82,6 +82,23 @@ import Testing
         #expect(Theme.solarized.syntaxPalette.light.comment == 0x93A1A1 && Theme.solarized.syntaxPalette.dark.comment == 0x586E75)
     }
 
+    @Test func typographyMatchesTheStylesheets() {
+        for theme in Theme.allCases {
+            let css = Stylesheet.css(for: theme)
+            let type = theme.typography
+            #expect(css.contains("--font-size: \(Int(type.bodySize))px;"), "\(theme)")
+            #expect(css.contains("--line-height: \(type.lineHeight);"), "\(theme)")
+            #expect(type.headingSizes.count == 6)
+        }
+        #expect(Theme.macOS.typography.headingSizes == [26, 22, 17, 15, 13, 13])
+        #expect(Stylesheet.css(for: .macOS).contains("--h1-size: 26px;"))
+        // GitHub and Solarized size headings in em of a 16px body.
+        #expect(Theme.github.typography.headingSizes == [32, 24, 20, 16, 14, 13.6])
+        #expect(Stylesheet.css(for: .github).contains("--h1-size: 2em;") && Stylesheet.css(for: .github).contains("--h6-size: .85em;"))
+        #expect(Theme.solarized.typography == PageTypography(bodySize: 16, lineHeight: 1.6, headingSizes: Theme.github.typography.headingSizes, boldTopHeadings: false))
+        #expect(Theme.macOS.typography.boldTopHeadings && Stylesheet.css(for: .macOS).contains("h1, h2 { font-weight: 700; }"))
+    }
+
     @Test func namesMathFonts() {
         for theme in Theme.allCases {
             #expect(Stylesheet.css(for: theme).contains("math { font-family:"), "\(theme) has no math font rule")

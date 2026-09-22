@@ -5,7 +5,8 @@ import cmark_gfm_extensions
 /// A flat reading of a document's first blocks with the styling that shapes a page: headings,
 /// list markers, quotes, code, rules, table rows and the inline styles of their text. For renderers
 /// that cannot show HTML, such as the thumbnail extension, which draws it with AppKit. Markers
-/// are gone; HTML blocks and front matter are skipped.
+/// are gone; HTML blocks and front matter are skipped. A callout's title (`Callouts`) is a strong
+/// paragraph of its own, the marker gone.
 public enum MarkdownOutline {
     public struct Run: Equatable, Sendable {
         public var text: String
@@ -81,6 +82,11 @@ public enum MarkdownOutline {
         private var strikethrough = 0
         private var link = 0
         private var image = 0
+        /// Set while the paragraph being read is a callout's first line: its title, strong, ends at the
+        /// first soft break. `calloutMarkerRemaining` is how much of the marker the text nodes still hold
+        /// (cmark keeps `[` as a text node of its own).
+        private var inCalloutTitle = false
+        private var calloutMarkerRemaining = 0
         private var cells: [[Run]] = []
         private var cell: [Run]?
         private var rowIsHeader = false
@@ -115,6 +121,13 @@ public enum MarkdownOutline {
                 begin(.heading(level: Int(cmark_node_get_heading_level(node))))
             case CMARK_NODE_PARAGRAPH:
                 begin(pendingMarker.map { .listItem(marker: $0) } ?? .paragraph)
+                if kind == .paragraph, quoteDepth > 0, cell == nil, let marker = Callouts.marker(in: leadingText(of: node)) {
+                    inCalloutTitle = true
+                    calloutMarkerRemaining = marker.length
+                    if marker.title.isEmpty {
+                        append(marker.defaultTitle)
+                    }
+                }
             case CMARK_NODE_CODE_BLOCK:
                 pendingMarker = nil
                 emit(.code, runs: [Run(literal(of: node), isCode: true)])
@@ -122,9 +135,25 @@ public enum MarkdownOutline {
                 pendingMarker = nil
                 emit(.rule, runs: [])
             case CMARK_NODE_TEXT:
-                append(literal(of: node))
+                var text = literal(of: node)
+                if calloutMarkerRemaining > 0 {
+                    let length = (text as NSString).length
+                    guard length > calloutMarkerRemaining else {
+                        calloutMarkerRemaining -= length
+                        break
+                    }
+                    text = (text as NSString).substring(from: calloutMarkerRemaining)
+                    calloutMarkerRemaining = 0
+                }
+                append(text)
             case CMARK_NODE_SOFTBREAK:
-                append(" ")
+                if inCalloutTitle {
+                    inCalloutTitle = false
+                    end()
+                    begin(.paragraph)
+                } else {
+                    append(" ")
+                }
             case CMARK_NODE_LINEBREAK:
                 append("\n")
             case CMARK_NODE_CODE:
@@ -167,6 +196,8 @@ public enum MarkdownOutline {
                 }
             case CMARK_NODE_HEADING, CMARK_NODE_PARAGRAPH:
                 end()
+                inCalloutTitle = false
+                calloutMarkerRemaining = 0
             case CMARK_NODE_EMPH:
                 emphasis -= 1
             case CMARK_NODE_STRONG:
@@ -200,6 +231,17 @@ public enum MarkdownOutline {
             return "\(list.next)."
         }
 
+        /// The text a paragraph starts with, across its leading text nodes.
+        private func leadingText(of paragraph: UnsafeMutablePointer<cmark_node>) -> String {
+            var text = ""
+            var child = cmark_node_first_child(paragraph)
+            while let node = child, cmark_node_get_type(node) == CMARK_NODE_TEXT {
+                text += literal(of: node)
+                child = cmark_node_next(node)
+            }
+            return text
+        }
+
         private func literal(of node: UnsafeMutablePointer<cmark_node>) -> String {
             cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
         }
@@ -223,7 +265,7 @@ public enum MarkdownOutline {
 
         private func append(_ text: String, code: Bool = false) {
             guard !text.isEmpty else { return }
-            let run = Run(text, isStrong: strong > 0, isEmphasis: emphasis > 0, isCode: code,
+            let run = Run(text, isStrong: strong > 0 || inCalloutTitle, isEmphasis: emphasis > 0, isCode: code,
                           isStrikethrough: strikethrough > 0, isLink: link > 0, isImage: image > 0)
             if cell != nil {
                 cell?.append(run)

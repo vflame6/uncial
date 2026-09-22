@@ -23,6 +23,18 @@ import Testing
         #expect(html.contains("<a href=\"http://www.example.com\">www.example.com</a>"))
     }
 
+    @Test func rendersCalloutsWithLineLabels() {
+        let html = renderer.renderBody("> [!tip] Hi\n> body\n\n> [!note]\n> only", sourcePositions: true)
+        #expect(html.contains("<div class=\"callout\" data-callout=\"tip\" data-line=\"1\" data-sourcepos=\"1:1-2:6\">"))
+        #expect(html.contains("<span class=\"callout-title-text\">Hi</span>"))
+        #expect(html.contains("<p data-line=\"2\" data-sourcepos=\"2:1-2:6\">body</p>"))
+        #expect(html.contains("<div class=\"callout\" data-callout=\"note\" data-line=\"4\" data-sourcepos=\"4:1-5:6\">"))
+        #expect(html.contains("<span class=\"callout-title-text\">Note</span>"))
+        #expect(html.contains("<p data-line=\"5\" data-sourcepos=\"5:1-5:6\">only</p>"))
+        #expect(!html.contains("<blockquote"))
+        #expect(renderer.renderBody("> plain").contains("<blockquote>"))
+    }
+
     @Test func filtersDangerousRawHTMLButKeepsSafeHTML() {
         let html = renderer.renderBody("<script>alert(1)</script>\n\n<details><summary>More</summary>Body</details>")
         #expect(html.contains("&lt;script>"))

@@ -35,6 +35,16 @@ import Testing
         #expect(blocks[2].runs == [Run("let x = 1\n", isCode: true)])
     }
 
+    @Test func calloutsShowTheirTitleWithoutTheMarker() {
+        let blocks = MarkdownOutline.blocks(in: "> [!tip] Hello **there**\n> body\n> more\n\n> [!NOTE]\n> only\n")
+        #expect(blocks.map(\.kind) == [.paragraph, .paragraph, .paragraph, .paragraph])
+        #expect(blocks.map(\.quoteDepth) == [1, 1, 1, 1])
+        #expect(blocks[0].runs == [Run("Hello ", isStrong: true), Run("there", isStrong: true)])
+        #expect(blocks[1].text == "body more")
+        #expect(blocks[2].runs == [Run("Note", isStrong: true)])
+        #expect(blocks[3].text == "only")
+    }
+
     @Test func tablesBecomeRows() {
         let blocks = MarkdownOutline.blocks(in: "| a | b |\n|---|---|\n| 1 | **2** |\n")
         #expect(blocks.count == 2)

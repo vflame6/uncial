@@ -77,6 +77,25 @@ extension Theme {
         }
     }
 
+    /// Colors for callouts by `Callouts.Role`, the values the theme's stylesheet sets as `--callout-…`
+    /// variables; nil for the macOS theme, whose page uses the system colors (tip is system teal).
+    public var calloutPalette: CalloutPalette? {
+        switch self {
+        case .macOS:
+            nil
+        case .github:
+            CalloutPalette(
+                light: .init(note: 0x0969DA, tip: 0x0D8F87, success: 0x1A7F37, question: 0x9A6700, warning: 0xBC4C00, danger: 0xCF222E, example: 0x8250DF, quote: 0x59636E),
+                dark: .init(note: 0x4493F8, tip: 0x39C5BB, success: 0x3FB950, question: 0xD29922, warning: 0xDB6D28, danger: 0xF85149, example: 0xAB7DF8, quote: 0x9198A1)
+            )
+        case .solarized:
+            CalloutPalette(
+                light: .init(note: 0x268BD2, tip: 0x2AA198, success: 0x859900, question: 0xB58900, warning: 0xCB4B16, danger: 0xDC322F, example: 0x6C71C4, quote: 0x586E75),
+                dark: .init(note: 0x268BD2, tip: 0x2AA198, success: 0x859900, question: 0xB58900, warning: 0xCB4B16, danger: 0xDC322F, example: 0x6C71C4, quote: 0x93A1A1)
+            )
+        }
+    }
+
     /// Concrete colors for diagrams whose renderer bakes colors in (mermaid.js): the theme's page
     /// colors, with fixed stand-ins for the macOS theme's system colors.
     public var diagramPalette: DiagramPalette {
@@ -142,6 +161,52 @@ public struct PageTypography: Equatable, Sendable {
         self.lineHeight = lineHeight
         self.headingSizes = headingSizes
         self.boldTopHeadings = boldTopHeadings
+    }
+}
+
+/// Colors for callouts as 0xRRGGBB, one set per appearance, one per `Callouts.Role`.
+public struct CalloutPalette: Equatable, Sendable {
+    public struct Colors: Equatable, Sendable {
+        public let note: UInt32
+        public let tip: UInt32
+        public let success: UInt32
+        public let question: UInt32
+        public let warning: UInt32
+        public let danger: UInt32
+        public let example: UInt32
+        public let quote: UInt32
+
+        public init(note: UInt32, tip: UInt32, success: UInt32, question: UInt32, warning: UInt32, danger: UInt32, example: UInt32, quote: UInt32) {
+            self.note = note
+            self.tip = tip
+            self.success = success
+            self.question = question
+            self.warning = warning
+            self.danger = danger
+            self.example = example
+            self.quote = quote
+        }
+
+        public func color(for role: Callouts.Role) -> UInt32 {
+            switch role {
+            case .note: note
+            case .tip: tip
+            case .success: success
+            case .question: question
+            case .warning: warning
+            case .danger: danger
+            case .example: example
+            case .quote: quote
+            }
+        }
+    }
+
+    public let light: Colors
+    public let dark: Colors
+
+    public init(light: Colors, dark: Colors) {
+        self.light = light
+        self.dark = dark
     }
 }
 

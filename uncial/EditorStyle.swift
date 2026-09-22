@@ -5,6 +5,7 @@ import UncialCore
 /// system colors); the rendered look, which Live Preview gives every line but the caret's, follows
 /// the theme's page: the system font at the page's body and heading sizes and line heights.
 struct EditorStyle {
+    let theme: Theme
     let background: NSColor
     let foreground: NSColor
     let accent: NSColor
@@ -25,6 +26,7 @@ struct EditorStyle {
     let body: NSFont
 
     init(theme: Theme, isDark: Bool, size: CGFloat = 13) {
+        self.theme = theme
         self.size = size
         self.isDark = isDark
         typography = theme.typography
@@ -61,7 +63,30 @@ struct EditorStyle {
         case .inlineCode, .codeBlock, .math: [.foregroundColor: code]
         case .link, .listMarker: [.foregroundColor: accent]
         case .url, .quote, .rule, .frontMatter, .table, .html: [.foregroundColor: muted]
+        case .callout: [.font: bold, .foregroundColor: accent]
         }
+    }
+
+    /// The theme's callout color for a role: the palette's, or the system color for the macOS theme
+    /// (whose page uses the same `-apple-system-…` keywords; tip is system teal).
+    func calloutColor(for role: Callouts.Role) -> NSColor {
+        if let palette = theme.calloutPalette {
+            return NSColor(rgb: (isDark ? palette.dark : palette.light).color(for: role))
+        }
+        switch role {
+        case .note: return .systemBlue
+        case .tip: return .systemTeal
+        case .success: return .systemGreen
+        case .question, .warning: return .systemOrange
+        case .danger: return .systemRed
+        case .example: return .systemPurple
+        case .quote: return .systemGray
+        }
+    }
+
+    /// A callout's title in the rendered look: the body font, semibold, like the page's 600.
+    var calloutTitleFont: NSFont {
+        NSFont.systemFont(ofSize: body.pointSize, weight: .semibold)
     }
 
     // MARK: Rendered look

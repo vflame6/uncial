@@ -11,10 +11,11 @@ public struct MarkdownRenderer: Sendable {
     /// Fenced code in a language `CodeHighlighter` knows comes back with highlight.js spans. Unless
     /// `remoteContent` is allowed, references to the web on media and resource elements are disarmed
     /// (`RemoteContent.block`); links stay. An image that is not where the document says is looked
-    /// for by `attachments`.
+    /// for by `attachments`. Blockquotes that start with `[!type]` become callouts (`Callouts`).
     public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false, diagrams: [String: PreRenderedDiagram] = [:], remoteContent: Bool = false, attachments: AttachmentSearch = .direct) -> String {
         let (frontMatter, body) = FrontMatter.split(markdown)
         var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
+        html = Callouts.render(html)
         html = HeadingAnchors.addIDs(to: html)
         html = MathRenderer.render(html)
         html = MermaidRenderer.render(html, diagrams: diagrams)

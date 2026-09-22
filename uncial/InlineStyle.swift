@@ -11,6 +11,22 @@ extension NSAttributedString.Key {
     static let inlineImage = NSAttributedString.Key("uncialInlineImage")
     /// A `MathPicture` on the one character that stands for a formula, drawn by `InlineLayoutManager`.
     static let mathPicture = NSAttributedString.Key("uncialMathPicture")
+    /// A `CalloutTitle` on a callout's first line: `InlineLayoutManager` draws the icon before it.
+    static let calloutTitle = NSAttributedString.Key("uncialCalloutTitle")
+}
+
+/// A callout's first line: the type it is drawn as, its quote depth (the icon sits at that
+/// level's text indent) and, when the line names no title, the title to draw after the icon.
+final class CalloutTitle: NSObject {
+    let type: String
+    let depth: Int
+    let defaultTitle: String?
+
+    init(type: String, depth: Int, defaultTitle: String?) {
+        self.type = type
+        self.depth = depth
+        self.defaultTitle = defaultTitle
+    }
 }
 
 /// A loaded image and the size it is drawn at under its paragraph.
@@ -49,11 +65,18 @@ final class MathPicture: NSObject {
 /// page's look (`EditorStyle.renderedAttributes`): the theme's body font and line height, headings
 /// at the page's sizes with a divider under h1 and h2, code in the mono font at 85% on a background,
 /// list items hanging by their marker's width, quotes indented behind a border, links in the accent
-/// color, markers muted (and hidden by `ThemedTextView`). The revealed lines, the caret's paragraph
+/// color, markers muted (and hidden by `ThemedTextView`); callouts (`Callouts`) as a tinted box in the
+/// role color with their icon and title, the decoration a stack per quote level (`callout:<type>` or
+/// `quote`, `quote:N` for plain quotes). The revealed lines, the caret's paragraph
 /// or its fenced block, keep the source look: SF Mono and the source presentation's coloring, no
 /// decorations, no pictures. Attribute-only, so undo never sees it.
 struct InlineStyle {
     static let quoteIndent: CGFloat = 16
+    /// A callout's icon, in points at the system size, and the room between it and the title.
+    static let calloutIconSize: CGFloat = 18
+    static let calloutIconGap: CGFloat = 6
+    /// Room kept above a callout's title and below its last line.
+    static let calloutPadding: CGFloat = 6
     static let codeIndent: CGFloat = 12
     /// Room a task box gets on its line: the square plus a little air on each side.
     static let taskBoxWidth: CGFloat = 18
@@ -147,6 +170,7 @@ struct InlineStyle {
                 storage.addAttributes(style.attributes(for: span.kind), range: span.range)
             }
         }
+        let callouts = MarkdownHighlighter.calloutBlocks(in: tokens, text: text)
         for token in tokens where !NSLocationInRange(token.range.location, revealed) {
             let paragraph = text.paragraphRange(for: token.range)
             switch token.kind {
@@ -201,7 +225,26 @@ struct InlineStyle {
                 let indented = mutableParagraphStyle(at: paragraph.location, in: storage)
                 indented.firstLineHeadIndent = Self.quoteIndent * CGFloat(depth)
                 indented.headIndent = indented.firstLineHeadIndent
-                storage.addAttributes([.paragraphStyle: indented, .blockDecoration: "quote:\(depth)", .foregroundColor: style.muted], range: paragraph)
+                let stack = Self.decorationStack(at: token.range.location, depth: depth, in: callouts)
+                if stack.contains(where: { $0.hasPrefix("callout:") }) {
+                    // Inside a callout the text keeps its color, like the page's callout content.
+                    storage.addAttributes([.paragraphStyle: indented, .blockDecoration: stack.joined(separator: "|")], range: paragraph)
+                } else {
+                    storage.addAttributes([.paragraphStyle: indented, .blockDecoration: "quote:\(depth)", .foregroundColor: style.muted], range: paragraph)
+                }
+            case .callout(let type, let depth, let defaultTitle):
+                // The title hangs by the icon's room; the icon itself is drawn at the content's indent.
+                let indented = mutableParagraphStyle(at: paragraph.location, in: storage)
+                indented.firstLineHeadIndent = Self.quoteIndent * CGFloat(depth) + Self.calloutIconSize * style.scale + Self.calloutIconGap
+                indented.headIndent = indented.firstLineHeadIndent
+                indented.paragraphSpacingBefore = Self.calloutPadding
+                let titleStart = token.markers.last.map { NSMaxRange($0) } ?? token.range.location
+                let title = NSRange(location: titleStart, length: max(0, NSMaxRange(token.range) - titleStart))
+                let hasTitle = !text.substring(with: title).trimmingCharacters(in: .whitespaces).isEmpty
+                let stack = Self.decorationStack(at: token.range.location, depth: depth, in: callouts)
+                storage.addAttributes([.paragraphStyle: indented, .blockDecoration: stack.joined(separator: "|"),
+                                       .calloutTitle: CalloutTitle(type: type, depth: depth, defaultTitle: hasTitle ? nil : defaultTitle)], range: paragraph)
+                storage.addAttributes([.font: style.calloutTitleFont, .foregroundColor: style.calloutColor(for: Callouts.role(for: type))], range: title)
             case .rule, .headingUnderline, .tableDelimiter:
                 storage.addAttributes([.blockDecoration: "rule", .foregroundColor: style.muted], range: paragraph)
             case .footnoteReference:
@@ -247,12 +290,27 @@ struct InlineStyle {
                 storage.addAttribute(.foregroundColor, value: style.muted, range: marker)
             }
         }
+        for block in callouts where !Self.touches(revealed, block.range) {
+            // Room under the block's last line, inside the box.
+            let last = text.paragraphRange(for: NSRange(location: NSMaxRange(block.range), length: 0))
+            let spaced = mutableParagraphStyle(at: last.location, in: storage)
+            spaced.paragraphSpacing = max(spaced.paragraphSpacing, Self.calloutPadding)
+            storage.addAttribute(.paragraphStyle, value: spaced, range: last)
+        }
         alignTables(tokens, in: storage, revealed: revealed)
         let blocks = Self.fencedBlocks(in: tokens, text: text)
         return Resolved(images: reserveImages(tokens, in: storage, images: images, revealed: revealed, textWidth: textWidth),
                         diagrams: reserveDiagrams(blocks, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth),
                         math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth),
                         pictureBlocks: blocks.filter { $0.isDiagram || $0.isMath }.map(\.range))
+    }
+
+    /// One entry per quote level of a line at `location`: `callout:<type>` where a callout block of
+    /// that depth holds the line, `quote` otherwise.
+    static func decorationStack(at location: Int, depth: Int, in callouts: [MarkdownHighlighter.CalloutBlock]) -> [String] {
+        (1...max(depth, 1)).map { level in
+            callouts.first { $0.depth == level && NSLocationInRange(location, $0.range) }.map { "callout:\($0.type)" } ?? "quote"
+        }
     }
 
     /// The parts of `whole` outside `range`: where the rendered look goes.

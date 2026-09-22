@@ -132,6 +132,72 @@ import UncialCore
         #expect(abs((paragraph(text, 31)?.headIndent ?? 0) - (width("• x ", style.body) + (kern ?? 0))) < 0.01)
     }
 
+    @Test func calloutsTintHangAndTitleTheirFirstLine() {
+        // Lines: title 0–10, body 12–17, deeper 19–29, plain quote 31–33, after 35–39.
+        let text = "> [!tip] Hi\n> body\n> > deeper\n\n> q\nafter"
+        let storage = storage(text)
+        let tip = style.calloutColor(for: .tip)
+        #expect(decoration(storage, 0) == "callout:tip" && decoration(storage, 12) == "callout:tip" && decoration(storage, 19) == "callout:tip|quote")
+        #expect(decoration(storage, 31) == "quote:1" && decoration(storage, 35) == nil)
+        #expect(font(storage, 9) == style.calloutTitleFont && color(storage, 9) == tip)
+        #expect(color(storage, 14) == style.foreground && color(storage, 32) == style.muted)
+        #expect(paragraph(storage, 0)?.firstLineHeadIndent == InlineStyle.quoteIndent + InlineStyle.calloutIconSize + InlineStyle.calloutIconGap)
+        #expect(paragraph(storage, 0)?.paragraphSpacingBefore == InlineStyle.calloutPadding)
+        #expect(paragraph(storage, 12)?.headIndent == InlineStyle.quoteIndent && paragraph(storage, 19)?.headIndent == 2 * InlineStyle.quoteIndent)
+        #expect(paragraph(storage, 19)?.paragraphSpacing == InlineStyle.calloutPadding && paragraph(storage, 12)?.paragraphSpacing == 0)
+        let title = storage.attribute(.calloutTitle, at: 0, effectiveRange: nil) as? CalloutTitle
+        #expect(title?.type == "tip" && title?.depth == 1 && title?.defaultTitle == nil)
+        #expect(storage.attribute(.calloutTitle, at: 12, effectiveRange: nil) == nil)
+        let untitled = self.storage("> [!Warning]\n> body")
+        #expect((untitled.attribute(.calloutTitle, at: 0, effectiveRange: nil) as? CalloutTitle)?.defaultTitle == "Warning")
+        #expect(color(untitled, 3) == style.muted)
+        #expect(style.calloutColor(for: .danger) == NSColor(rgb: 0xCF222E))
+        #expect(EditorStyle(theme: .macOS, isDark: false).calloutColor(for: .tip) == .systemTeal)
+    }
+
+    @Test func layoutManagerPaintsCalloutsAndTheirIcon() {
+        // Lines end at 5, 17, 24 and 29.
+        let text = "plain\n> [!tip] Hi\n> body\nafter"
+        let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage)
+        let layoutManager = InlineLayoutManager()
+        layoutManager.calloutColors = [.tip: .red]
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 200, height: 1000))
+        layoutManager.addTextContainer(container)
+        layoutManager.ensureLayout(for: container)
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        let context = NSGraphicsContext(bitmapImageRep: rep)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        NSColor.white.setFill()
+        NSRect(x: 0, y: 0, width: 200, height: 200).fill()
+        context.cgContext.translateBy(x: 0, y: 200)
+        context.cgContext.scaleBy(x: 1, y: -1)
+        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
+        NSGraphicsContext.restoreGraphicsState()
+        let ends = [5, 17, 24, 29]
+        func rect(_ line: Int) -> NSRect { layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: ends[line]), effectiveRange: nil) }
+        func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
+            let rect = rect(line)
+            return rep.colorAt(x: Int(x), y: Int(rect.minY + rect.height * fraction))
+        }
+        func isTinted(_ color: NSColor?) -> Bool { color.map { $0.redComponent > 0.95 && $0.greenComponent > 0.8 && $0.greenComponent < 0.95 } ?? false }
+        func isWhite(_ color: NSColor?) -> Bool { color.map { $0.redComponent > 0.99 && $0.greenComponent > 0.99 } ?? false }
+        #expect(isWhite(pixel(150, 0)) && isTinted(pixel(150, 1)) && isTinted(pixel(150, 2)) && isWhite(pixel(150, 3)))
+        // The top corners are rounded: the very corner stays white, a little further in it is tinted.
+        #expect(isWhite(pixel(0.5, 1, 0.02)) && isTinted(pixel(0.5, 1, 0.5)))
+        // The icon (full red) sits in the title line between the container padding + indent and the title.
+        let title = rect(1)
+        var strokes = 0
+        for x in Int(container.lineFragmentPadding + InlineStyle.quoteIndent)...Int(container.lineFragmentPadding + InlineStyle.quoteIndent + InlineStyle.calloutIconSize) {
+            for y in Int(title.minY)...Int(title.maxY - 1) where rep.colorAt(x: x, y: y).map({ $0.redComponent > 0.9 && $0.greenComponent < 0.5 }) == true {
+                strokes += 1
+            }
+        }
+        #expect(strokes > 10)
+    }
+
     @Test func imagesReserveSpaceAndHideMarkers() {
         let picture = NSImage(size: NSSize(width: 200, height: 100))
         func provider(_ destination: String) -> NSImage? { destination == "pic.png" ? picture : nil }

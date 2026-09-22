@@ -1,4 +1,5 @@
 import Foundation
+import UncialCore
 
 /// Finds the Markdown constructs the editor styles. Line-based with one line of lookahead
 /// (tables, setext headings) and just enough state for fenced code and a leading front-matter
@@ -7,7 +8,7 @@ import Foundation
 /// ranges); `spans(in:)` is the flat coloring view of it.
 nonisolated enum MarkdownHighlighter {
     enum Kind: Equatable {
-        case heading, strong, emphasis, strikethrough, inlineCode, codeBlock, link, url, listMarker, quote, rule, frontMatter, table, html, math
+        case heading, strong, emphasis, strikethrough, inlineCode, codeBlock, link, url, listMarker, quote, rule, frontMatter, table, html, math, callout
     }
 
     struct Span: Equatable {
@@ -56,6 +57,10 @@ nonisolated enum MarkdownHighlighter {
             /// `box` the three characters of a task box `[ ]`/`[x]`, whose brackets are markers.
             case listItem(bullet: Int?, box: NSRange?)
             case quote(depth: Int)
+            /// The first line of a callout (`Callouts`): a quote line starting with `[!type]` where its
+            /// blockquote begins. `type` is the default type it maps to, `defaultTitle` what shows when the
+            /// line has no title; the markers are the `>` prefix and the marker with its following space.
+            case callout(type: String, depth: Int, defaultTitle: String)
             case rule
             case fence
             case code
@@ -193,6 +198,18 @@ nonisolated enum MarkdownHighlighter {
                     markers.append(NSRange(location: lineStart + position, length: spaced ? 2 : 1))
                     position += spaced ? 2 : 1
                 }
+                // `[!type]` opens a callout where its blockquote begins: on a line deeper than the one before.
+                var restStart = match.range.length
+                while restStart < whole.length, restStart - match.range.length < 3, [0x20, 0x09].contains((line as NSString).character(at: restStart)) {
+                    restStart += 1
+                }
+                if let marker = Callouts.marker(in: (line as NSString).substring(from: restStart)),
+                   markers.count > quoteDepth(ofLineBefore: current, lines: lines, source: source) {
+                    let kind = Token.Kind.callout(type: marker.type, depth: markers.count, defaultTitle: marker.defaultTitle)
+                    tokens.append(Token(range: contentRange, kind: kind, markers: markers + [NSRange(location: lineStart + restStart, length: marker.length)]))
+                    tokens += inlineTokens(in: line, offset: lineStart, from: restStart + marker.length, definitions: definitions)
+                    continue
+                }
                 tokens.append(Token(range: contentRange, kind: .quote(depth: markers.count), markers: markers))
                 tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
                 continue
@@ -234,6 +251,43 @@ nonisolated enum MarkdownHighlighter {
             tokens += inlineTokens(in: line, offset: lineStart, from: 0, definitions: definitions)
         }
         return tokens
+    }
+
+    /// The quote depth of the line before `index` (0 for the first line and for lines without a `>` prefix).
+    private static func quoteDepth(ofLineBefore index: Int, lines: [NSRange], source: NSString) -> Int {
+        guard index > 0 else { return 0 }
+        let line = source.substring(with: lines[index - 1])
+        guard let match = quote.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) else { return 0 }
+        return (line as NSString).substring(with: match.range).filter { $0 == ">" }.count
+    }
+
+    /// A callout's lines: its first line and the quote lines right after it at its depth or deeper,
+    /// up to a line that is not one (a lazy continuation line ends it here, unlike in cmark).
+    struct CalloutBlock: Equatable {
+        let range: NSRange
+        let type: String
+        let depth: Int
+    }
+
+    static func calloutBlocks(in tokens: [Token], text: NSString) -> [CalloutBlock] {
+        var blocks: [CalloutBlock] = []
+        for (index, token) in tokens.enumerated() {
+            guard case .callout(let type, let depth, _) = token.kind else { continue }
+            var end = NSMaxRange(token.range)
+            for next in tokens[(index + 1)...] {
+                let lineDepth: Int
+                switch next.kind {
+                case .quote(let depth): lineDepth = depth
+                case .callout(_, let depth, _): lineDepth = depth
+                default: continue
+                }
+                guard end < text.length, lineDepth >= depth,
+                      next.range.location == NSMaxRange(text.paragraphRange(for: NSRange(location: end, length: 0))) else { break }
+                end = NSMaxRange(next.range)
+            }
+            blocks.append(CalloutBlock(range: NSRange(location: token.range.location, length: end - token.range.location), type: type, depth: depth))
+        }
+        return blocks
     }
 
     /// Reference link definitions anywhere in the document, keyed by their normalized label
@@ -544,6 +598,9 @@ nonisolated enum MarkdownHighlighter {
             case .math, .mathFence: spans.append(Span(range: token.range, kind: .math))
             case .listItem: spans.append(Span(range: token.range, kind: .listMarker))
             case .quote: spans.append(Span(range: token.range, kind: .quote))
+            case .callout:
+                spans.append(Span(range: token.range, kind: .quote))
+                if let marker = token.markers.last { spans.append(Span(range: marker, kind: .callout)) }
             case .rule: spans.append(Span(range: token.range, kind: .rule))
             case .fence, .code: spans.append(Span(range: token.range, kind: .codeBlock))
             case .frontMatter: spans.append(Span(range: token.range, kind: .frontMatter))

@@ -15,6 +15,8 @@ extension Stylesheet {
       --h1-border: 1px solid var(--border); --h2-border: 1px solid var(--border);
       --code-comment: #93a1a1; --code-keyword: #859900; --code-string: #2aa198; --code-number: #d33682; --code-type: #b58900; --code-function: #268bd2;
       --code-variable: #6c71c4; --code-meta: #cb4b16; --code-tag: #268bd2; --code-addition: #859900; --code-deletion: #dc322f;
+      --callout-note: #268bd2; --callout-tip: #2aa198; --callout-success: #859900; --callout-question: #b58900;
+      --callout-warning: #cb4b16; --callout-danger: #dc322f; --callout-example: #6c71c4; --callout-quote: #586e75;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -23,6 +25,8 @@ extension Stylesheet {
         --code-bg: #073642; --code-fg: #93a1a1; --row-alt: #03303c;
         --mark: rgba(181, 137, 0, .35); --quote-border: #586e75;
         --code-comment: #586e75;
+        --callout-note: #268bd2; --callout-tip: #2aa198; --callout-success: #859900; --callout-question: #b58900;
+        --callout-warning: #cb4b16; --callout-danger: #dc322f; --callout-example: #6c71c4; --callout-quote: #93a1a1;
       }
     }
     a:hover { color: #2aa198; }

@@ -82,6 +82,28 @@ import Testing
         #expect(Theme.solarized.syntaxPalette.light.comment == 0x93A1A1 && Theme.solarized.syntaxPalette.dark.comment == 0x586E75)
     }
 
+    @Test func calloutPalettesMatchTheStylesheets() {
+        for theme in Theme.allCases {
+            let css = Stylesheet.css(for: theme)
+            #expect(css.contains(".callout { --callout-color: var(--callout-note);"), "\(theme) misses the callout rules")
+            #expect(css.contains(".callout[data-callout=\"quote\"] { --callout-color: var(--callout-quote); }"), "\(theme)")
+            guard let palette = theme.calloutPalette else {
+                #expect(theme == .macOS)
+                #expect(css.contains("--callout-note: -apple-system-blue;") && css.contains("--callout-danger: -apple-system-red;"))
+                #expect(css.contains("--callout-tip: #30b0c7;") && css.contains("--callout-tip: #40c8e0;"))
+                continue
+            }
+            for role in Callouts.Role.allCases {
+                let light = String(format: "--callout-%@: #%06x", role.rawValue, palette.light.color(for: role))
+                let dark = String(format: "--callout-%@: #%06x", role.rawValue, palette.dark.color(for: role))
+                #expect(css.contains(light), "\(theme) light misses \(light)")
+                #expect(css.contains(dark), "\(theme) dark misses \(dark)")
+            }
+        }
+        #expect(Theme.github.calloutPalette?.light.tip == 0x0D8F87 && Theme.github.calloutPalette?.dark.danger == 0xF85149)
+        #expect(Theme.solarized.calloutPalette?.light.quote == 0x586E75 && Theme.solarized.calloutPalette?.dark.quote == 0x93A1A1)
+    }
+
     @Test func typographyMatchesTheStylesheets() {
         for theme in Theme.allCases {
             let css = Stylesheet.css(for: theme)

@@ -37,6 +37,10 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 - Paste or drop files and pictures into the editor: the file is copied where
   new attachments go (Settings ▸ General chooses the folder, created as needed)
   and the Markdown for it, an image or a link, is inserted at the cursor.
+- Obsidian-style callouts: a quote that starts with `[!note]`, `[!tip]`,
+  `[!warning]` or any other of Obsidian's default types (aliases included)
+  becomes a tinted box with the type's icon and a title, in the page, in
+  Quick Look and in Live Preview; `[!type]-` and `[!type]+` fold in the page.
 - Quick Look preview and thumbnails for Markdown files.
 - Optional status bar with line, word and character counts. Pinch to zoom.
 

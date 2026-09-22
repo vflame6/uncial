@@ -24,12 +24,15 @@ extension Stylesheet {
       --h1-border: 1px solid var(--border-muted); --h2-border: 1px solid var(--border-muted);
       --code-comment: #5d6c79; --code-keyword: #9b2393; --code-string: #c41a16; --code-number: #1c00cf; --code-type: #3e8087; --code-function: #4b21b0;
       --code-variable: #0f68a0; --code-meta: #643820; --code-tag: #0b4f79; --code-addition: #1a7f37; --code-deletion: #cf222e;
+      --callout-note: -apple-system-blue; --callout-tip: #30b0c7; --callout-success: -apple-system-green; --callout-question: -apple-system-orange;
+      --callout-warning: -apple-system-orange; --callout-danger: -apple-system-red; --callout-example: -apple-system-purple; --callout-quote: -apple-system-gray;
     }
     @media (prefers-color-scheme: dark) {
       :root {
         --code-bg: color-mix(in srgb, -apple-system-label 10%, transparent);
         --code-comment: #6c7986; --code-keyword: #fc5fa3; --code-string: #fc6a5d; --code-number: #d0bf69; --code-type: #5dd8ff; --code-function: #a167e6;
         --code-variable: #67b7a4; --code-meta: #fd8f3f; --code-tag: #41a1c0; --code-addition: #3fb950; --code-deletion: #f85149;
+        --callout-tip: #40c8e0;
       }
     }
     body { -webkit-font-smoothing: antialiased; }

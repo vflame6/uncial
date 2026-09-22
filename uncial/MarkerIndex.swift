@@ -15,7 +15,8 @@ nonisolated struct MarkerIndex: Equatable {
     let hidden: [NSRange]
     /// Character indexes of `-`, `*` and `+` list markers, drawn as bullets.
     let bullets: Set<Int>
-    /// Fenced code and math blocks including both fence lines; an unclosed one runs to its last line.
+    /// Fenced code and math blocks including both fence lines (an unclosed one runs to its last line),
+    /// and callouts: what reveals as a whole.
     let blocks: [NSRange]
     /// Every range that can turn into a picture, drawn or not: a reveal change touching one
     /// re-applies attributes.
@@ -23,7 +24,8 @@ nonisolated struct MarkerIndex: Equatable {
     /// Sorted character indexes that stand for a formula's picture.
     let anchors: [Int]
 
-    init(tokens: [MarkdownHighlighter.Token], resolvedImages: Set<Int> = [], pictureBlocks: [NSRange] = [], resolvedDiagrams: Set<Int> = [], resolvedMath: [Int: Int] = [:]) {
+    /// `calloutBlocks` (`MarkdownHighlighter.calloutBlocks`) reveal as a whole too.
+    init(tokens: [MarkdownHighlighter.Token], resolvedImages: Set<Int> = [], pictureBlocks: [NSRange] = [], resolvedDiagrams: Set<Int> = [], resolvedMath: [Int: Int] = [:], calloutBlocks: [NSRange] = []) {
         var hidden: [NSRange] = []
         var bullets: Set<Int> = []
         var blocks: [NSRange] = []
@@ -81,7 +83,7 @@ nonisolated struct MarkerIndex: Equatable {
         }
         self.hidden = Self.merged(hidden)
         self.bullets = bullets
-        self.blocks = blocks
+        self.blocks = blocks + calloutBlocks
         self.pictureRanges = pictureBlocks + mathTokens
         self.anchors = resolvedMath.values.sorted()
     }

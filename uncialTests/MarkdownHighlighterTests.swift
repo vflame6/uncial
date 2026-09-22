@@ -231,6 +231,32 @@ import Testing
         #expect(has(text, .quote, "> > deep **b**") && has(text, .strong, "**b**"))
     }
 
+    @Test func calloutsOpenWhereTheirBlockquoteBegins() {
+        let text = "> [!Note] Title **b**\n> body\n\n> [!tip]-\n> x\n> > [!todo] nested\n> a\n> [!note] late"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        let first = token(text)
+        #expect(first.kind == .callout(type: "note", depth: 1, defaultTitle: "Note"))
+        #expect(markers(first, in: text) == ["> ", "[!Note] "])
+        #expect(has(text, .callout, "[!Note] ") && has(text, .quote, "> [!Note] Title **b**") && has(text, .strong, "**b**"))
+        #expect(token(text, 2).kind == .quote(depth: 1))
+        let folded = tokens.first { $0.range.location == 30 }
+        #expect(folded?.kind == .callout(type: "tip", depth: 1, defaultTitle: "Tip"))
+        #expect(folded.map { markers($0, in: text) } == ["> ", "[!tip]-"])
+        let nested = tokens.first { $0.range.location == 44 }
+        #expect(nested?.kind == .callout(type: "todo", depth: 2, defaultTitle: "Todo"))
+        #expect(nested.map { markers($0, in: text) } == ["> ", "> ", "[!todo] "])
+        // A marker on a line that continues a blockquote is plain text.
+        #expect(tokens.first { $0.range.location == 67 }?.kind == .quote(depth: 1))
+        #expect(!has("> a\n> [!note] b", .callout, "[!note] "))
+        #expect(has(">   [!x] spaced", .callout, "[!x] "))
+        #expect(!has("> [!note]x", .callout, "[!note]"))
+
+        let blocks = MarkdownHighlighter.calloutBlocks(in: tokens, text: text as NSString)
+        #expect(blocks.map(\.range) == [NSRange(location: 0, length: 28), NSRange(location: 30, length: 51), NSRange(location: 44, length: 18)])
+        #expect(blocks.map(\.type) == ["note", "tip", "todo"] && blocks.map(\.depth) == [1, 1, 2])
+        #expect(MarkdownHighlighter.calloutBlocks(in: MarkdownHighlighter.tokens(in: "> [!note]\n> a\nlazy\n> b"), text: "> [!note]\n> a\nlazy\n> b").map(\.range) == [NSRange(location: 0, length: 13)])
+    }
+
     @Test func rulesAndFencesHideTheirMarkers() {
         let text = "\n---\n```swift\nlet x = 1\n```"
         let tokens = MarkdownHighlighter.tokens(in: text)

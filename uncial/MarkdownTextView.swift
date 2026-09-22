@@ -219,6 +219,9 @@ final class ThemedTextView: NSTextView {
             layoutManager.lineColor = style.muted
             layoutManager.accent = style.accent
             layoutManager.separatorColor = style.muted.withAlphaComponent(0.35)
+            layoutManager.calloutColors = Dictionary(uniqueKeysWithValues: Callouts.Role.allCases.map { ($0, style.calloutColor(for: $0)) })
+            layoutManager.calloutTitleFont = style.calloutTitleFont
+            layoutManager.calloutIconSize = InlineStyle.calloutIconSize * style.scale
         }
         rehighlight()
     }
@@ -263,7 +266,8 @@ final class ThemedTextView: NSTextView {
             case .inline:
                 let textWidth = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
                 // A diagram or formula the caret is in stays source, so the reveal is settled first, from the new tokens.
-                let reveal = MarkerIndex(tokens: tokens).revealedRange(for: selectedRange(), in: text as NSString)
+                let callouts = MarkdownHighlighter.calloutBlocks(in: tokens, text: text as NSString).map(\.range)
+                let reveal = MarkerIndex(tokens: tokens, calloutBlocks: callouts).revealedRange(for: selectedRange(), in: text as NSString)
                 let resolved = InlineStyle(style: style).apply(tokens, to: textStorage, images: { self.image(for: $0) },
                                                                diagrams: { self.image(forDiagram: $0) }, math: { self.picture(forMath: $0, display: $1) },
                                                                revealed: reveal, textWidth: textWidth)
@@ -271,7 +275,7 @@ final class ThemedTextView: NSTextView {
                 resolvedDiagrams = resolved.diagrams
                 resolvedMath = resolved.math
                 markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, pictureBlocks: resolved.pictureBlocks,
-                                      resolvedDiagrams: resolvedDiagrams, resolvedMath: resolvedMath)
+                                      resolvedDiagrams: resolvedDiagrams, resolvedMath: resolvedMath, calloutBlocks: callouts)
                 revealed = markers.revealedRange(for: selectedRange(), in: text as NSString)
             }
             CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)

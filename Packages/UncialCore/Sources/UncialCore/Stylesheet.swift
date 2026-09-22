@@ -1,7 +1,8 @@
 /// Shared layout and element rules. Every color, font and size comes from a custom property
 /// that each theme sets (light values on `:root`, dark ones under `prefers-color-scheme: dark`).
 /// The `.hljs-…` rules color highlighted code through the `--code-…` variables, one per
-/// `CodeHighlighter.Scope`, which every theme sets to its `SyntaxPalette` values.
+/// `CodeHighlighter.Scope`, which every theme sets to its `SyntaxPalette` values; the `.callout` rules
+/// take their colors from `--callout-<role>` variables, one per `Callouts.Role`, set to `CalloutPalette`.
 public enum Stylesheet {
     /// The base sheet followed by the theme's variables and overrides.
     public static func css(for theme: Theme) -> String {
@@ -64,6 +65,23 @@ public enum Stylesheet {
     blockquote { margin: 0 0 16px; padding: 0 1em; color: var(--muted); border-left: .25em solid var(--quote-border); }
     blockquote > :first-child { margin-top: 0; }
     blockquote > :last-child { margin-bottom: 0; }
+    .callout { --callout-color: var(--callout-note); margin: 0 0 16px; padding: 12px 16px; border-radius: var(--radius); background: color-mix(in srgb, var(--callout-color) 10%, transparent); }
+    .callout[data-callout="abstract"], .callout[data-callout="tip"] { --callout-color: var(--callout-tip); }
+    .callout[data-callout="success"] { --callout-color: var(--callout-success); }
+    .callout[data-callout="question"] { --callout-color: var(--callout-question); }
+    .callout[data-callout="warning"] { --callout-color: var(--callout-warning); }
+    .callout[data-callout="failure"], .callout[data-callout="danger"], .callout[data-callout="bug"] { --callout-color: var(--callout-danger); }
+    .callout[data-callout="example"] { --callout-color: var(--callout-example); }
+    .callout[data-callout="quote"] { --callout-color: var(--callout-quote); }
+    .callout-title { display: flex; align-items: center; gap: 8px; margin: 0; color: var(--callout-color); font-weight: 600; }
+    .callout-icon, .callout-fold { display: inline-flex; flex: none; }
+    .callout-icon svg, .callout-fold svg { width: 18px; height: 18px; }
+    .callout-fold { opacity: .7; transition: transform .15s; }
+    details[open] > .callout-title .callout-fold { transform: rotate(90deg); }
+    summary.callout-title { cursor: pointer; list-style: none; }
+    summary.callout-title::-webkit-details-marker { display: none; }
+    .callout-content { margin-top: 8px; }
+    .callout-content > :last-child { margin-bottom: 0; }
     ul, ol { padding-left: 2em; }
     ul ul, ul ol, ol ol, ol ul { margin-top: 0; margin-bottom: 0; }
     li + li { margin-top: .25em; }

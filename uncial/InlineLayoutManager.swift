@@ -1,10 +1,11 @@
 import AppKit
+import UncialCore
 
 /// Draws the inline presentation's block decorations behind the text: a rounded background
 /// across a fenced code block, a left border per quote level, a rule line, a divider under an h1
-/// or h2. Driven by the
-/// `.blockDecoration` paragraph attribute, so it needs no NSTextBlock and adds no padding. Also
-/// draws the pictures: images under their paragraph, formulas on their anchor glyph.
+/// or h2, a tinted box per callout level with the callout's icon and default title. Driven by the
+/// `.blockDecoration` paragraph attribute (and `.calloutTitle`), so it needs no NSTextBlock and adds no
+/// padding. Also draws the pictures: images under their paragraph, formulas on their anchor glyph.
 final class InlineLayoutManager: NSLayoutManager {
     static let cornerRadius: CGFloat = 6
     static let borderWidth: CGFloat = 3
@@ -14,6 +15,10 @@ final class InlineLayoutManager: NSLayoutManager {
     var accent: NSColor = .clear
     /// The divider under a rendered h1 or h2.
     var separatorColor: NSColor = .clear
+    /// The callout colors per role: the box is the color at 10%, icon and title the color itself.
+    var calloutColors: [Callouts.Role: NSColor] = [:]
+    var calloutTitleFont = NSFont.systemFont(ofSize: 15, weight: .semibold)
+    var calloutIconSize: CGFloat = InlineStyle.calloutIconSize
     /// The paragraphs whose markers are shown; a rule there gives way to its raw text.
     var revealed = NSRange(location: 0, length: 0)
 
@@ -31,6 +36,7 @@ final class InlineLayoutManager: NSLayoutManager {
             if let decoration = storage.attribute(.blockDecoration, at: fragment.location, effectiveRange: nil) as? String {
                 self.draw(decoration, in: box, fragment: fragment, fragmentGlyphs: fragmentGlyphs, storage: storage, text: text)
             }
+            self.drawCalloutTitle(in: fragment, fragmentGlyphs: fragmentGlyphs, lineRect: box, container: container, storage: storage, text: text)
             self.drawTaskBoxes(in: fragment, lineRect: box, container: container, origin: origin, storage: storage)
             self.drawImage(in: fragment, lineRect: box, container: container, storage: storage, text: text)
         }
@@ -74,7 +80,7 @@ final class InlineLayoutManager: NSLayoutManager {
             let after = NSMaxRange(paragraph) < text.length ? storage.attribute(.blockDecoration, at: NSMaxRange(paragraph), effectiveRange: nil) as? String : nil
             let isFirst = before != "code" && startsParagraph(fragmentGlyphs, paragraph: paragraph)
             let isLast = after != "code" && NSMaxRange(fragment) >= NSMaxRange(paragraph)
-            fillCode(box, roundTop: isFirst, roundBottom: isLast)
+            fill(box, with: codeBackground, roundTop: isFirst, roundBottom: isLast)
         case "rule":
             guard !NSLocationInRange(paragraph.location, revealed) else { return }
             lineColor.setFill()
@@ -85,11 +91,60 @@ final class InlineLayoutManager: NSLayoutManager {
             separatorColor.setFill()
             NSRect(x: box.minX, y: box.maxY - 1, width: box.width, height: 1).fill()
         default:
-            guard decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) else { return }
-            lineColor.setFill()
-            for level in 0..<depth {
-                NSRect(x: box.minX + InlineStyle.quoteIndent * CGFloat(level) + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
+            if decoration.hasPrefix("quote:"), let depth = Int(decoration.dropFirst(6)) {
+                lineColor.setFill()
+                for level in 0..<depth {
+                    NSRect(x: box.minX + InlineStyle.quoteIndent * CGFloat(level) + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
+                }
+                return
             }
+            // A stack, one entry per quote level: a callout's box from that level's indent to the right
+            // edge, rounded where the neighboring paragraphs are not in the same callout, or a quote's bar.
+            let before = paragraph.location > 0 ? storage.attribute(.blockDecoration, at: paragraph.location - 1, effectiveRange: nil) as? String : nil
+            let after = NSMaxRange(paragraph) < text.length ? storage.attribute(.blockDecoration, at: NSMaxRange(paragraph), effectiveRange: nil) as? String : nil
+            for (level, entry) in decoration.split(separator: "|").map(String.init).enumerated() {
+                let left = box.minX + InlineStyle.quoteIndent * CGFloat(level)
+                if entry.hasPrefix("callout:") {
+                    guard let color = calloutColors[Callouts.role(for: String(entry.dropFirst(8)))] else { continue }
+                    let isFirst = Self.entry(at: level, in: before) != entry && startsParagraph(fragmentGlyphs, paragraph: paragraph)
+                    let isLast = Self.entry(at: level, in: after) != entry && NSMaxRange(fragment) >= NSMaxRange(paragraph)
+                    fill(NSRect(x: left, y: box.minY, width: box.maxX - left, height: box.height), with: color.withAlphaComponent(0.1), roundTop: isFirst, roundBottom: isLast)
+                } else {
+                    lineColor.setFill()
+                    NSRect(x: left + 2, y: box.minY, width: Self.borderWidth, height: box.height).fill()
+                }
+            }
+        }
+    }
+
+    /// The entry at a quote level of a decoration: `quote` inside a `quote:N`, the level's entry of a stack, nil otherwise.
+    private static func entry(at level: Int, in decoration: String?) -> String? {
+        guard let decoration else { return nil }
+        if decoration.hasPrefix("quote:") {
+            return level < (Int(decoration.dropFirst(6)) ?? 0) ? "quote" : nil
+        }
+        let levels = decoration.split(separator: "|")
+        return level < levels.count ? String(levels[level]) : nil
+    }
+
+    /// A callout's icon at the content indent of its level, centered on the title's capitals, and,
+    /// when the line names no title, the default title after it; only while the markers are hidden.
+    private func drawCalloutTitle(in fragment: NSRange, fragmentGlyphs: NSRange, lineRect: NSRect, container: NSTextContainer, storage: NSTextStorage, text: NSString) {
+        guard let title = storage.attribute(.calloutTitle, at: fragment.location, effectiveRange: nil) as? CalloutTitle,
+              !NSLocationInRange(fragment.location, revealed),
+              let color = calloutColors[Callouts.role(for: title.type)] else { return }
+        let paragraph = text.paragraphRange(for: NSRange(location: fragment.location, length: 0))
+        guard startsParagraph(fragmentGlyphs, paragraph: paragraph) else { return }
+        let baseline = location(forGlyphAt: fragmentGlyphs.location).y
+        let x = lineRect.minX + container.lineFragmentPadding + InlineStyle.quoteIndent * CGFloat(title.depth)
+        let size = calloutIconSize
+        let iconRect = NSRect(x: x, y: lineRect.minY + baseline - calloutTitleFont.capHeight / 2 - size / 2, width: size, height: size)
+        if let icon = CalloutIcons.image(for: title.type, color: color, size: size) {
+            icon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        }
+        if let defaultTitle = title.defaultTitle {
+            let string = NSAttributedString(string: defaultTitle, attributes: [.font: calloutTitleFont, .foregroundColor: color])
+            string.draw(at: NSPoint(x: x + size + InlineStyle.calloutIconGap, y: lineRect.minY + baseline - calloutTitleFont.ascender))
         }
     }
 
@@ -141,7 +196,7 @@ final class InlineLayoutManager: NSLayoutManager {
     /// One rounded rectangle per block, painted piecewise: each fragment clips a rectangle that is
     /// extended past the edges that must stay square. The text view's coordinates are flipped, so
     /// "top" is `minY`.
-    private func fillCode(_ box: NSRect, roundTop: Bool, roundBottom: Bool) {
+    private func fill(_ box: NSRect, with color: NSColor, roundTop: Bool, roundBottom: Bool) {
         let radius = Self.cornerRadius
         var extended = box
         if !roundTop {
@@ -153,7 +208,7 @@ final class InlineLayoutManager: NSLayoutManager {
         }
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(rect: box).addClip()
-        codeBackground.setFill()
+        color.setFill()
         NSBezierPath(roundedRect: extended, xRadius: radius, yRadius: radius).fill()
         NSGraphicsContext.restoreGraphicsState()
     }

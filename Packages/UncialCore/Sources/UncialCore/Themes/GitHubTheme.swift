@@ -14,6 +14,8 @@ extension Stylesheet {
       --h1-border: 1px solid var(--border-muted); --h2-border: 1px solid var(--border-muted);
       --code-comment: #59636e; --code-keyword: #cf222e; --code-string: #0a3069; --code-number: #0550ae; --code-type: #0550ae; --code-function: #8250df;
       --code-variable: #953800; --code-meta: #0550ae; --code-tag: #116329; --code-addition: #116329; --code-deletion: #82071e;
+      --callout-note: #0969da; --callout-tip: #0d8f87; --callout-success: #1a7f37; --callout-question: #9a6700;
+      --callout-warning: #bc4c00; --callout-danger: #cf222e; --callout-example: #8250df; --callout-quote: #59636e;
     }
     @media (prefers-color-scheme: dark) {
       :root {
@@ -22,6 +24,8 @@ extension Stylesheet {
         --code-bg: #151b23; --row-alt: #151b23; --mark: #3a2d00; --quote-border: #3d444d;
         --code-comment: #9198a1; --code-keyword: #ff7b72; --code-string: #a5d6ff; --code-number: #79c0ff; --code-type: #79c0ff; --code-function: #d2a8ff;
         --code-variable: #ffa657; --code-meta: #79c0ff; --code-tag: #7ee787; --code-addition: #3fb950; --code-deletion: #f85149;
+        --callout-note: #4493f8; --callout-tip: #39c5bb; --callout-success: #3fb950; --callout-question: #d29922;
+        --callout-warning: #db6d28; --callout-danger: #f85149; --callout-example: #ab7df8; --callout-quote: #9198a1;
       }
     }
     """#

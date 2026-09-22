@@ -144,6 +144,20 @@ import UncialCore
     }
 
     /// Remote images load asynchronously through the injected loader and then hide their markers.
+    @Test func revealsAWholeCalloutAroundTheCaret() {
+        // Lines: `> [!note] Hi` 0–11, `> body` 13–18, `after` 20–24.
+        let text = "> [!note] Hi\n> body\nafter"
+        let inside = editor(text, presentation: .inline, caret: 15)
+        #expect(inside.revealed == NSRange(location: 0, length: 20))
+        #expect(inside.textStorage?.attribute(.font, at: 10, effectiveRange: nil) as? NSFont == inside.style.regular)
+        #expect(inside.layoutManager?.propertyForGlyph(at: inside.layoutManager!.glyphIndexForCharacter(at: 0)) != .null)
+        let outside = editor(text, presentation: .inline, caret: 22)
+        #expect(outside.revealed == NSRange(location: 20, length: 5))
+        #expect(outside.textStorage?.attribute(.font, at: 10, effectiveRange: nil) as? NSFont == outside.style.calloutTitleFont)
+        #expect(outside.layoutManager?.propertyForGlyph(at: outside.layoutManager!.glyphIndexForCharacter(at: 2)) == .null)
+        #expect(outside.textStorage?.attribute(.blockDecoration, at: 13, effectiveRange: nil) as? String == "callout:note")
+    }
+
     @Test func loadsRemoteImagesAsynchronously() async throws {
         let picture = NSImage(size: NSSize(width: 20, height: 10), flipped: false) { rect in
             NSColor.red.setFill()

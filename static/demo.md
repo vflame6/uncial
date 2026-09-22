@@ -75,6 +75,28 @@ lines hanging under their text, task boxes drawn as squares that toggle on click
 *Expect:* one bar per level in the muted color, `>` markers hidden, the text
 muted.
 
+## Callouts
+
+> [!note] A titled note
+> Body text with **bold** and `code`.
+
+> [!tip]
+> The title falls back to the type.
+
+> [!warning]- Folded, closed by default
+> Hidden until the title is clicked.
+
+> [!example] Nested
+> > [!todo] Inner callout
+> > with a step
+> > > a plain quote inside
+
+*Expect:* one tinted box per callout with the type's icon and title in its color
+(blue note, teal tip, orange warning, purple example), the body in the text color;
+the folded warning shows a chevron and opens on click in the page; in Live Preview
+the boxes are drawn in place and the whole callout shows its source while the
+cursor is inside; the plain quote inside keeps its bar.
+
 ## Code
 
 ```swift

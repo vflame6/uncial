@@ -15,6 +15,7 @@ struct DocumentView: View {
         model.autosaves = settings.autosave
         model.externalChangePolicy = settings.externalChangePolicy
         model.remoteContent = settings.loadRemoteContent
+        model.attachmentSearch = settings.attachmentSearch
         _model = State(initialValue: model)
         let preferred = settings.defaultEditorMode
         // An empty read-only window is useless: new documents open with the editor visible.
@@ -69,6 +70,7 @@ struct DocumentView: View {
         .onChange(of: settings.autosave) { model.autosaves = settings.autosave }
         .onChange(of: settings.externalChangePolicy) { model.externalChangePolicy = settings.externalChangePolicy }
         .onChange(of: settings.loadRemoteContent) { model.remoteContent = settings.loadRemoteContent }
+        .onChange(of: settings.attachmentSearch) { model.attachmentSearch = settings.attachmentSearch }
         .onAppear { updateSync() }
         .onDisappear { model.saveIfAutomatic() }
     }
@@ -99,6 +101,7 @@ struct DocumentView: View {
                 readableWidth: settings.readableLineWidth,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
                 loadsRemoteImages: settings.loadRemoteContent,
+                attachmentSearch: settings.attachmentSearch,
                 scrollTarget: sync.editorTarget,
                 handle: editorHandle,
                 onChange: { model.updateText($0) },
@@ -138,6 +141,7 @@ struct DocumentView: View {
                 lineNumbers: settings.showLineNumbers,
                 baseURL: model.fileURL?.deletingLastPathComponent(),
                 remoteContent: settings.loadRemoteContent,
+                attachments: settings.attachmentSearch,
                 handle: previewFind.handle,
                 scrollTarget: sync.previewTarget,
                 onScroll: { sync.previewDidScroll(toLine: $0) }

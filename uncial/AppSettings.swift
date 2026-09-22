@@ -19,6 +19,9 @@ final class AppSettings {
         static let autosave = "autosave"
         static let externalChangePolicy = "externalChangePolicy"
         static let loadRemoteContent = "loadRemoteContent"
+        static let attachmentsDirectory = "attachmentsDirectory"
+        static let searchesParentsForAttachments = "searchesParentsForAttachments"
+        static let attachmentSearchBoundary = "attachmentSearchBoundary"
         static let splitRatio = "splitRatio"
         static let textSize = "textSize"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
@@ -90,6 +93,26 @@ final class AppSettings {
         }
     }
 
+    /// The folder a relative image or linked file is looked for in when it is not where the document
+    /// says: next to the document and, with `searchesParentsForAttachments`, next to every folder
+    /// above it up to `attachmentSearchBoundary`. Blank: the folders themselves only.
+    var attachmentsDirectory: String {
+        didSet { defaults.set(attachmentsDirectory, forKey: Key.attachmentsDirectory) }
+    }
+
+    var searchesParentsForAttachments: Bool {
+        didSet { defaults.set(searchesParentsForAttachments, forKey: Key.searchesParentsForAttachments) }
+    }
+
+    var attachmentSearchBoundary: AttachmentSearch.Boundary {
+        didSet { defaults.set(attachmentSearchBoundary.rawValue, forKey: Key.attachmentSearchBoundary) }
+    }
+
+    /// The three attachment settings as the value the renderer, the editor and the link opener take.
+    var attachmentSearch: AttachmentSearch {
+        AttachmentSearch(directoryName: attachmentsDirectory, searchesParents: searchesParentsForAttachments, boundary: attachmentSearchBoundary)
+    }
+
     /// Share of a Split View window's width for the source pane, within `SplitLayout.ratioRange`.
     var splitRatio: Double {
         didSet { defaults.set(splitRatio, forKey: Key.splitRatio) }
@@ -152,6 +175,9 @@ final class AppSettings {
         autosave = defaults.bool(forKey: Key.autosave)
         externalChangePolicy = ExternalChangePolicy(rawValue: defaults.string(forKey: Key.externalChangePolicy) ?? "") ?? .ask
         loadRemoteContent = defaults.bool(forKey: Key.loadRemoteContent)
+        attachmentsDirectory = defaults.string(forKey: Key.attachmentsDirectory) ?? AttachmentSearch.defaultDirectoryName
+        searchesParentsForAttachments = defaults.object(forKey: Key.searchesParentsForAttachments) == nil ? true : defaults.bool(forKey: Key.searchesParentsForAttachments)
+        attachmentSearchBoundary = AttachmentSearch.Boundary(rawValue: defaults.string(forKey: Key.attachmentSearchBoundary) ?? "") ?? .home
         splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
         let storedSize = defaults.integer(forKey: Key.textSize)
         textSize = storedSize == 0 ? nil : min(max(storedSize, Self.textSizeRange.lowerBound), Self.textSizeRange.upperBound)
@@ -175,5 +201,14 @@ final class AppSettings {
     func applyAppearance() {
         guard appliesAppearance else { return }
         NSApp.appearance = appearance.appearance
+    }
+}
+
+extension AttachmentSearch.Boundary {
+    var title: String {
+        switch self {
+        case .home: "Home folder"
+        case .root: "System root"
+        }
     }
 }

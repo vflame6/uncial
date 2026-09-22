@@ -1,7 +1,7 @@
 import SwiftUI
 import UncialCore
 
-/// General tab: appearance, theme, remote content, Quick Look extension, default app. Also shown in the Welcome window.
+/// General tab: appearance, theme, remote content, attachments, Quick Look extension, default app. Also shown in the Welcome window.
 struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
     var quickLook: QuickLookExtensionManager
@@ -29,6 +29,21 @@ struct GeneralSettingsView: View {
                 Text("Privacy")
             } footer: {
                 Text("Off, a document's references to the web (images, media, style sheets) stay unloaded in the window, in Live Preview and in Quick Look, so opening a file tells no server about it. Links still open in your browser when you click them.")
+            }
+
+            Section {
+                TextField("Attachments folder", text: $settings.attachmentsDirectory, prompt: Text(AttachmentSearch.defaultDirectoryName))
+                Toggle("Search the folders above the document", isOn: $settings.searchesParentsForAttachments)
+                Picker("Stop at", selection: $settings.attachmentSearchBoundary) {
+                    ForEach(AttachmentSearch.Boundary.allCases, id: \.self) { boundary in
+                        Text(boundary.title).tag(boundary)
+                    }
+                }
+                .disabled(!settings.searchesParentsForAttachments)
+            } header: {
+                Text("Attachments")
+            } footer: {
+                Text("An image or linked file that is not where the document says is looked for in the attachments folder next to the document and then, folder by folder, above the document: in each folder itself and in its attachments folder, up to your home folder or the root of the disk. A document outside your home folder is searched in its own folder only while the search stops at home. Leave the folder name empty to look in the folders themselves only. Quick Look can read nothing but the document, so its previews show no attachments.")
             }
 
             Section {

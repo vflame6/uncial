@@ -2,9 +2,11 @@ import Foundation
 import UniformTypeIdentifiers
 
 /// Rewrites local `<img src>` references to image files as `data:` URIs so previews work without file access.
+/// A file that is not where the reference says is looked for by `attachments`.
 public struct ImageInliner: Sendable {
     public let directoryURL: URL
     public let maxBytes: Int
+    public let attachments: AttachmentSearch
 
     private static let imageSource = try! NSRegularExpression(
         pattern: #"(<img\b[^>]*?\bsrc\s*=\s*)(?:"([^"]*)"|'([^']*)')"#,
@@ -13,9 +15,10 @@ public struct ImageInliner: Sendable {
     private static let scheme = try! NSRegularExpression(pattern: #"^[a-zA-Z][a-zA-Z0-9+.\-]*:"#)
 
     /// - Parameter baseURL: the document file (its directory is used) or a directory URL.
-    public init(baseURL: URL, maxBytes: Int = 20 * 1024 * 1024) {
+    public init(baseURL: URL, maxBytes: Int = 20 * 1024 * 1024, attachments: AttachmentSearch = .direct) {
         self.directoryURL = baseURL.hasDirectoryPath ? baseURL : baseURL.deletingLastPathComponent()
         self.maxBytes = maxBytes
+        self.attachments = attachments
     }
 
     public func inline(_ html: String) -> String {
@@ -35,9 +38,11 @@ public struct ImageInliner: Sendable {
         return output
     }
 
-    /// Resolves `source` against the directory and returns a data URI, or nil when it should be left alone.
+    /// Resolves `source` against the directory (or finds it through `attachments`) and returns a data
+    /// URI, or nil when it should be left alone.
     func dataURI(for source: String) -> String? {
-        guard let fileURL = localFileURL(for: source),
+        guard let direct = localFileURL(for: source),
+              let fileURL = attachments.locate(direct, from: directoryURL),
               let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize, size <= maxBytes,
               let mime = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType, mime.hasPrefix("image/"),
               let data = try? Data(contentsOf: fileURL) else { return nil }

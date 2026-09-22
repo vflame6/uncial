@@ -34,6 +34,23 @@ import Testing
         #expect(output.hasPrefix("<img src=\"data:image/png;base64,"))
     }
 
+    /// A missing image is found in the document folder's attachments folder, or in a parent's.
+    @Test func findsImagesThroughTheAttachmentSearch() throws {
+        let root = try fixtureDirectory()
+        let sub = root.appendingPathComponent("notes/sub", isDirectory: true)
+        try FileManager.default.createDirectory(at: sub.appendingPathComponent("attachments"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root.appendingPathComponent("notes/attachments"), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: root.appendingPathComponent("img/dot.png"), to: root.appendingPathComponent("notes/attachments/dot.png"))
+        try FileManager.default.copyItem(at: root.appendingPathComponent("img/my icon.svg"), to: sub.appendingPathComponent("attachments/my icon.svg"))
+        let document = sub.appendingPathComponent("README.md")
+        let html = "<img src=\"dot.png\"><img src=\"my%20icon.svg\">"
+        #expect(ImageInliner(baseURL: document).inline(html) == html)
+        let everywhere = ImageInliner(baseURL: document, attachments: AttachmentSearch(boundary: .root)).inline(html)
+        #expect(everywhere.contains("<img src=\"data:image/png;base64,iVBORw0KGgo") && everywhere.contains("<img src=\"data:image/svg+xml;base64,"))
+        let ownFolder = ImageInliner(baseURL: document, attachments: AttachmentSearch(searchesParents: false)).inline(html)
+        #expect(ownFolder.contains("<img src=\"dot.png\">") && ownFolder.contains("<img src=\"data:image/svg+xml;base64,"))
+    }
+
     @Test func leavesNonImageFilesAlone() throws {
         let directory = try fixtureDirectory()
         try Data("secret".utf8).write(to: directory.appendingPathComponent("notes.txt"))

@@ -40,6 +40,11 @@ final class DocumentViewModel {
         didSet { if remoteContent != oldValue { render() } }
     }
 
+    /// Where an image that is not where the document says is looked for (`AppSettings.attachmentSearch`).
+    var attachmentSearch: AttachmentSearch = .direct {
+        didSet { if attachmentSearch != oldValue { render() } }
+    }
+
     /// What happens when the file changes while the window holds unsaved edits (`AppSettings.externalChangePolicy`).
     var externalChangePolicy: ExternalChangePolicy = .ask
     /// Asked, under the Ask policy, with the document's name: keep the edits or reload the file. The
@@ -256,11 +261,12 @@ final class DocumentViewModel {
         let baseURL = fileURL
         let theme = theme
         let remoteContent = remoteContent
+        let attachments = attachmentSearch
         Task.detached(priority: .userInitiated) {
             // Diagrams beautiful-mermaid cannot draw go through mermaid.js in the hidden web view first.
             let sources = MermaidRenderer.unsupportedFences(in: text)
             let diagrams = sources.isEmpty ? [:] : await DiagramWebRenderer.shared.render(sources, theme: theme)
-            let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true, diagrams: diagrams, remoteContent: remoteContent)
+            let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true, diagrams: diagrams, remoteContent: remoteContent, attachments: attachments)
             let statistics = DocumentStatistics(text: text)
             await MainActor.run { [weak self] in
                 guard let self, self.generation == generation else { return }

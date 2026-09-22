@@ -332,6 +332,35 @@ import UncialCore
         #expect((inline.textStorage!.attribute(.paragraphStyle, at: 15, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
     }
 
+    /// An image that is not next to the document is found in the attachments folder once the search is on.
+    @Test func findsImagesInTheAttachmentsFolder() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-inline-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("attachments"), withIntermediateDirectories: true)
+        let picture = NSImage(size: NSSize(width: 30, height: 10), flipped: false) { rect in
+            NSColor.blue.setFill()
+            rect.fill()
+            return true
+        }
+        let png = NSBitmapImageRep(data: picture.tiffRepresentation!)!.representation(using: .png, properties: [:])!
+        try png.write(to: directory.appendingPathComponent("attachments/file.png"))
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.baseURL = directory
+        inline.presentation = .inline
+        inline.replaceText(with: "![a](file.png)\nend")
+        inline.setSelectedRange(NSRange(location: 17, length: 0))
+        layout(inline)
+        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
+        inline.attachmentSearch = AttachmentSearch(searchesParents: false)
+        layout(inline)
+        #expect(inline.markers.isHidden(0))
+        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 18)
+        inline.attachmentSearch = .direct
+        layout(inline)
+        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
+    }
+
     @Test func centersAReadableColumn() {
         let inline = editor(sample, presentation: .inline, caret: 32)
         #expect(inline.textContainerInset.width == 16)

@@ -20,6 +20,8 @@ struct MarkdownTextView: NSViewRepresentable {
     let baseURL: URL?
     /// Whether http(s) images are fetched for Live Preview (`AppSettings.loadRemoteContent`).
     let loadsRemoteImages: Bool
+    /// Where a local image or linked file is looked for when it is not where the document says.
+    let attachmentSearch: AttachmentSearch
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     /// Receives the text view so menu commands (Edit ▸ Find) can address it.
@@ -71,6 +73,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.readableWidth = readableWidth
         textView.baseURL = baseURL
         textView.loadsRemoteImages = loadsRemoteImages
+        textView.attachmentSearch = attachmentSearch
         textView.theme = theme
         textView.string = text
         textView.fontSize = fontSize
@@ -99,6 +102,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.continuesLists = continueLists
         textView.baseURL = baseURL
         textView.loadsRemoteImages = loadsRemoteImages
+        textView.attachmentSearch = attachmentSearch
         textView.theme = theme
         textView.readableWidth = readableWidth
         if textView.presentation != presentation {
@@ -312,6 +316,15 @@ final class ThemedTextView: NSTextView {
             if presentation == .inline { rehighlight() }
         }
     }
+    /// Where a local image or link destination is looked for when nothing is at the place it names
+    /// (`AppSettings.attachmentSearch`): the attachments folder next to the document, its parents.
+    var attachmentSearch: AttachmentSearch = .direct {
+        didSet {
+            guard attachmentSearch != oldValue else { return }
+            imageCache.removeAll()
+            if presentation == .inline { rehighlight() }
+        }
+    }
     private(set) var markers = MarkerIndex.empty
     /// Locations of the image tokens that loaded and are drawn under their paragraph.
     private(set) var resolvedImages: Set<Int> = []
@@ -368,8 +381,9 @@ final class ThemedTextView: NSTextView {
         rehighlight()
     }
 
-    /// Local images load right away; http(s) ones are fetched once through `remoteImageLoader` (only
-    /// with `loadsRemoteImages`) and, once here, re-render the text. Every outcome is cached per
+    /// Local images load right away (found through `attachmentSearch` when they are not where the
+    /// destination says); http(s) ones are fetched once through `remoteImageLoader` (only with
+    /// `loadsRemoteImages`) and, once here, re-render the text. Every outcome is cached per
     /// destination, misses too.
     func image(for destination: String) -> NSImage? {
         if let cached = imageCache[destination] { return cached }
@@ -379,7 +393,8 @@ final class ThemedTextView: NSTextView {
             return nil
         }
         if url.isFileURL {
-            let loaded = NSImage(contentsOf: url)
+            let located = baseURL.flatMap { attachmentSearch.locate(url, from: $0) } ?? url
+            let loaded = NSImage(contentsOf: located)
             imageCache[destination] = .some(loaded)
             return loaded
         }
@@ -517,7 +532,7 @@ final class ThemedTextView: NSTextView {
         let destination = (link as? String) ?? (link as? URL)?.absoluteString ?? ""
         if NSApp.currentEvent?.modifierFlags.contains(.command) == true, !destination.hasPrefix("#"),
            let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL {
-            LinkOpener.open(url)
+            LinkOpener.open(url, from: baseURL, attachments: attachmentSearch)
         } else {
             setSelectedRange(NSRange(location: charIndex, length: 0))
         }

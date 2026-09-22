@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import UncialCore
 @testable import Uncial
 
 @MainActor
@@ -15,6 +16,20 @@ import Testing
 
     private func contents(of file: URL) throws -> String {
         String(decoding: try Data(contentsOf: file), as: UTF8.self)
+    }
+
+    /// The attachment search reaches the renderer and a change re-renders.
+    @Test func attachmentSearchReRenders() async throws {
+        let file = try temporaryFile("![a](a.gif)")
+        let directory = file.deletingLastPathComponent()
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("attachments"), withIntermediateDirectories: true)
+        try Data([0x47, 0x49, 0x46]).write(to: directory.appendingPathComponent("attachments/a.gif"))
+        let model = DocumentViewModel(fileURL: file, initialText: "![a](a.gif)", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.body.contains("<img src=\"a.gif\""))
+        model.attachmentSearch = AttachmentSearch()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.body.contains("<img src=\"data:image/gif;base64,R0lG\""))
     }
 
     @Test func rendersInitialTextAndEdits() async throws {

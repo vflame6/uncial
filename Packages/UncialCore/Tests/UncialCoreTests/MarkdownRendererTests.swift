@@ -79,6 +79,17 @@ import Testing
         #expect(renderer.renderBody("![a](a.gif)").contains("<img src=\"a.gif\""))
     }
 
+    @Test func bodyAndDocumentFindImagesThroughTheAttachmentSearch() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("uncial-attach-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory.appendingPathComponent("attachments"), withIntermediateDirectories: true)
+        try Data([0x47, 0x49, 0x46]).write(to: directory.appendingPathComponent("attachments/a.gif"))
+        let document = directory.appendingPathComponent("doc.md")
+        #expect(renderer.renderBody("![a](a.gif)", baseURL: document).contains("<img src=\"a.gif\""))
+        #expect(renderer.renderBody("![a](a.gif)", baseURL: document, attachments: AttachmentSearch()).contains("<img src=\"data:image/gif;base64,R0lG\""))
+        #expect(renderer.renderDocument("![a](a.gif)", title: "t", baseURL: document, attachments: AttachmentSearch()).contains("<img src=\"data:image/gif;base64,R0lG\""))
+    }
+
     @Test func documentUsesRequestedTheme() {
         let html = renderer.renderDocument("# T", title: "t", theme: .github)
         #expect(html.contains("data-theme=\"github\""))

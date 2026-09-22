@@ -29,6 +29,11 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   the web unless you allow it in Settings ▸ General: remote images and other
   references stay unloaded in the window, in Live Preview and in Quick Look, so
   opening a file tells no server about it.
+- Attachments found where you keep them: an image or linked file that is not
+  next to the document is looked for in its `attachments` folder and then,
+  folder by folder, above the document. Settings ▸ General sets the folder
+  name, whether the folders above are searched, and whether the search stops at
+  your home folder or at the root of the disk.
 - Quick Look preview and thumbnails for Markdown files.
 - Optional status bar with line, word and character counts. Pinch to zoom.
 
@@ -86,9 +91,9 @@ Marked, …), disable it in the same settings pane or macOS may keep using it.
 - File ▸ Open (⌘O) and Open Recent work as in any document app. File ▸ New… (⌘N)
   asks where to create an empty Markdown file and opens it.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.
-- Settings (⌘,) has General (appearance, theme, loading from the web, Quick Look,
-  default app), Editor, Shortcuts and About tabs; the General controls are offered
-  once in a Welcome window on first launch.
+- Settings (⌘,) has General (appearance, theme, loading from the web, attachments,
+  Quick Look, default app), Editor, Shortcuts and About tabs; the General controls
+  are offered once in a Welcome window on first launch.
 
 ### Editing
 

@@ -1,15 +1,18 @@
 import AppKit
+import UncialCore
 
 /// External links go to the default browser; local Markdown files open in Uncial; other files open with their default app.
 enum LinkOpener {
     static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mkdn", "mkdown", "mdwn", "mdtxt", "mdtext"]
 
-    static func open(_ url: URL) {
+    /// Opens `url`. A local file that is not where `url` says is looked for by `attachments` from
+    /// `directory` (the document's folder) first.
+    static func open(_ url: URL, from directory: URL? = nil, attachments: AttachmentSearch = .direct) {
         guard url.isFileURL else {
             NSWorkspace.shared.open(url)
             return
         }
-        let fileURL = URL(fileURLWithPath: url.path)
+        let fileURL = resolve(url, from: directory, attachments: attachments)
         guard markdownExtensions.contains(fileURL.pathExtension.lowercased()) else {
             NSWorkspace.shared.open(fileURL)
             return
@@ -19,5 +22,13 @@ enum LinkOpener {
                 NSWorkspace.shared.open(fileURL)
             }
         }
+    }
+
+    /// The local file a `file:` link stands for: the file itself (query and fragment dropped) or,
+    /// when nothing is there, the attachment `attachments` finds from `directory`.
+    static func resolve(_ url: URL, from directory: URL?, attachments: AttachmentSearch) -> URL {
+        let fileURL = URL(fileURLWithPath: url.path)
+        guard let directory else { return fileURL }
+        return attachments.locate(fileURL, from: directory) ?? fileURL
     }
 }

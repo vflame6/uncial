@@ -17,6 +17,8 @@ struct WebView: NSViewRepresentable {
     let baseURL: URL?
     /// Whether the page may load from the web; off, `RemoteContentBlocker`'s rule list is installed first.
     let remoteContent: Bool
+    /// Where a link to a local file that is not where the document says is looked for.
+    let attachments: AttachmentSearch
     /// Receives the web view so the find bar and menu commands can address it.
     let handle: PreviewHandle
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
@@ -46,6 +48,7 @@ struct WebView: NSViewRepresentable {
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.setTextScale(textScale)
+        context.coordinator.attachments = attachments
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL, remoteContent: remoteContent)
         context.coordinator.apply(scrollTarget)
         return webView
@@ -55,6 +58,7 @@ struct WebView: NSViewRepresentable {
         context.coordinator.onScroll = onScroll
         context.coordinator.setLineNumbers(lineNumbers)
         context.coordinator.setTextScale(textScale)
+        context.coordinator.attachments = attachments
         context.coordinator.show(body: body, title: title, theme: theme, baseURL: baseURL, remoteContent: remoteContent)
         context.coordinator.apply(scrollTarget)
     }
@@ -82,6 +86,8 @@ struct WebView: NSViewRepresentable {
 
         weak var webView: WKWebView?
         var onScroll: ((Double) -> Void)?
+        /// Where a clicked link to a missing local file is looked for, from the page's base URL.
+        var attachments: AttachmentSearch = .direct
         private var page: Page?
         private var currentBody: String?
         private var isLoading = false
@@ -238,7 +244,7 @@ struct WebView: NSViewRepresentable {
                     decisionHandler(.allow)
                 } else {
                     decisionHandler(.cancel)
-                    LinkOpener.open(url)
+                    LinkOpener.open(url, from: page?.baseURL, attachments: attachments)
                 }
                 return
             }
@@ -255,7 +261,7 @@ struct WebView: NSViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             if let url = navigationAction.request.url {
-                LinkOpener.open(url)
+                LinkOpener.open(url, from: page?.baseURL, attachments: attachments)
             }
             return nil
         }

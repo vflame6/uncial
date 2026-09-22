@@ -26,6 +26,10 @@ import UncialCore
         #expect(settings.autosave == false)
         #expect(settings.externalChangePolicy == .ask)
         #expect(settings.loadRemoteContent == false)
+        #expect(settings.attachmentsDirectory == "attachments")
+        #expect(settings.searchesParentsForAttachments == true)
+        #expect(settings.attachmentSearchBoundary == .home)
+        #expect(settings.attachmentSearch == AttachmentSearch())
         #expect(settings.splitRatio == 0.5)
         #expect(settings.textSize == nil && settings.effectiveTextSize == 13 && settings.textScale == 1)
         #expect(settings.hasCompletedFirstRun == false)
@@ -42,6 +46,22 @@ import UncialCore
         defaults.set("bogus", forKey: AppSettings.Key.externalChangePolicy)
         #expect(AppSettings(defaults: defaults, applyAppearance: false).externalChangePolicy == .ask)
         #expect(ExternalChangePolicy.allCases.map(\.title) == ["Ask", "Keep my edits", "Reload the file"])
+    }
+
+    @Test func persistsAttachmentSearch() {
+        let defaults = freshDefaults()
+        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.attachmentsDirectory = "assets"
+        settings.searchesParentsForAttachments = false
+        settings.attachmentSearchBoundary = .root
+        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
+        #expect(reloaded.attachmentsDirectory == "assets")
+        #expect(reloaded.searchesParentsForAttachments == false)
+        #expect(reloaded.attachmentSearchBoundary == .root)
+        #expect(reloaded.attachmentSearch == AttachmentSearch(directoryName: "assets", searchesParents: false, boundary: .root))
+        defaults.set("bogus", forKey: AppSettings.Key.attachmentSearchBoundary)
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).attachmentSearchBoundary == .home)
+        #expect(AttachmentSearch.Boundary.allCases.map(\.title) == ["Home folder", "System root"])
     }
 
     @Test func persistsEditorConveniences() {

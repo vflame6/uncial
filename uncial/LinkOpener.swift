@@ -3,7 +3,7 @@ import UncialCore
 
 /// External links go to the default browser; local Markdown files open in Uncial; other files open with their default app.
 enum LinkOpener {
-    static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mkdn", "mkdown", "mdwn", "mdtxt", "mdtext"]
+    static let markdownExtensions = MarkdownText.fileExtensions
 
     /// Opens `url`. A local file that is not where `url` says is looked for by `attachments` from
     /// `directory` (the document's folder) first.

@@ -95,7 +95,7 @@ public struct AttachmentSearch: Equatable, Sendable {
     }
 
     /// `url` as a standardized directory URL, so relative paths resolve inside it and not beside it.
-    private static func directoryURL(_ url: URL) -> URL {
+    static func directoryURL(_ url: URL) -> URL {
         URL(fileURLWithPath: url.standardizedFileURL.path, isDirectory: true)
     }
 }

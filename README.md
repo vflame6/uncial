@@ -34,6 +34,9 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   folder by folder, above the document. Settings ▸ General sets the folder
   name, whether the folders above are searched, and whether the search stops at
   your home folder or at the root of the disk.
+- Paste or drop files and pictures into the editor: the file is copied where
+  new attachments go (Settings ▸ General chooses the folder, created as needed)
+  and the Markdown for it, an image or a link, is inserted at the cursor.
 - Quick Look preview and thumbnails for Markdown files.
 - Optional status bar with line, word and character counts. Pinch to zoom.
 

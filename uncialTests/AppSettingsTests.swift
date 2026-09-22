@@ -30,6 +30,7 @@ import UncialCore
         #expect(settings.searchesParentsForAttachments == true)
         #expect(settings.attachmentSearchBoundary == .home)
         #expect(settings.attachmentSearch == AttachmentSearch())
+        #expect(settings.attachmentDestination == .attachmentsFolder)
         #expect(settings.splitRatio == 0.5)
         #expect(settings.textSize == nil && settings.effectiveTextSize == 13 && settings.textScale == 1)
         #expect(settings.hasCompletedFirstRun == false)
@@ -54,14 +55,19 @@ import UncialCore
         settings.attachmentsDirectory = "assets"
         settings.searchesParentsForAttachments = false
         settings.attachmentSearchBoundary = .root
+        settings.attachmentDestination = .nearestAttachmentsFolder
         let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
         #expect(reloaded.attachmentsDirectory == "assets")
         #expect(reloaded.searchesParentsForAttachments == false)
         #expect(reloaded.attachmentSearchBoundary == .root)
+        #expect(reloaded.attachmentDestination == .nearestAttachmentsFolder)
         #expect(reloaded.attachmentSearch == AttachmentSearch(directoryName: "assets", searchesParents: false, boundary: .root))
         defaults.set("bogus", forKey: AppSettings.Key.attachmentSearchBoundary)
+        defaults.set("bogus", forKey: AppSettings.Key.attachmentDestination)
         #expect(AppSettings(defaults: defaults, applyAppearance: false).attachmentSearchBoundary == .home)
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).attachmentDestination == .attachmentsFolder)
         #expect(AttachmentSearch.Boundary.allCases.map(\.title) == ["Home folder", "System root"])
+        #expect(AttachmentImporter.Destination.allCases.map(\.title) == ["Attachments folder next to the document", "First attachments folder found above", "The document's folder"])
     }
 
     @Test func persistsEditorConveniences() {

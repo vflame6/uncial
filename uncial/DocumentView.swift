@@ -102,6 +102,7 @@ struct DocumentView: View {
                 baseURL: model.fileURL?.deletingLastPathComponent(),
                 loadsRemoteImages: settings.loadRemoteContent,
                 attachmentSearch: settings.attachmentSearch,
+                attachmentDestination: settings.attachmentDestination,
                 scrollTarget: sync.editorTarget,
                 handle: editorHandle,
                 onChange: { model.updateText($0) },

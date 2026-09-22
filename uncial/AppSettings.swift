@@ -22,6 +22,7 @@ final class AppSettings {
         static let attachmentsDirectory = "attachmentsDirectory"
         static let searchesParentsForAttachments = "searchesParentsForAttachments"
         static let attachmentSearchBoundary = "attachmentSearchBoundary"
+        static let attachmentDestination = "attachmentDestination"
         static let splitRatio = "splitRatio"
         static let textSize = "textSize"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
@@ -113,6 +114,11 @@ final class AppSettings {
         AttachmentSearch(directoryName: attachmentsDirectory, searchesParents: searchesParentsForAttachments, boundary: attachmentSearchBoundary)
     }
 
+    /// Where a file pasted or dropped into the editor is put (`AttachmentImporter.Destination`).
+    var attachmentDestination: AttachmentImporter.Destination {
+        didSet { defaults.set(attachmentDestination.rawValue, forKey: Key.attachmentDestination) }
+    }
+
     /// Share of a Split View window's width for the source pane, within `SplitLayout.ratioRange`.
     var splitRatio: Double {
         didSet { defaults.set(splitRatio, forKey: Key.splitRatio) }
@@ -178,6 +184,7 @@ final class AppSettings {
         attachmentsDirectory = defaults.string(forKey: Key.attachmentsDirectory) ?? AttachmentSearch.defaultDirectoryName
         searchesParentsForAttachments = defaults.object(forKey: Key.searchesParentsForAttachments) == nil ? true : defaults.bool(forKey: Key.searchesParentsForAttachments)
         attachmentSearchBoundary = AttachmentSearch.Boundary(rawValue: defaults.string(forKey: Key.attachmentSearchBoundary) ?? "") ?? .home
+        attachmentDestination = AttachmentImporter.Destination(rawValue: defaults.string(forKey: Key.attachmentDestination) ?? "") ?? .attachmentsFolder
         splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
         let storedSize = defaults.integer(forKey: Key.textSize)
         textSize = storedSize == 0 ? nil : min(max(storedSize, Self.textSizeRange.lowerBound), Self.textSizeRange.upperBound)
@@ -209,6 +216,16 @@ extension AttachmentSearch.Boundary {
         switch self {
         case .home: "Home folder"
         case .root: "System root"
+        }
+    }
+}
+
+extension AttachmentImporter.Destination {
+    var title: String {
+        switch self {
+        case .attachmentsFolder: "Attachments folder next to the document"
+        case .nearestAttachmentsFolder: "First attachments folder found above"
+        case .documentFolder: "The document's folder"
         }
     }
 }

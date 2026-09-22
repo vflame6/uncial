@@ -22,6 +22,8 @@ struct MarkdownTextView: NSViewRepresentable {
     let loadsRemoteImages: Bool
     /// Where a local image or linked file is looked for when it is not where the document says.
     let attachmentSearch: AttachmentSearch
+    /// Where a pasted or dropped file is put (`AppSettings.attachmentDestination`).
+    let attachmentDestination: AttachmentImporter.Destination
     /// 1-based fractional document line to scroll to; a new token performs the scroll.
     var scrollTarget: ScrollTarget?
     /// Receives the text view so menu commands (Edit ▸ Find) can address it.
@@ -74,6 +76,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.baseURL = baseURL
         textView.loadsRemoteImages = loadsRemoteImages
         textView.attachmentSearch = attachmentSearch
+        textView.attachmentDestination = attachmentDestination
         textView.theme = theme
         textView.string = text
         textView.fontSize = fontSize
@@ -103,6 +106,7 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.baseURL = baseURL
         textView.loadsRemoteImages = loadsRemoteImages
         textView.attachmentSearch = attachmentSearch
+        textView.attachmentDestination = attachmentDestination
         textView.theme = theme
         textView.readableWidth = readableWidth
         if textView.presentation != presentation {
@@ -174,6 +178,7 @@ final class ThemedTextView: NSTextView {
         layoutManager.addTextContainer(container)
         let textView = ThemedTextView(frame: .zero, textContainer: container)
         layoutManager.delegate = textView
+        textView.registerForDraggedTypes(textView.readablePasteboardTypes)
         return textView
     }
 
@@ -197,6 +202,8 @@ final class ThemedTextView: NSTextView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        // NSTextView registers its own drag types on the way into a window; ours must be there too.
+        registerForDraggedTypes(readablePasteboardTypes)
         applyStyle()
     }
 
@@ -325,6 +332,9 @@ final class ThemedTextView: NSTextView {
             if presentation == .inline { rehighlight() }
         }
     }
+    /// Where a pasted or dropped file is put (`AppSettings.attachmentDestination`), together with
+    /// `attachmentSearch`'s folder name and walk.
+    var attachmentDestination: AttachmentImporter.Destination = .attachmentsFolder
     private(set) var markers = MarkerIndex.empty
     /// Locations of the image tokens that loaded and are drawn under their paragraph.
     private(set) var resolvedImages: Set<Int> = []
@@ -536,6 +546,74 @@ final class ThemedTextView: NSTextView {
         } else {
             setSelectedRange(NSRange(location: charIndex, length: 0))
         }
+    }
+
+    // MARK: Pasted and dropped attachments
+
+    /// Pasteboard contents that become attachments: files first, then picture data.
+    static let attachmentPasteboardTypes: [NSPasteboard.PasteboardType] = [.fileURL, .png, .tiff, NSPasteboard.PasteboardType("public.jpeg")]
+
+    /// Files and pictures ahead of the inherited types, so a copied file or picture pastes (and
+    /// drops) as an attachment while text still pastes as text.
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        Self.attachmentPasteboardTypes + super.readablePasteboardTypes
+    }
+
+    override func dragOperation(for dragInfo: any NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
+        Self.attachmentPasteboardTypes.contains(type) && baseURL != nil ? .copy : super.dragOperation(for: dragInfo, type: type)
+    }
+
+    /// `paste:` lands here with the preferred type; files and pictures become attachments.
+    override func readSelection(from pboard: NSPasteboard, type: NSPasteboard.PasteboardType) -> Bool {
+        guard Self.attachmentPasteboardTypes.contains(type), baseURL != nil else {
+            return super.readSelection(from: pboard, type: type)
+        }
+        return importAttachments(from: pboard)
+    }
+
+    /// A drop of files or pictures inserts at the drop point; anything else is NSTextView's business.
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let pasteboard = sender.draggingPasteboard
+        guard baseURL != nil, pasteboard.availableType(from: Self.attachmentPasteboardTypes) != nil else {
+            return super.performDragOperation(sender)
+        }
+        let point = convert(sender.draggingLocation, from: nil)
+        setSelectedRange(NSRange(location: characterIndexForInsertion(at: point), length: 0))
+        return importAttachments(from: pasteboard)
+    }
+
+    /// Copies the pasteboard's files (or writes its picture) where new attachments go and inserts
+    /// the Markdown for them at the selection, undoably. False when it holds neither, or on an
+    /// error, which is shown.
+    @discardableResult
+    func importAttachments(from pasteboard: NSPasteboard) -> Bool {
+        guard let baseURL else { return false }
+        let importer = AttachmentImporter(search: attachmentSearch, destination: attachmentDestination)
+        do {
+            let stored: [URL]
+            if let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [NSURL], !files.isEmpty {
+                stored = try files.map { try importer.store(fileAt: $0 as URL, for: baseURL) }
+            } else if let picture = Self.pictureData(on: pasteboard) {
+                stored = [try importer.store(picture.data, named: AttachmentImporter.pastedImageName(extension: picture.extension), for: baseURL)]
+            } else {
+                return false
+            }
+            let markdown = stored.map { AttachmentImporter.markdown(for: $0, relativeTo: baseURL) }.joined(separator: "\n")
+            insertText(markdown, replacementRange: selectedRange())
+            return true
+        } catch {
+            _ = presentError(error)
+            return false
+        }
+    }
+
+    /// PNG or JPEG bytes as they are on the pasteboard; any other picture re-encoded as PNG.
+    private static func pictureData(on pasteboard: NSPasteboard) -> (data: Data, extension: String)? {
+        if let data = pasteboard.data(forType: .png) { return (data, "png") }
+        if let data = pasteboard.data(forType: NSPasteboard.PasteboardType("public.jpeg")) { return (data, "jpg") }
+        guard let image = NSImage(pasteboard: pasteboard), let tiff = image.tiffRepresentation,
+              let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) else { return nil }
+        return (png, "png")
     }
 
     // MARK: Undo

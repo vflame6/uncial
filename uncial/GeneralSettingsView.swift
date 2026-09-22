@@ -40,10 +40,15 @@ struct GeneralSettingsView: View {
                     }
                 }
                 .disabled(!settings.searchesParentsForAttachments)
+                Picker("New attachments go to", selection: $settings.attachmentDestination) {
+                    ForEach(AttachmentImporter.Destination.allCases, id: \.self) { destination in
+                        Text(destination.title).tag(destination)
+                    }
+                }
             } header: {
                 Text("Attachments")
             } footer: {
-                Text("An image or linked file that is not where the document says is looked for in the attachments folder next to the document and then, folder by folder, above the document: in each folder itself and in its attachments folder, up to your home folder or the root of the disk. A document outside your home folder is searched in its own folder only while the search stops at home. Leave the folder name empty to look in the folders themselves only. Quick Look can read nothing but the document, so its previews show no attachments.")
+                Text("An image or linked file that is not where the document says is looked for in the attachments folder next to the document and then, folder by folder, above the document: in each folder itself and in its attachments folder, up to your home folder or the root of the disk. A document outside your home folder is searched in its own folder only while the search stops at home. Leave the folder name empty to look in the folders themselves only; new attachments then go to the document's folder. A file or picture pasted or dropped into the editor is copied where new attachments go (the folder is created as needed) and inserted as a link, or as an image for pictures; a file the document already reaches, and any Markdown file, is linked where it is. Quick Look can read nothing but the document, so its previews show no attachments.")
             }
 
             Section {

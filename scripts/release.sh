@@ -28,6 +28,15 @@ package)
         exit 1
     fi
     codesign --verify --deep --strict "$app"
+    # A build for others must not carry the debugger's entitlement (Xcode injects it for Debug builds
+    # and for development-signed builds unless CODE_SIGN_INJECT_BASE_ENTITLEMENTS is NO, as the
+    # project's Release configuration sets).
+    for binary in "$app" "$app"/Contents/PlugIns/*.appex; do
+        if codesign -d --entitlements :- "$binary" 2>/dev/null | grep -q "com.apple.security.get-task-allow"; then
+            echo "$binary carries com.apple.security.get-task-allow; build Release with CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO." >&2
+            exit 1
+        fi
+    done
     echo "Signed as: $(codesign -dvv "$app" 2>&1 | sed -n 's/^Authority=//p' | head -1)"
     if [ -n "${NOTARY_PROFILE:-}" ]; then
         ditto -c -k --keepParent "$app" "$zip"

@@ -201,7 +201,7 @@ final class ThemedTextView: NSTextView {
 
     private func applyStyle() {
         let isDark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        style = EditorStyle(palette: palette, isDark: isDark, size: fontSize)
+        style = EditorStyle(palette: palette, syntax: theme.syntaxPalette, isDark: isDark, size: fontSize)
         backgroundColor = style.background
         insertionPointColor = style.foreground
         enclosingScrollView?.backgroundColor = style.background
@@ -228,7 +228,7 @@ final class ThemedTextView: NSTextView {
     }
 
     /// Re-applies base attributes and, per presentation, the Markdown coloring or the inline
-    /// rendering. Attribute-only, so undo is untouched. Inline: every glyph is invalidated so markers
+    /// rendering, then the code inside fenced blocks (`CodeSyntaxStyle`). Attribute-only, so undo is untouched. Inline: every glyph is invalidated so markers
     /// that appeared or vanished anywhere are hidden or shown correctly (regenerated lazily).
     func rehighlight() {
         guard let textStorage else { return }
@@ -259,6 +259,7 @@ final class ThemedTextView: NSTextView {
                 markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, pictureBlocks: resolved.pictureBlocks,
                                       resolvedDiagrams: resolvedDiagrams, resolvedMath: resolvedMath)
             }
+            CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)
         } else {
             markers = .empty
         }
@@ -311,9 +312,10 @@ final class ThemedTextView: NSTextView {
             DispatchQueue.main.async { completion(image) }
         }.resume()
     }
-    /// The document theme: the colors of the diagrams mermaid.js draws, and part of their cache key.
+    /// The document theme: the colors of highlighted code and of the diagrams mermaid.js draws (part
+    /// of their cache key).
     var theme: Theme = .default {
-        didSet { if theme != oldValue, presentation == .inline { rehighlight() } }
+        didSet { if theme != oldValue { applyStyle() } }
     }
     /// Opening fence locations of the mermaid blocks drawn as pictures.
     private(set) var resolvedDiagrams: Set<Int> = []

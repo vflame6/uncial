@@ -1,5 +1,7 @@
 /// Shared layout and element rules. Every color, font and size comes from a custom property
 /// that each theme sets (light values on `:root`, dark ones under `prefers-color-scheme: dark`).
+/// The `.hljs-…` rules color highlighted code through the `--code-…` variables, one per
+/// `CodeHighlighter.Scope`, which every theme sets to its `SyntaxPalette` values.
 public enum Stylesheet {
     /// The base sheet followed by the theme's variables and overrides.
     public static func css(for theme: Theme) -> String {
@@ -45,6 +47,20 @@ public enum Stylesheet {
     code { padding: .2em .4em; margin: 0; font-size: 85%; color: var(--code-fg); background: var(--code-bg); border-radius: var(--radius); white-space: break-spaces; }
     pre { padding: 16px; overflow: auto; font-size: 85%; line-height: 1.45; color: var(--code-fg); background: var(--code-bg); border-radius: var(--radius); }
     pre code { padding: 0; margin: 0; font-size: 100%; color: inherit; background: transparent; border: 0; white-space: pre; word-break: normal; }
+    .hljs-comment, .hljs-quote { color: var(--code-comment); }
+    .hljs-keyword, .hljs-doctag, .hljs-template-tag { color: var(--code-keyword); }
+    .hljs-string, .hljs-regexp, .hljs-char.escape_, .hljs-code, .hljs-formula { color: var(--code-string); }
+    .hljs-number, .hljs-literal, .hljs-symbol, .hljs-bullet { color: var(--code-number); }
+    .hljs-type, .hljs-built_in, .hljs-title.class_ { color: var(--code-type); }
+    .hljs-title, .hljs-section { color: var(--code-function); }
+    .hljs-variable, .hljs-template-variable, .hljs-attr, .hljs-attribute, .hljs-property, .hljs-selector-attr, .hljs-selector-pseudo { color: var(--code-variable); }
+    .hljs-meta { color: var(--code-meta); }
+    .hljs-name, .hljs-selector-tag, .hljs-selector-id, .hljs-selector-class { color: var(--code-tag); }
+    .hljs-subst { color: var(--fg); }
+    .hljs-addition { color: var(--code-addition); background: color-mix(in srgb, var(--code-addition) 12%, transparent); }
+    .hljs-deletion { color: var(--code-deletion); background: color-mix(in srgb, var(--code-deletion) 12%, transparent); }
+    .hljs-emphasis { font-style: italic; }
+    .hljs-strong { font-weight: 600; }
     blockquote { margin: 0 0 16px; padding: 0 1em; color: var(--muted); border-left: .25em solid var(--quote-border); }
     blockquote > :first-child { margin-top: 0; }
     blockquote > :last-child { margin-bottom: 0; }

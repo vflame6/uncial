@@ -8,6 +8,8 @@ struct EditorStyle {
     let accent: NSColor
     let muted: NSColor
     let code: NSColor
+    /// The theme's colors for highlighted code, per `CodeHighlighter.Scope`.
+    let syntax: SyntaxPalette.Colors
     let regular: NSFont
     let bold: NSFont
     let italic: NSFont
@@ -16,9 +18,10 @@ struct EditorStyle {
     /// Whether the colors are the dark variant.
     let isDark: Bool
 
-    init(palette: EditorPalette?, isDark: Bool, size: CGFloat = 13) {
+    init(palette: EditorPalette?, syntax: SyntaxPalette = Theme.default.syntaxPalette, isDark: Bool, size: CGFloat = 13) {
         self.size = size
         self.isDark = isDark
+        self.syntax = isDark ? syntax.dark : syntax.light
         let colors = palette.map { isDark ? $0.dark : $0.light }
         background = colors.map { NSColor(rgb: $0.background) } ?? .textBackgroundColor
         foreground = colors.map { NSColor(rgb: $0.foreground) } ?? .textColor
@@ -31,6 +34,10 @@ struct EditorStyle {
     }
 
     var scale: CGFloat { size / 13 }
+
+    func color(for scope: CodeHighlighter.Scope) -> NSColor {
+        NSColor(rgb: syntax.color(for: scope))
+    }
 
     var baseAttributes: [NSAttributedString.Key: Any] {
         [.font: regular, .foregroundColor: foreground]

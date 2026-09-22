@@ -11,6 +11,11 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 - GitHub-flavored Markdown: tables, task lists, strikethrough, autolinks,
   footnotes, fenced code, raw HTML, LaTeX math and Mermaid diagrams, rendered
   without running any script in the page.
+- Syntax highlighting in fenced code for about 50 languages, from Python,
+  JavaScript, TypeScript, Java, C, C++, C#, Go, Rust, Swift, Kotlin, Ruby, PHP,
+  SQL and shell to Fortran, COBOL, Prolog, MATLAB, Pascal and Scratch, plus JSON,
+  YAML, HTML, CSS, diff and more, with colors that follow the theme in the
+  rendered page, in Quick Look and in the editor.
 - Four modes per window: Read Only, Live Preview (Markdown rendered in place),
   Split View and Raw Editor.
 - Three themes, each with a light and a dark variant: macOS, GitHub and Solarized.
@@ -119,6 +124,7 @@ search the source, or the rendered page in Read Only.
 make core-test   # unit tests for the renderer and watcher (swift test)
 make test        # core tests + app unit tests via xcodebuild
 make build       # Release build into ./build
+make highlight   # rebuild the highlight.js bundle (scripts/build-highlight.sh)
 make clean
 ```
 
@@ -133,7 +139,7 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 
 | Part | What it does |
 |---|---|
-| `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, math (KaTeX) and diagrams (beautiful-mermaid) rendered through JavaScriptCore at render time, image inlining, and the three themes as CSS. Also the file watcher and the block outline the thumbnails draw. |
+| `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, math (KaTeX), diagrams (beautiful-mermaid) and code highlighting (highlight.js) done through JavaScriptCore at render time, image inlining, and the three themes as CSS. Also the file watcher and the block outline the thumbnails draw. |
 | `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model keeps the editor's text, writes it to the file on ⌘S (or as you type, when automatic saving is on) and reconciles changes that arrive from other programs. A hidden web view runs mermaid.js for the diagram types beautiful-mermaid lacks and draws every diagram to a bitmap for Live Preview. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
 | `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme, and the diagrams mermaid.js drew in the app, from the App Group container the app writes to (WebKit cannot run inside the extension). |
 | `UncialThumbnail` | Quick Look Thumbnail Extension. Draws the document's outline (headings, text, lists, quotes, code, rules, tables) as a small page with AppKit for Finder icons, Open panels and Get Info, in the theme's light colors. |

@@ -66,6 +66,22 @@ import Testing
         #expect(HTMLDocument.wrap(body: "", title: "t", lineNumbers: true).contains("<html data-theme=\"macos\" class=\"line-numbers\">"))
     }
 
+    @Test func syntaxPalettesMatchTheStylesheets() {
+        for theme in Theme.allCases {
+            let css = Stylesheet.css(for: theme)
+            let palette = theme.syntaxPalette
+            for scope in CodeHighlighter.Scope.allCases {
+                let light = String(format: "--code-%@: #%06x", scope.rawValue, palette.light.color(for: scope))
+                let dark = String(format: "--code-%@: #%06x", scope.rawValue, palette.dark.color(for: scope))
+                #expect(css.contains(light), "\(theme) light misses \(light)")
+                #expect(css.contains(dark), "\(theme) dark misses \(dark)")
+            }
+        }
+        #expect(Theme.macOS.syntaxPalette.light.keyword == 0x9B2393)
+        #expect(Theme.github.syntaxPalette.dark.string == 0xA5D6FF)
+        #expect(Theme.solarized.syntaxPalette.light.comment == 0x93A1A1 && Theme.solarized.syntaxPalette.dark.comment == 0x586E75)
+    }
+
     @Test func namesMathFonts() {
         for theme in Theme.allCases {
             #expect(Stylesheet.css(for: theme).contains("math { font-family:"), "\(theme) has no math font rule")

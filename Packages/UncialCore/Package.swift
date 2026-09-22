@@ -21,6 +21,7 @@ let package = Package(
                 .copy("Resources/katex.min.js"), .copy("Resources/KATEX-LICENSE"),
                 .copy("Resources/beautiful-mermaid.min.js"), .copy("Resources/BEAUTIFUL-MERMAID-LICENSE"),
                 .copy("Resources/mermaid.min.js"), .copy("Resources/MERMAID-LICENSE"),
+                .copy("Resources/highlight.min.js"), .copy("Resources/HIGHLIGHT-LICENSE"),
             ]
         ),
         .testTarget(

@@ -8,12 +8,14 @@ public struct MarkdownRenderer: Sendable {
     /// With `sourcePositions`, block elements carry `data-sourcepos` line ranges of the full document
     /// and `data-line` labels for the gutter (`SourcePositions.annotate`). `diagrams` holds the mermaid
     /// fences drawn ahead of time by mermaid.js (see `MermaidRenderer.unsupportedFences`), keyed by source.
+    /// Fenced code in a language `CodeHighlighter` knows comes back with highlight.js spans.
     public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false, diagrams: [String: PreRenderedDiagram] = [:]) -> String {
         let (frontMatter, body) = FrontMatter.split(markdown)
         var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
         html = HeadingAnchors.addIDs(to: html)
         html = MathRenderer.render(html)
         html = MermaidRenderer.render(html, diagrams: diagrams)
+        html = CodeHighlighter.render(html)
         if sourcePositions {
             if frontMatter != nil {
                 html = SourcePositions.shift(html, by: FrontMatter.bodyLineOffset(of: markdown))

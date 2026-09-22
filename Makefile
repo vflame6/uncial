@@ -11,7 +11,7 @@ VERSION ?= $(shell sed -n 's/.*MARKETING_VERSION = \(.*\);/\1/p' uncial.xcodepro
 # without a Gatekeeper override; NOTARY_PROFILE (a `notarytool store-credentials` profile) notarizes it.
 SIGN_FLAGS = $(if $(SIGN_IDENTITY),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" OTHER_CODE_SIGN_FLAGS=--timestamp,)
 
-.PHONY: build test core-test install uninstall icon clean bump release publish
+.PHONY: build test core-test install uninstall icon highlight clean bump release publish
 
 build:
 	$(XCODEBUILD) -configuration $(CONFIG) build $(SIGN_FLAGS)
@@ -39,6 +39,9 @@ uninstall:
 
 icon:
 	swift scripts/make-icon.swift static/icon.png uncial/Assets.xcassets/AppIcon.appiconset
+
+highlight:
+	scripts/build-highlight.sh
 
 # Release: `make bump VERSION=1.1.0`, commit, `make release` (build, notarize if NOTARY_PROFILE is
 # set, zip, update the cask), then `make publish` (commit the cask, tag, push, GitHub release).

@@ -82,6 +82,22 @@ struct Demo {
 }
 ```
 
+```python
+def greet(name: str) -> str:
+    """Say hello,
+    on two lines."""
+    return f"Hello, {name}!"  # trailing
+```
+
+```json
+{ "name": "uncial", "version": 1.0, "themes": ["macOS", "GitHub", "Solarized"] }
+```
+
+```diff
+- let old = true
++ let new = false
+```
+
 ~~~
 A tilde fence without an info string.
 ~~~
@@ -89,8 +105,11 @@ A tilde fence without an info string.
     An indented code block (four spaces) stays as source in Live Preview.
 
 *Expect:* fenced blocks on a rounded tint spanning every line, fence lines
-hidden except the info string `swift`, code in the code color, no syntax
-highlighting inside. Put the cursor inside a block: the whole block reveals.
+hidden except the info string, keywords, strings, numbers and comments in the
+theme's syntax colors (the same colors in the rendered page and in Quick Look;
+the docstring stays one color across its two lines, the diff lines get a green
+and a red tint), the tilde fence in the plain code color. Put the cursor inside
+a block: the whole block reveals.
 
 ## Table
 

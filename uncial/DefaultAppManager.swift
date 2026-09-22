@@ -26,13 +26,18 @@ final class SystemWorkspace: DefaultAppWorkspace {
 }
 
 /// Makes Uncial the default app for Markdown files, or hands the role back to the previous app.
+/// Two types are involved, the system's `net.daringfireball.markdown` (`md`, `markdown`) and Uncial's
+/// own `UTType.markdownVariant` for the other extensions, each with its own remembered previous handler.
 @Observable
 final class DefaultAppManager {
     static let shared = DefaultAppManager(workspace: SystemWorkspace(), ownURL: Bundle.main.bundleURL, defaults: .standard)
 
+    /// The types whose handler is set together; the first is the one the settings describe.
+    static let types: [UTType] = [.markdown, .markdownVariant]
     static let previousDefaultKey = "previousDefaultMarkdownApp"
     static let textEditURL = URL(fileURLWithPath: "/System/Applications/TextEdit.app")
 
+    /// Whether Uncial handles every type; `currentDefaultName` names the first app holding one instead.
     private(set) var isDefault: Bool?
     private(set) var currentDefaultName: String?
     private(set) var isBusy = false
@@ -49,32 +54,46 @@ final class DefaultAppManager {
     }
 
     func refresh() async {
-        let current = workspace.defaultApplicationURL(for: .markdown)
-        isDefault = current.map(isOwnApp) ?? false
-        currentDefaultName = current?.deletingPathExtension().lastPathComponent
+        let handlers = Self.types.map { workspace.defaultApplicationURL(for: $0) }
+        isDefault = handlers.allSatisfy { $0.map(isOwnApp) ?? false }
+        let named: URL? = handlers.compactMap { $0 }.first { !isOwnApp($0) } ?? handlers[0]
+        currentDefaultName = named?.deletingPathExtension().lastPathComponent
     }
 
     func makeDefault() async {
         await perform {
-            if let current = self.workspace.defaultApplicationURL(for: .markdown), !self.isOwnApp(current) {
-                self.defaults.set(current.path, forKey: Self.previousDefaultKey)
+            for type in Self.types {
+                if let current = self.workspace.defaultApplicationURL(for: type), !self.isOwnApp(current) {
+                    self.defaults.set(current.path, forKey: Self.previousDefaultKey(for: type))
+                }
+                try await self.workspace.setDefaultApplication(at: self.ownURL, for: type)
             }
-            try await self.workspace.setDefaultApplication(at: self.ownURL, for: .markdown)
         }
     }
 
     func removeDefault() async {
         await perform {
-            try await self.workspace.setDefaultApplication(at: self.restoreTarget(), for: .markdown)
+            for type in Self.types {
+                try await self.workspace.setDefaultApplication(at: self.restoreTarget(for: type), for: type)
+            }
         }
     }
 
-    /// The remembered previous handler when it still exists and is not Uncial; otherwise TextEdit.
-    func restoreTarget() -> URL {
-        if let path = defaults.string(forKey: Self.previousDefaultKey),
-           FileManager.default.fileExists(atPath: path) {
-            let url = URL(fileURLWithPath: path)
-            if !isOwnApp(url) { return url }
+    /// Where `type`'s previous handler is remembered. The Markdown type keeps the original key, so a
+    /// choice made before the variant type existed still restores.
+    static func previousDefaultKey(for type: UTType) -> String {
+        type == .markdown ? previousDefaultKey : previousDefaultKey + "." + type.identifier
+    }
+
+    /// The remembered previous handler of `type` when it still exists and is not Uncial, else the
+    /// Markdown type's (a variant file had no handler of its own), else TextEdit.
+    func restoreTarget(for type: UTType = .markdown) -> URL {
+        let keys = type == .markdown ? [Self.previousDefaultKey] : [Self.previousDefaultKey(for: type), Self.previousDefaultKey]
+        for key in keys {
+            if let path = defaults.string(forKey: key), FileManager.default.fileExists(atPath: path) {
+                let url = URL(fileURLWithPath: path)
+                if !isOwnApp(url) { return url }
+            }
         }
         return Self.textEditURL
     }

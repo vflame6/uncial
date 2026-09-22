@@ -2,7 +2,7 @@ import AppKit
 
 /// External links go to the default browser; local Markdown files open in Uncial; other files open with their default app.
 enum LinkOpener {
-    static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mkdn", "mdwn", "mdtxt", "mdtext"]
+    static let markdownExtensions: Set<String> = ["md", "markdown", "mdown", "mkd", "mkdn", "mkdown", "mdwn", "mdtxt", "mdtext"]
 
     static func open(_ url: URL) {
         guard url.isFileURL else {

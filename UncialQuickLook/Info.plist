@@ -11,6 +11,7 @@
 			<key>QLSupportedContentTypes</key>
 			<array>
 				<string>net.daringfireball.markdown</string>
+				<string>com.maksimradaev.uncial.markdown</string>
 			</array>
 			<key>QLSupportsSearchableItems</key>
 			<false/>

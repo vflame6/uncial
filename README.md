@@ -72,7 +72,9 @@ Marked, …), disable it in the same settings pane or macOS may keep using it.
 ## Usage
 
 - Right-click a Markdown file ▸ Open With ▸ Uncial, drop it on the Dock icon, or
-  run `open -a Uncial README.md`.
+  run `open -a Uncial README.md`. Uncial and its Quick Look extensions handle
+  `.md` and `.markdown` files as well as `.mdown`, `.mkd`, `.mkdn`, `.mkdown`,
+  `.mdwn`, `.mdtxt` and `.mdtext`.
 - File ▸ Open (⌘O) and Open Recent work as in any document app. File ▸ New… (⌘N)
   asks where to create an empty Markdown file and opens it.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.

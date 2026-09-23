@@ -56,7 +56,7 @@ With [Homebrew](https://brew.sh):
 ```sh
 brew tap vflame6/uncial https://github.com/vflame6/uncial
 brew trust vflame6/uncial
-brew install --cask --no-quarantine uncial
+brew install --cask uncial
 ```
 
 From source:

@@ -31,8 +31,7 @@ cask "uncial" do
 
   caveats <<~EOS
     Uncial is signed with a development certificate and not notarized, so macOS blocks
-    the first launch: allow it under System Settings > Privacy & Security ("Open Anyway"),
-    or install with `brew install --cask --no-quarantine uncial`.
+    the first launch: allow it under System Settings > Privacy & Security ("Open Anyway").
 
     Open Uncial once so macOS registers its Quick Look extensions. If Space in Finder
     still shows Markdown as plain text, enable "Uncial Quick Look" and "Uncial Thumbnails"

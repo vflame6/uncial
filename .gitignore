@@ -44,5 +44,5 @@ playground.xcworkspace
 .env.*
 
 # Local working notes (design specs, plans)
-docs/superpowers/
+docs/
 CLAUDE.md

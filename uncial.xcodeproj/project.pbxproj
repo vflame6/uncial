@@ -22,13 +22,6 @@
 			remoteGlobalIDString = 22DDDE0D304C354F00A461AF;
 			remoteInfo = uncial;
 		};
-		22DDDE29304C355000A461AF /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 22DDDE06304C354F00A461AF /* Project object */;
-			proxyType = 1;
-			remoteGlobalIDString = 22DDDE0D304C354F00A461AF;
-			remoteInfo = uncial;
-		};
 		5A1C1A1E0000000000000010 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 22DDDE06304C354F00A461AF /* Project object */;
@@ -63,7 +56,6 @@
 /* Begin PBXFileReference section */
 		22DDDE0E304C354F00A461AF /* Uncial.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Uncial.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		22DDDE1E304C355000A461AF /* uncialTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uncialTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		22DDDE28304C355000A461AF /* uncialUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uncialUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A1C1A1E0000000000000001 /* UncialQuickLook.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = UncialQuickLook.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		5A1C1A1E0000000000000020 /* UncialThumbnail.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = UncialThumbnail.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -116,11 +108,6 @@
 			path = uncialTests;
 			sourceTree = "<group>";
 		};
-		22DDDE2B304C355000A461AF /* uncialUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = uncialUITests;
-			sourceTree = "<group>";
-		};
 		5A1C1A1E0000000000000002 /* UncialQuickLook */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -156,13 +143,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		22DDDE25304C355000A461AF /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		5A1C1A1E0000000000000007 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -187,7 +167,6 @@
 			children = (
 				22DDDE10304C354F00A461AF /* uncial */,
 				22DDDE21304C355000A461AF /* uncialTests */,
-				22DDDE2B304C355000A461AF /* uncialUITests */,
 				5A1C1A1E0000000000000002 /* UncialQuickLook */,
 				5A1C1A1E0000000000000021 /* UncialThumbnail */,
 				22DDDE0F304C354F00A461AF /* Products */,
@@ -199,7 +178,6 @@
 			children = (
 				22DDDE0E304C354F00A461AF /* Uncial.app */,
 				22DDDE1E304C355000A461AF /* uncialTests.xctest */,
-				22DDDE28304C355000A461AF /* uncialUITests.xctest */,
 				5A1C1A1E0000000000000001 /* UncialQuickLook.appex */,
 				5A1C1A1E0000000000000020 /* UncialThumbnail.appex */,
 			);
@@ -257,29 +235,6 @@
 			productName = uncialTests;
 			productReference = 22DDDE1E304C355000A461AF /* uncialTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		22DDDE27304C355000A461AF /* uncialUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 22DDDE39304C355000A461AF /* Build configuration list for PBXNativeTarget "uncialUITests" */;
-			buildPhases = (
-				22DDDE24304C355000A461AF /* Sources */,
-				22DDDE25304C355000A461AF /* Frameworks */,
-				22DDDE26304C355000A461AF /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				22DDDE2A304C355000A461AF /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				22DDDE2B304C355000A461AF /* uncialUITests */,
-			);
-			name = uncialUITests;
-			packageProductDependencies = (
-			);
-			productName = uncialUITests;
-			productReference = 22DDDE28304C355000A461AF /* uncialUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		5A1C1A1E0000000000000004 /* UncialQuickLook */ = {
 			isa = PBXNativeTarget;
@@ -344,10 +299,6 @@
 						CreatedOnToolsVersion = 26.6;
 						TestTargetID = 22DDDE0D304C354F00A461AF;
 					};
-					22DDDE27304C355000A461AF = {
-						CreatedOnToolsVersion = 26.6;
-						TestTargetID = 22DDDE0D304C354F00A461AF;
-					};
 					5A1C1A1E0000000000000004 = {
 						CreatedOnToolsVersion = 26.6;
 					};
@@ -375,7 +326,6 @@
 			targets = (
 				22DDDE0D304C354F00A461AF /* uncial */,
 				22DDDE1D304C355000A461AF /* uncialTests */,
-				22DDDE27304C355000A461AF /* uncialUITests */,
 				5A1C1A1E0000000000000004 /* UncialQuickLook */,
 				5A1C1A1E0000000000000023 /* UncialThumbnail */,
 			);
@@ -391,13 +341,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		22DDDE1C304C355000A461AF /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		22DDDE26304C355000A461AF /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -435,13 +378,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		22DDDE24304C355000A461AF /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		5A1C1A1E0000000000000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -463,11 +399,6 @@
 			isa = PBXTargetDependency;
 			target = 22DDDE0D304C354F00A461AF /* uncial */;
 			targetProxy = 22DDDE1F304C355000A461AF /* PBXContainerItemProxy */;
-		};
-		22DDDE2A304C355000A461AF /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 22DDDE0D304C354F00A461AF /* uncial */;
-			targetProxy = 22DDDE29304C355000A461AF /* PBXContainerItemProxy */;
 		};
 		5A1C1A1E0000000000000011 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -715,44 +646,6 @@
 			};
 			name = Release;
 		};
-		22DDDE3A304C355000A461AF /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = XWTLHG45H7;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncialUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = uncial;
-			};
-			name = Debug;
-		};
-		22DDDE3B304C355000A461AF /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = XWTLHG45H7;
-				GENERATE_INFOPLIST_FILE = YES;
-				MARKETING_VERSION = 1.1.4;
-				PRODUCT_BUNDLE_IDENTIFIER = com.maksimradaev.uncialUITests;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				STRING_CATALOG_GENERATE_SYMBOLS = NO;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_EMIT_LOC_STRINGS = NO;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-				TEST_TARGET_NAME = uncial;
-			};
-			name = Release;
-		};
 		5A1C1A1E0000000000000009 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -899,15 +792,6 @@
 			buildConfigurations = (
 				22DDDE37304C355000A461AF /* Debug */,
 				22DDDE38304C355000A461AF /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		22DDDE39304C355000A461AF /* Build configuration list for PBXNativeTarget "uncialUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				22DDDE3A304C355000A461AF /* Debug */,
-				22DDDE3B304C355000A461AF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

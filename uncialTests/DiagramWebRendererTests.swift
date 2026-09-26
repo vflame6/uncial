@@ -148,6 +148,34 @@ final class LoopbackListener: @unchecked Sendable {
         #expect(DiagramWebRenderer.hex(0x0A84FF) == "#0A84FF" && DiagramWebRenderer.mix(0xFFFFFF, into: 0x000000, 0.5) == 0x808080)
     }
 
+    /// beautiful-mermaid lays out a large flowchart for hundreds of milliseconds: off the main thread,
+    /// so the editor keeps responding while a new diagram is drawn (it stalled 179 ms at 50 nodes, 444 ms
+    /// at 100).
+    @Test func laysOutDiagramsOffTheMainThread() async throws {
+        let renderer = DiagramWebRenderer()
+        _ = await renderer.image(for: DiagramRequest(source: "graph LR\n  A --> B", theme: .macOS, dark: false, scale: 1, width: 600))
+        let run = UUID().uuidString.prefix(8)
+        let edges = (0..<50).map { "  N\($0)[\"\(run) \($0)\"] --> N\($0 + 1)\n  N\($0) --> M\($0 % 9)" }.joined(separator: "\n")
+        let request = DiagramRequest(source: "graph TD\n" + edges, theme: .macOS, dark: false, scale: 1, width: 600)
+        var finished = false
+        let drawing = Task { @MainActor in
+            let image = await renderer.image(for: request)
+            finished = true
+            return image
+        }
+        let start = ContinuousClock.now
+        var last = start
+        var longest: Duration = .zero
+        while !finished, ContinuousClock.now - start < .seconds(30) {
+            try await Task.sleep(for: .milliseconds(5))
+            let now = ContinuousClock.now
+            longest = max(longest, now - last)
+            last = now
+        }
+        #expect(await drawing.value != nil)
+        #expect(longest < .milliseconds(120), "the main actor stalled \(longest)")
+    }
+
     @Test func rasterizesMathForLivePreview() async throws {
         let renderer = DiagramWebRenderer()
         let request = MathRequest(tex: "\\frac{a}{b}", display: false, theme: .macOS, dark: false, fontSize: 13)

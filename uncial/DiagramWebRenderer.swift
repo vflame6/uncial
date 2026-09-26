@@ -154,7 +154,10 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
     func image(for request: DiagramRequest) async -> NSImage? {
         if let cached = imageCache[request] { return cached }
         let svg: String
-        if let native = MermaidRenderer.nativeSVG(for: request.source) {
+        // beautiful-mermaid's layout takes hundreds of milliseconds for a large diagram (PERF-8): off the
+        // main actor; MermaidRenderer is thread-safe.
+        let source = request.source
+        if let native = await Task.detached(priority: .userInitiated, operation: { MermaidRenderer.nativeSVG(for: source) }).value {
             svg = native
         } else if let diagram = await variants(for: request.source, theme: request.theme) {
             svg = request.dark ? diagram.dark : diagram.light

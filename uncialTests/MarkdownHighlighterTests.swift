@@ -75,6 +75,21 @@ import Testing
         #expect(!has(text, .codeBlock, "done"))
     }
 
+    /// Emphasis follows CommonMark's flanking rules: a run opens only before text (`a**"foo"**` is no
+    /// emphasis), `_` never inside a word (`foo__bar__`, `__foo__bar`), no delimiter pairs across a link's
+    /// text, and GFM's `~~` the same (`~~ spaced ~~` is not struck). Live Preview hid those markers, which
+    /// the page shows (BUG-28).
+    @Test func emphasisFollowsTheFlankingRules() {
+        for text in ["a**\"foo\"**", "a__\"foo\"__", "foo__bar__", "5__6__78", "__foo__bar", "**(**foo)", "__(__foo)", "_foo [bar_](/url)", "~~ spaced ~~"] {
+            let emphasis = MarkdownHighlighter.tokens(in: text).filter { [.strong, .emphasis, .strikethrough].contains($0.kind) }
+            #expect(emphasis.isEmpty, "\(text)")
+        }
+        #expect(has("**bold** and *em* and __under__ and ~~gone~~", .strong, "**bold**"))
+        #expect(has("x *em*, y", .emphasis, "*em*"))
+        #expect(has("(*em*)", .emphasis, "*em*"))
+        #expect(has("a ~~gone~~ b", .strikethrough, "~~gone~~"))
+    }
+
     @Test func inlineCodeMasksEmphasis() {
         let text = "`a*b*c` *d*"
         #expect(has(text, .inlineCode, "`a*b*c`"))

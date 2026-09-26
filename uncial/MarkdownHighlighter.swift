@@ -550,23 +550,90 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination), markers: [open, close]))
             mask(match.range)
         }
-        for match in hasEmphasis ? boldItalic.matches(in: scratch as String, range: region) : [] {
+        // The regexes propose; CommonMark decides: each run must be able to open or close (flanking, and
+        // `_` never inside a word), and no pair may join a delimiter outside a link's text to one inside.
+        let original = line as NSString
+        let linkTexts: [NSRange] = tokens.compactMap { token in
+            switch token.kind {
+            case .link, .image:
+                guard token.markers.count == 2 else { return nil }
+                let start = NSMaxRange(token.markers[0]) - offset
+                return NSRange(location: start, length: max(0, token.markers[1].location - offset - start))
+            default:
+                return nil
+            }
+        }
+        func pairs(_ match: NSRange, run: Int) -> Bool {
+            let open = NSRange(location: match.location, length: run)
+            let close = NSRange(location: NSMaxRange(match) - run, length: run)
+            guard canOpen(open, in: original), canClose(close, in: original) else { return false }
+            return !linkTexts.contains { NSLocationInRange(open.location, $0) != NSLocationInRange(close.location, $0) }
+        }
+        for match in hasEmphasis ? boldItalic.matches(in: scratch as String, range: region) : [] where pairs(match.range, run: 3) {
             // `***text***`: strong over the whole with three-character markers, emphasis on the text itself.
             tokens.append(Token(range: shifted(match.range), kind: .strong, markers: edges(match.range, open: 3, close: 3)))
             tokens.append(Token(range: shifted(NSRange(location: match.range.location + 3, length: match.range.length - 6)), kind: .emphasis, markers: []))
             mask(match.range)
         }
-        for match in hasEmphasis ? strong.matches(in: scratch as String, range: region) : [] {
+        for match in hasEmphasis ? strong.matches(in: scratch as String, range: region) : [] where pairs(match.range, run: 2) {
             tokens.append(Token(range: shifted(match.range), kind: .strong, markers: edges(match.range, open: 2, close: 2)))
             mask(match.range)
         }
-        for match in hasEmphasis ? emphasis.matches(in: scratch as String, range: region) : [] {
+        for match in hasEmphasis ? emphasis.matches(in: scratch as String, range: region) : [] where pairs(match.range, run: 1) {
             tokens.append(Token(range: shifted(match.range), kind: .emphasis, markers: edges(match.range, open: 1, close: 1)))
         }
-        for match in hasTilde ? strikethrough.matches(in: scratch as String, range: region) : [] {
+        for match in hasTilde ? strikethrough.matches(in: scratch as String, range: region) : [] where pairs(match.range, run: 2) {
             tokens.append(Token(range: shifted(match.range), kind: .strikethrough, markers: edges(match.range, open: 2, close: 2)))
         }
         return tokens.sorted { $0.range.location < $1.range.location }
+    }
+
+    /// Whether the delimiter run at `run` can open emphasis: left-flanking, and a `_` run not also
+    /// right-flanking unless punctuation comes before it (so never inside a word).
+    private static func canOpen(_ run: NSRange, in line: NSString) -> Bool {
+        let (left, right) = flanking(run, in: line)
+        guard left else { return false }
+        guard line.character(at: run.location) == 0x5F else { return true } // "_"
+        return !right || character(before: run, in: line).map(isPunctuation) == true
+    }
+
+    /// Whether the run at `run` can close emphasis: right-flanking, and a `_` run not also left-flanking
+    /// unless punctuation comes after it.
+    private static func canClose(_ run: NSRange, in line: NSString) -> Bool {
+        let (left, right) = flanking(run, in: line)
+        guard right else { return false }
+        guard line.character(at: run.location) == 0x5F else { return true }
+        return !left || character(after: run, in: line).map(isPunctuation) == true
+    }
+
+    /// CommonMark's flanking: a left-flanking run is not followed by whitespace, and not followed by
+    /// punctuation unless whitespace or punctuation precedes it; right-flanking mirrors that. The start
+    /// and end of the line count as whitespace.
+    private static func flanking(_ run: NSRange, in line: NSString) -> (left: Bool, right: Bool) {
+        let previous = character(before: run, in: line)
+        let next = character(after: run, in: line)
+        let previousSpace = previous.map(\.isWhitespace) ?? true
+        let nextSpace = next.map(\.isWhitespace) ?? true
+        let previousPunctuation = previous.map(isPunctuation) ?? false
+        let nextPunctuation = next.map(isPunctuation) ?? false
+        let left = !nextSpace && (!nextPunctuation || previousSpace || previousPunctuation)
+        let right = !previousSpace && (!previousPunctuation || nextSpace || nextPunctuation)
+        return (left, right)
+    }
+
+    private static func character(before run: NSRange, in line: NSString) -> Character? {
+        guard run.location > 0 else { return nil }
+        return Character(line.substring(with: line.rangeOfComposedCharacterSequence(at: run.location - 1)))
+    }
+
+    private static func character(after run: NSRange, in line: NSString) -> Character? {
+        guard NSMaxRange(run) < line.length else { return nil }
+        return Character(line.substring(with: line.rangeOfComposedCharacterSequence(at: NSMaxRange(run))))
+    }
+
+    /// CommonMark's punctuation: Unicode's punctuation and symbols (ASCII `$`, `+`, `<`, `|`, … are symbols).
+    private static func isPunctuation(_ character: Character) -> Bool {
+        character.isPunctuation || character.isSymbol
     }
 
     /// Code spans as CommonMark reads them: a run of backticks closes at the next run of the same length,

@@ -3,6 +3,20 @@ import Testing
 import UncialCore
 @testable import Uncial
 
+/// Stands in for `MarkdownTextView.Coordinator`: the model takes the text, then the view rehighlights.
+@MainActor
+private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
+    var changes = 0
+    var model = ""
+
+    func textDidChange(_ notification: Notification) {
+        guard let view = notification.object as? ThemedTextView else { return }
+        changes += 1
+        model = view.string
+        view.rehighlight()
+    }
+}
+
 @MainActor
 @Suite struct ThemedTextViewInlineTests {
     /// Lines: `## Heading` 0–10, `Some **bold** text` 11–29, `- item` 30–36, fence 37–40,
@@ -31,6 +45,42 @@ import UncialCore
         let index = min(NSMaxRange(range), (view.string as NSString).length - 1)
         let glyph = view.layoutManager!.glyphIndexForCharacter(at: index)
         return view.layoutManager!.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil).width
+    }
+
+    /// Shortening the text inside a block that ends the document (an unclosed fence, a fence with no
+    /// newline after it, a callout, a `$$` block) used to check the reveal against the old block
+    /// ranges while the storage was still processing the edit: the edit raised and never reached
+    /// the delegate, and the next one crashed the app.
+    @Test func editsAtTheEndOfATrailingBlockReachTheDelegate() {
+        let cases: [(text: String, caret: Int)] = [
+            ("intro\n```swift\nlet x", 20),
+            ("intro\n```swift\nlet x\n```", 20),
+            ("intro\n\n> [!note] Hi\n> body", 26),
+            ("intro\n$$\nx^2", 12),
+        ]
+        for (text, caret) in cases {
+            let view = editor(text, presentation: .inline, caret: caret)
+            let mirror = CoordinatorMirror()
+            view.delegate = mirror
+            view.deleteBackward(nil)
+            view.deleteBackward(nil)
+            let expected = (text as NSString).replacingCharacters(in: NSRange(location: caret - 2, length: 2), with: "")
+            #expect(view.string == expected)
+            #expect(mirror.changes == 2)
+            #expect(mirror.model == expected)
+            #expect(view.textStorage?.editedMask.isEmpty == true)
+        }
+    }
+
+    /// Reload or a change on disk replaces the text with a shorter one while a block ended the old text.
+    @Test func replacingWithShorterTextRevealsWithinIt() {
+        let view = editor("intro\n```swift\nlet x = 1\n```", presentation: .inline, caret: 0)
+        view.replaceText(with: "intro\n```swift\nlet")
+        #expect(view.string == "intro\n```swift\nlet")
+        #expect(view.revealed == NSRange(location: 0, length: 6))
+        let atEnd = editor("intro\n```swift\nlet x = 1\n```", presentation: .inline, caret: 27)
+        atEnd.replaceText(with: "intro\n```swift\nlet")
+        #expect(atEnd.revealed == NSRange(location: 6, length: 12))
     }
 
     /// The caret's line is raw (SF Mono, as in the source presentation) and every other line rendered.

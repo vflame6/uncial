@@ -67,4 +67,14 @@ import Testing
         #expect(markers.revealedRange(for: NSRange(location: 17, length: 0), in: text) == NSRange(location: 14, length: 3))
         #expect(MarkerIndex.empty.revealedRange(for: NSRange(location: 0, length: 0), in: "") == NSRange(location: 0, length: 0))
     }
+
+    /// Ranges taken from a longer text (the storage mid-edit, or the text before a reload) never
+    /// reach past the text they are applied to.
+    @Test func revealsWithinTheTextWhenBlocksAreStale() {
+        let stale = index("intro\n```swift\nlet x")
+        let text = "intro\n```swift\nlet " as NSString
+        #expect(stale.revealedRange(for: NSRange(location: 19, length: 0), in: text) == NSRange(location: 6, length: 13))
+        #expect(stale.revealedRange(for: NSRange(location: 25, length: 3), in: text) == NSRange(location: 6, length: 13))
+        #expect(stale.revealedRange(for: NSRange(location: 0, length: 0), in: "") == NSRange(location: 0, length: 0))
+    }
 }

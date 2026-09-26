@@ -192,6 +192,8 @@ final class ThemedTextView: NSTextView {
     private(set) var style = EditorStyle(theme: .default, isDark: false)
     /// Set while `rehighlight()` runs: a selection change it causes must not start another pass.
     private var isRehighlighting = false
+    /// Set while `replaceText(with:)` swaps the string; its own pass settles the reveal.
+    private var isReplacingText = false
     private(set) var lineIndex = LineIndex(text: "")
     private var lineNumberView: LineNumberRulerView? { enclosingScrollView?.verticalRulerView as? LineNumberRulerView }
 
@@ -227,13 +229,17 @@ final class ThemedTextView: NSTextView {
     }
 
     /// Replaces the whole text after an external change (reload, another editor): caret kept in
-    /// range, undo history and tracked pairs dropped.
+    /// range, undo history and tracked pairs dropped. The old markers describe the old text, so
+    /// they go first, and the reveal waits for the pass at the end.
     func replaceText(with text: String) {
         let selection = selectedRange()
+        markers = .empty
+        isReplacingText = true
         string = text
         let length = (text as NSString).length
         let location = min(selection.location, length)
         setSelectedRange(NSRange(location: location, length: min(selection.length, length - location)))
+        isReplacingText = false
         undoManager?.removeAllActions()
         pairing.reset()
         rehighlight()
@@ -386,10 +392,12 @@ final class ThemedTextView: NSTextView {
 
     /// The raw look follows the caret: when it enters another paragraph, the paragraph it left goes
     /// back to the rendered look and the new one to the source look, which is the same attribute
-    /// pass as after an edit. Not while a drag is still selecting.
+    /// pass as after an edit. Not while a drag is still selecting, and not while the storage is
+    /// still processing an edit: the layout manager moves the selection from inside that, when
+    /// `markers` still describe the text before it, and `textDidChange`'s pass follows anyway.
     private func updateReveal(stillSelecting: Bool = false) {
-        guard presentation == .inline, !stillSelecting, !isRehighlighting, let textStorage,
-              textStorage.length <= Self.highlightingLimit else { return }
+        guard presentation == .inline, !stillSelecting, !isRehighlighting, !isReplacingText, let textStorage,
+              textStorage.editedMask.isEmpty, textStorage.length <= Self.highlightingLimit else { return }
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
         rehighlight()

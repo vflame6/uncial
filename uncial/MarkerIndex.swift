@@ -155,10 +155,16 @@ nonisolated struct MarkerIndex: Equatable {
         !anchors(in: range).isEmpty
     }
 
-    /// The paragraphs the selection touches, widened to any fenced block they are in.
+    /// The paragraphs the selection touches, widened to any fenced block they are in. The selection
+    /// and the blocks are clipped to `text`: they may come from a longer text (an edit still being
+    /// processed, a reload), and `lineRange(for:)` raises past the end.
     func revealedRange(for selection: NSRange, in text: NSString) -> NSRange {
-        var range = text.lineRange(for: selection)
-        for block in blocks where NSIntersectionRange(block, range).length > 0 || NSLocationInRange(range.location, block) {
+        let length = text.length
+        let start = min(selection.location, length)
+        var range = text.lineRange(for: NSRange(location: start, length: min(selection.length, length - start)))
+        for block in blocks where block.location <= length {
+            let block = NSRange(location: block.location, length: min(NSMaxRange(block), length) - block.location)
+            guard NSIntersectionRange(block, range).length > 0 || NSLocationInRange(range.location, block) else { continue }
             range = NSUnionRange(range, text.lineRange(for: block))
         }
         return range

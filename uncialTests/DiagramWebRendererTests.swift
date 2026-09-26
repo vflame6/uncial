@@ -155,7 +155,7 @@ final class LoopbackListener: @unchecked Sendable {
         let renderer = DiagramWebRenderer()
         _ = await renderer.image(for: DiagramRequest(source: "graph LR\n  A --> B", theme: .macOS, dark: false, scale: 1, width: 600))
         let run = UUID().uuidString.prefix(8)
-        let edges = (0..<50).map { "  N\($0)[\"\(run) \($0)\"] --> N\($0 + 1)\n  N\($0) --> M\($0 % 9)" }.joined(separator: "\n")
+        let edges = (0..<70).map { "  N\($0)[\"\(run) \($0)\"] --> N\($0 + 1)\n  N\($0) --> M\($0 % 9)" }.joined(separator: "\n")
         let request = DiagramRequest(source: "graph TD\n" + edges, theme: .macOS, dark: false, scale: 1, width: 600)
         var finished = false
         let drawing = Task { @MainActor in
@@ -173,7 +173,9 @@ final class LoopbackListener: @unchecked Sendable {
             last = now
         }
         #expect(await drawing.value != nil)
-        #expect(longest < .milliseconds(120), "the main actor stalled \(longest)")
+        // Other suites' main-actor tests run in between in a full run (up to about 0.3 s); the layout
+        // itself stalled 0.8 s at 50 nodes and grows faster than the node count.
+        #expect(longest < .milliseconds(600), "the main actor stalled \(longest)")
     }
 
     @Test func rasterizesMathForLivePreview() async throws {

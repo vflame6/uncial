@@ -96,7 +96,6 @@ nonisolated enum MarkdownHighlighter {
     private static let strong = regex(#"(?<!\\)\*\*(?!\s)[^*\n]+(?<![\s\\])\*\*|(?<!\\)__(?!\s)[^_\n]+(?<![\s\\])__"#)
     private static let emphasis = regex(#"(?<![\w*\\])\*(?!\s)[^*\n]+(?<![\s\\])\*(?![\w*])|(?<![\w_\\])_(?!\s)[^_\n]+(?<![\s\\])_(?![\w_])"#)
     private static let strikethrough = regex(#"~~[^~\n]+~~"#)
-    private static let autolink = regex(#"<(?:https?|mailto):[^>\s]+>"#)
     private static let footnoteReference = regex(#"\[\^[^\]\s]+\](?!:)"#)
     // cmark's raw HTML (scanners.re): a comment (`<!-->` and `<!--->` whole ones), a processing
     // instruction, a declaration, CDATA, or a tag whose attributes each follow whitespace and have a
@@ -105,17 +104,24 @@ nonisolated enum MarkdownHighlighter {
         #"<!--(?:-?>|(?:[^\x00-]|-[^\x00-]|--[^\x00>])*-->)|<\?[\s\S]*?\?>|<![A-Z]+\s+[^>\x00]*>|<!\[CDATA\[[\s\S]*?\]\]>"#
             + #"|<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`\x00]+|'[^'\x00]*'|"[^"\x00]*"))?)*)\s*(/?)>"#
     )
+    /// Inside an HTML block the browser reads the tags: any attributes (quoted ones may hold `>`), and
+    /// attributes on a closing tag too.
+    private static let lenientHTML = regex(
+        #"<!--(?:-?>|(?:[^\x00-]|-[^\x00-]|--[^\x00>])*-->)|<\?[\s\S]*?\?>|<![A-Za-z][^>]*>|<!\[CDATA\[[\s\S]*?\]\]>"#
+            + #"|<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s(?:[^<>"']|"[^"]*"|'[^']*')*)?)(/?)>"#
+    )
+    /// cmark's autolinks: any scheme of 2 to 32 characters, or an email address.
+    private static let autolinkURI = regex(#"<[A-Za-z][A-Za-z0-9.+-]{1,31}:[^\x00-\x20<>]*>"#)
+    private static let autolinkEmail = regex(
+        #"<[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>"#
+    )
     /// Tags GFM's tag filter shows as text (`&lt;script>`).
     private static let filteredTags: Set<String> = ["title", "textarea", "style", "xmp", "iframe", "noembed", "noframes", "script", "plaintext"]
     private static let attribute = regex(#"([A-Za-z_:][-A-Za-z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#)
     /// Tags that never have content: a lone `<br>` needs no `</br>`.
     private static let voidElements: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
     private static let referenceLink = regex(#"(!?)\[([^\[\]\n]+)\](?:\[([^\[\]\n]*)\])?"#)
-    private static let escape = regex(#"\\[!-/:-@\[-`{-~]"#)
     private static let mathFence = regex(#"^\s{0,3}\$\$\s*$"#)
-    private static let displayMath = regex(#"\$\$([^$\n]+?)\$\$"#)
-    // GitHub's rules: no space right inside the dollars, no digit right after the closing one.
-    private static let inlineMath = regex(#"(?<![\w$\\])\$(?![\s$])([^$\n]+?)(?<![\s\\])\$(?![\d$])"#)
 
     static func spans(in text: String) -> [Span] {
         spans(from: tokens(in: text))
@@ -166,7 +172,8 @@ nonisolated enum MarkdownHighlighter {
                 case .html:
                     // The page shows an HTML block's text as written: only its tags are read.
                     let scratch = NSMutableString(string: line)
-                    tokens += htmlTokens(in: scratch, region: whole, offset: lineStart) { range in
+                    let tags = lenientHTML.matches(in: line, range: whole).filter { isTag($0, in: scratch, strict: false) }
+                    tokens += htmlTokens(for: tags, in: scratch, offset: lineStart) { range in
                         scratch.replaceCharacters(in: range, with: String(repeating: " ", count: range.length))
                     }
                 }
@@ -513,37 +520,42 @@ nonisolated enum MarkdownHighlighter {
         let hasAngle = units.contains(0x3C), hasBracket = units.contains(0x5B), hasTilde = units.contains(0x7E)
         let hasEmphasis = units.contains(0x2A) || units.contains(0x5F)
 
-        for span in hasBacktick ? codeSpans(in: line as NSString, region: region) : [] {
-            tokens.append(Token(range: shifted(span.range), kind: .inlineCode, markers: edges(span.range, open: span.run, close: span.run)))
+        // Math first, as the page's `MathSource` takes it out before cmark reads the line: TeX's `\{` and
+        // `\,` are no escapes (BUG-28).
+        for span in hasDollar ? mathSpans(in: line as NSString, region: region) : [] {
+            let edge = span.display ? 2 : 1
+            tokens.append(Token(range: shifted(span.range), kind: .math(display: span.display), markers: edges(span.range, open: edge, close: edge)))
             mask(span.range)
         }
-        for match in hasBackslash ? escape.matches(in: scratch as String, range: region) : [] {
-            tokens.append(Token(range: shifted(match.range), kind: .escape, markers: [NSRange(location: offset + match.range.location, length: 1)]))
-            mask(match.range)
-        }
-        for match in hasDollar ? displayMath.matches(in: scratch as String, range: region) : [] {
-            tokens.append(Token(range: shifted(match.range), kind: .math(display: true), markers: edges(match.range, open: 2, close: 2)))
-            mask(match.range)
-        }
-        for match in hasDollar ? inlineMath.matches(in: scratch as String, range: region) : [] {
-            tokens.append(Token(range: shifted(match.range), kind: .math(display: false), markers: edges(match.range, open: 1, close: 1)))
-            mask(match.range)
-        }
-        for match in hasAngle ? autolink.matches(in: scratch as String, range: region) : [] {
-            let inner = NSRange(location: match.range.location + 1, length: match.range.length - 2)
-            tokens.append(Token(range: shifted(match.range), kind: .autolink(destination: scratch.substring(with: inner)), markers: edges(match.range, open: 1, close: 1)))
-            mask(match.range)
+        // Then cmark's atoms, whichever starts first.
+        if hasBacktick || hasBackslash || hasAngle {
+            var tags: [NSTextCheckingResult] = []
+            for atom in atoms(in: scratch, region: region) {
+                switch atom {
+                case .escape(let range):
+                    tokens.append(Token(range: shifted(range), kind: .escape, markers: [NSRange(location: offset + range.location, length: 1)]))
+                    mask(range)
+                case .code(let range, let run):
+                    tokens.append(Token(range: shifted(range), kind: .inlineCode, markers: edges(range, open: run, close: run)))
+                    mask(range)
+                case .autolink(let range, let destination):
+                    tokens.append(Token(range: shifted(range), kind: .autolink(destination: destination), markers: edges(range, open: 1, close: 1)))
+                    mask(range)
+                case .tag(let match):
+                    tags.append(match)
+                }
+            }
+            tokens += htmlTokens(for: tags, in: scratch, offset: offset, mask: mask)
         }
         // Inline links and images, read the way CommonMark reads them (`inlineLink`): images first, so a
-        // badge (a link around an image) keeps both, and before the HTML pass, which took a `<…>`
-        // destination for a tag. Only the markers are masked; the text still parses.
+        // badge (a link around an image) keeps both. Only the markers are masked; the text still parses.
         for isImage in hasBracket ? [true, false] : [] {
             var index = region.location
             while index < NSMaxRange(region) {
                 let start = isImage ? index + 1 : index
                 guard start < NSMaxRange(region), scratch.character(at: start) == 0x5B, // "["
                       !isImage || scratch.character(at: index) == 0x21, // "!"
-                      let link = inlineLink(in: scratch, bracket: start, end: NSMaxRange(region)) else {
+                      let link = inlineLink(in: scratch, source: line as NSString, bracket: start, end: NSMaxRange(region)) else {
                     index += 1
                     continue
                 }
@@ -557,7 +569,6 @@ nonisolated enum MarkdownHighlighter {
                 index = start + 1
             }
         }
-        if hasAngle { tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask) }
         for match in hasBracket ? footnoteReference.matches(in: scratch as String, range: region) : [] {
             let label = scratch.substring(with: NSRange(location: match.range.location + 2, length: match.range.length - 3))
             guard definitions.footnotes.contains(normalized(label: label)) else { continue }
@@ -661,47 +672,173 @@ nonisolated enum MarkdownHighlighter {
         character.isPunctuation || character.isSymbol
     }
 
-    /// Code spans as CommonMark reads them: a run of backticks closes at the next run of the same length,
-    /// and shorter or longer runs between are code; a run without its match is literal, and so is a
-    /// backtick after a backslash (BUG-23: runs of different lengths paired, so `` `ls` `` showed " ls ").
-    private static func codeSpans(in line: NSString, region: NSRange) -> [(range: NSRange, run: Int)] {
-        var spans: [(range: NSRange, run: Int)] = []
+    private enum Atom {
+        case escape(NSRange)
+        case code(NSRange, run: Int)
+        case autolink(NSRange, destination: String)
+        case tag(NSTextCheckingResult)
+    }
+
+    /// cmark's atoms of `line` in `region` as its inline parser meets them, left to right: a backslash
+    /// escape, a code span (a backtick run up to the next run of the same length), an autolink or a raw
+    /// HTML tag, whichever starts first, none inside another. So `<a href="`">` is a tag and `` `<b>` ``
+    /// code, escapes stay as written in autolinks and tags, and a tag in a link's text hides the `]` in
+    /// it (BUG-28). An inline link's tail after `](` is the link's: a `<…>` destination is neither an
+    /// autolink nor a tag.
+    private static func atoms(in line: NSString, region: NSRange) -> [Atom] {
+        var atoms: [Atom] = []
         let end = NSMaxRange(region)
-        func run(at index: Int) -> Int {
-            var length = 0
-            while index + length < end, line.character(at: index + length) == 0x60 { length += 1 }
-            return length
+        var index = region.location
+        while index < end {
+            let unit = line.character(at: index)
+            if unit == 0x5C, index + 1 < end, isASCIIPunctuation(line.character(at: index + 1)) { // "\"
+                atoms.append(.escape(NSRange(location: index, length: 2)))
+                index += 2
+            } else if unit == 0x60 { // "`"
+                let length = backtickRun(in: line, at: index, end: end)
+                if let close = closingBacktickRun(in: line, from: index + length, length: length, end: end) {
+                    atoms.append(.code(NSRange(location: index, length: close + length - index), run: length))
+                    index = close + length
+                } else {
+                    index += length
+                }
+            } else if unit == 0x3C, let atom = angleAtom(in: line, at: index, end: end) { // "<"
+                atoms.append(atom.atom)
+                index = atom.end
+            } else if unit == 0x5D, index + 1 < end, line.character(at: index + 1) == 0x28, // "]("
+                      let tail = linkTail(in: line, open: index + 1, end: end) {
+                index = tail.end
+            } else {
+                index += 1
+            }
+        }
+        return atoms
+    }
+
+    /// The autolink or tag at `index` (a `<`), autolinks first as cmark tries them.
+    private static func angleAtom(in line: NSString, at index: Int, end: Int) -> (atom: Atom, end: Int)? {
+        let rest = NSRange(location: index, length: end - index)
+        let text = line as String
+        if let match = autolinkURI.firstMatch(in: text, options: .anchored, range: rest) {
+            let inner = line.substring(with: NSRange(location: index + 1, length: match.range.length - 2))
+            return (.autolink(match.range, destination: inner), NSMaxRange(match.range))
+        }
+        if let match = autolinkEmail.firstMatch(in: text, options: .anchored, range: rest) {
+            let inner = line.substring(with: NSRange(location: index + 1, length: match.range.length - 2))
+            return (.autolink(match.range, destination: "mailto:" + inner), NSMaxRange(match.range))
+        }
+        if let match = html.firstMatch(in: text, options: .anchored, range: rest), isTag(match, in: line, strict: true) {
+            return (.tag(match), NSMaxRange(match.range))
+        }
+        return nil
+    }
+
+    /// Whether a match of `html` or `lenientHTML` is a tag the page keeps as HTML: not one GFM's tag
+    /// filter shows as text, and, read strictly as cmark does, no closing tag with attributes.
+    private static func isTag(_ match: NSTextCheckingResult, in line: NSString, strict: Bool) -> Bool {
+        guard match.range(at: 2).location != NSNotFound else { return true } // a comment, declaration…
+        let isClosing = match.range(at: 1).length == 1
+        if strict, isClosing, match.range(at: 3).length > 0 || match.range(at: 4).length > 0 { return false }
+        return !filteredTags.contains(line.substring(with: match.range(at: 2)).lowercased())
+    }
+
+    private static func backtickRun(in line: NSString, at index: Int, end: Int) -> Int {
+        var length = 0
+        while index + length < end, line.character(at: index + length) == 0x60 { length += 1 }
+        return length
+    }
+
+    /// Where the next backtick run of exactly `length` starts from `start`, closing a code span: shorter
+    /// or longer runs between are code (BUG-23: runs of different lengths paired, so `` `ls` `` showed " ls ").
+    private static func closingBacktickRun(in line: NSString, from start: Int, length: Int, end: Int) -> Int? {
+        var index = start
+        while index < end {
+            guard line.character(at: index) == 0x60 else {
+                index += 1
+                continue
+            }
+            let run = backtickRun(in: line, at: index, end: end)
+            if run == length { return index }
+            index += run
+        }
+        return nil
+    }
+
+    private static func isASCIIPunctuation(_ unit: unichar) -> Bool {
+        (0x21...0x2F).contains(unit) || (0x3A...0x40).contains(unit) || (0x5B...0x60).contains(unit) || (0x7B...0x7E).contains(unit)
+    }
+
+    /// The formulas of `line` in `region` as the page's `MathSource` finds them before cmark reads the
+    /// line, left to right: a backslash hides the character after it, code spans are skipped, `$$…$$`
+    /// closes on the line (no backtick inside, no backslash before it), and `$…$` follows `MathRenderer`'s
+    /// rules: no word character, `$` or backslash before the opening dollar, no space or `$` right inside
+    /// it, the first `$` after it closes (not after a space or a backslash, not before a digit or a `$`),
+    /// no backtick inside.
+    private static func mathSpans(in line: NSString, region: NSRange) -> [(range: NSRange, display: Bool)] {
+        var spans: [(range: NSRange, display: Bool)] = []
+        let end = NSMaxRange(region)
+        func scalar(at index: Int) -> Unicode.Scalar? {
+            guard index >= 0, index < line.length else { return nil }
+            let unit = line.character(at: index)
+            if UTF16.isLeadSurrogate(unit), index + 1 < line.length, UTF16.isTrailSurrogate(line.character(at: index + 1)) {
+                return Unicode.Scalar(0x10000 + (UInt32(unit) - 0xD800) << 10 + (UInt32(line.character(at: index + 1)) - 0xDC00))
+            }
+            return Unicode.Scalar(unit)
+        }
+        func scalar(before index: Int) -> Unicode.Scalar? {
+            guard index > 0 else { return nil }
+            let unit = line.character(at: index - 1)
+            return UTF16.isTrailSurrogate(unit) && index >= 2 ? scalar(at: index - 2) : Unicode.Scalar(unit)
+        }
+        func hasBacktick(_ range: Range<Int>) -> Bool {
+            range.contains { line.character(at: $0) == 0x60 }
         }
         var index = region.location
         while index < end {
-            guard line.character(at: index) == 0x60 else {
-                // An escaped backtick is literal.
-                index += line.character(at: index) == 0x5C && index + 1 < end ? 2 : 1
-                continue
-            }
-            let length = run(at: index)
-            var search = index + length
-            var close: Int?
-            while search < end {
-                guard line.character(at: search) == 0x60 else {
-                    search += 1
+            let unit = line.character(at: index)
+            if unit == 0x5C { // "\"
+                index += 2
+            } else if unit == 0x60 { // "`"
+                let length = backtickRun(in: line, at: index, end: end)
+                index = closingBacktickRun(in: line, from: index + length, length: length, end: end).map { $0 + length } ?? index + length
+            } else if unit == 0x24, index + 1 < end, line.character(at: index + 1) == 0x24 { // "$$"
+                var close = index + 3
+                while close + 1 < end, !(line.character(at: close) == 0x24 && line.character(at: close + 1) == 0x24) { close += 1 }
+                guard scalar(before: index) != "\\", close + 1 < end, !hasBacktick((index + 2)..<close) else {
+                    index += 2
                     continue
                 }
-                let candidate = run(at: search)
-                if candidate == length {
-                    close = search
-                    break
-                }
-                search += candidate
-            }
-            if let close {
-                spans.append((NSRange(location: index, length: close + length - index), length))
-                index = close + length
+                spans.append((NSRange(location: index, length: close + 2 - index), true))
+                index = close + 2
+            } else if unit == 0x24, !opensNoMath(scalar(before: index)), let close = inlineMathClose(in: line, open: index, end: end, scalar: scalar(at:)),
+                      !hasBacktick((index + 1)..<close) {
+                spans.append((NSRange(location: index, length: close + 1 - index), false))
+                index = close + 1
             } else {
-                index += length
+                index += 1
             }
         }
         return spans
+    }
+
+    /// No inline math opens after a word character, a `$` or a backslash.
+    private static func opensNoMath(_ scalar: Unicode.Scalar?) -> Bool {
+        guard let scalar else { return false }
+        return scalar == "$" || scalar == "\\" || scalar == "_" || scalar.properties.isAlphabetic || scalar.properties.numericType != nil
+    }
+
+    /// The closing dollar of inline math opening at `open`: the first one after it, when the math is
+    /// not blank at either end, not closed after a backslash and not followed by a digit or a dollar.
+    private static func inlineMathClose(in line: NSString, open: Int, end: Int, scalar: (Int) -> Unicode.Scalar?) -> Int? {
+        let first = open + 1
+        guard first < end, let head = scalar(first), !head.properties.isWhitespace, head != "$" else { return nil }
+        var close = first
+        while close < end, line.character(at: close) != 0x24 { close += 1 }
+        guard close < end else { return nil }
+        let before = UTF16.isTrailSurrogate(line.character(at: close - 1)) && close - 2 >= first ? scalar(close - 2) : scalar(close - 1)
+        guard let last = before, !last.properties.isWhitespace, last != "\\" else { return nil }
+        if let next = scalar(close + 1), close + 1 < end, next == "$" || next.properties.numericType != nil { return nil }
+        return close
     }
 
     /// The inline link or image whose text opens at `start` (its `[`, after any `!`), read as CommonMark
@@ -709,7 +846,7 @@ nonisolated enum MarkdownHighlighter {
     /// (spaces allowed) or as a run with balanced parentheses, an optional title after whitespace in
     /// `"…"`, `'…'` or `(…)`, and `)`. `textEnd` is the text's `]`, `end` just past the `)`; nil when a
     /// part is missing (`[a](/my uri)` is no link, as on the page).
-    private static func inlineLink(in text: NSString, bracket start: Int, end limit: Int) -> (textEnd: Int, destination: String, end: Int)? {
+    private static func inlineLink(in text: NSString, source: NSString, bracket start: Int, end limit: Int) -> (textEnd: Int, destination: String, end: Int)? {
         var depth = 0
         var index = start
         var textEnd: Int?
@@ -728,21 +865,29 @@ nonisolated enum MarkdownHighlighter {
         }
         guard let textEnd, textEnd + 1 < limit, text.character(at: textEnd + 1) == 0x28, // "("
               !text.substring(with: NSRange(location: start + 1, length: textEnd - start - 1)).contains("](") else { return nil }
-        index = textEnd + 2
+        guard let tail = linkTail(in: source, open: textEnd + 1, end: limit) else { return nil }
+        return (textEnd, tail.destination, tail.end)
+    }
+
+    /// An inline link's tail from its `(` at `open`, read as written (a tag or code span inside is the
+    /// tail's text): the destination and just past the `)`. A backslash escapes what follows.
+    private static func linkTail(in text: NSString, open: Int, end limit: Int) -> (destination: String, end: Int)? {
+        var index = open + 1
         func skipSpaces() {
             while index < limit, [0x20, 0x09].contains(text.character(at: index)) { index += 1 }
         }
         skipSpaces()
         let destination: String
         if index < limit, text.character(at: index) == 0x3C { // "<"
-            let open = index + 1
-            index = open
+            let start = index + 1
+            index = start
             while index < limit, text.character(at: index) != 0x3E { // ">"
-                if text.character(at: index) == 0x3C { return nil }
-                index += 1
+                let unit = text.character(at: index)
+                if unit == 0x3C { return nil }
+                index += unit == 0x5C ? 2 : 1
             }
             guard index < limit else { return nil }
-            destination = text.substring(with: NSRange(location: open, length: index - open))
+            destination = text.substring(with: NSRange(location: start, length: index - start))
             index += 1
         } else {
             let begin = index
@@ -750,6 +895,10 @@ nonisolated enum MarkdownHighlighter {
             while index < limit {
                 let unit = text.character(at: index)
                 if unit <= 0x20 { break }
+                if unit == 0x5C, index + 1 < limit, isASCIIPunctuation(text.character(at: index + 1)) {
+                    index += 2
+                    continue
+                }
                 if unit == 0x28 {
                     parentheses += 1
                 } else if unit == 0x29 {
@@ -766,44 +915,36 @@ nonisolated enum MarkdownHighlighter {
         let closers: [unichar: unichar] = [0x22: 0x22, 0x27: 0x27, 0x28: 0x29] // `"…"`, `'…'`, `(…)`
         if index > afterDestination, index < limit, let closer = closers[text.character(at: index)] {
             index += 1
-            while index < limit, text.character(at: index) != closer { index += 1 }
+            while index < limit, text.character(at: index) != closer {
+                index += text.character(at: index) == 0x5C && index + 1 < limit && isASCIIPunctuation(text.character(at: index + 1)) ? 2 : 1
+            }
             guard index < limit else { return nil }
             index += 1
             skipSpaces()
         }
         guard index < limit, text.character(at: index) == 0x29 else { return nil } // ")"
-        return (textEnd, destination, index + 1)
+        return (destination, index + 1)
     }
 
-    /// Tags of `scratch` within `region`: comments, `<img>` as images, elements whose closing tag is
-    /// on the same line, and every other tag on its own. Each tag is masked; content is not, so the
-    /// Markdown inside an element still parses.
-    private static func htmlTokens(in scratch: NSMutableString, region: NSRange, offset: Int, mask: (NSRange) -> Void) -> [Token] {
+    /// Tokens for the `tags` of `scratch` (matches of `html` or `lenientHTML`, in order): comments,
+    /// `<img>` as images, elements whose closing tag is on the same line, and every other tag on its
+    /// own. Each tag is masked; content is not, so the Markdown inside an element still parses.
+    private static func htmlTokens(for tags: [NSTextCheckingResult], in scratch: NSMutableString, offset: Int, mask: (NSRange) -> Void) -> [Token] {
         var tokens: [Token] = []
         var open: [(name: String, range: NSRange, attributes: [String: String])] = []
         func lone(_ name: String?, _ attributes: [String: String], _ range: NSRange) -> Token {
             Token(range: NSRange(location: offset + range.location, length: range.length), kind: .html(element: name, attributes: attributes), markers: [NSRange(location: offset + range.location, length: range.length)])
         }
-        var location = region.location
-        while location < NSMaxRange(region),
-              let match = html.firstMatch(in: scratch as String, range: NSRange(location: location, length: NSMaxRange(region) - location)) {
+        for match in tags {
             let range = match.range
-            location = NSMaxRange(range)
+            defer { mask(range) }
             guard match.range(at: 2).location != NSNotFound else {
                 tokens.append(lone(nil, [:], range))
-                mask(range)
                 continue
             }
             let name = scratch.substring(with: match.range(at: 2)).lowercased()
-            let isClosing = match.range(at: 1).length == 1
-            // Text on the page: a closing tag with attributes, a filtered tag. A tag may start inside it.
-            guard !(isClosing && (match.range(at: 3).length > 0 || match.range(at: 4).length > 0)), !filteredTags.contains(name) else {
-                location = range.location + 1
-                continue
-            }
-            defer { mask(range) }
             let attributes = self.attributes(in: scratch.substring(with: match.range(at: 3)))
-            if isClosing {
+            if match.range(at: 1).length == 1 {
                 if let index = open.lastIndex(where: { $0.name == name }) {
                     let opener = open.remove(at: index)
                     let element = NSRange(location: offset + opener.range.location, length: NSMaxRange(range) - opener.range.location)

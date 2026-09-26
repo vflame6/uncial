@@ -311,6 +311,42 @@ import Testing
         #expect(has(text, .heading, "# H"))
     }
 
+    /// cmark's precedence: math as the page's `MathSource` finds it before cmark reads the line (TeX's
+    /// `\{` and `\,` are no escapes there), then escapes, code spans, autolinks and raw HTML, whichever
+    /// starts first; a link's `<…>` destination is the link's, and a tag inside link text keeps its `]`.
+    @Test func inlineConstructsTakeCmarksPrecedence() {
+        func hidden(_ text: String) -> [String] {
+            MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
+        }
+        func kinds(_ text: String) -> [MarkdownHighlighter.Token.Kind] {
+            MarkdownHighlighter.tokens(in: text).map(\.kind)
+        }
+        #expect(kinds(#"set $\{x \mid x > 0\}$ and $a\,b$"#) == [.math(display: false), .math(display: false)])
+        #expect(hidden(#"set $\{x\}$"#) == ["$", "$"])
+        #expect(kinds(#"$$\left\{ x \right.$$"#) == [.math(display: true)])
+        // Escapes do not work in autolinks or raw HTML.
+        #expect(hidden("<http://example.com?find=\\*>") == ["<", ">"])
+        #expect(hidden("<a href=\"\\\"\">") == ["\\"])
+        // Leftmost wins between code spans, autolinks and tags.
+        #expect(hidden("<a href=\"`\">`") == ["<a href=\"`\">"])
+        #expect(hidden("<http://foo.bar.`baz>`") == ["<", ">"])
+        #expect(hidden("`<a href=\"`\">`") == ["`", "`"])
+        // A tag inside a link's text keeps the brackets in it; a `<…>` destination is no tag.
+        #expect(hidden("[foo <bar attr=\"](baz)\">") == ["<bar attr=\"](baz)\">"])
+        #expect(kinds("[a](<b c>) and [d](<http://e>)") == [.link(destination: "b c"), .link(destination: "http://e")])
+        // Any scheme, and email addresses.
+        #expect(kinds("<irc://foo.bar:2233/baz> <foo@bar.example.com>") == [
+            .autolink(destination: "irc://foo.bar:2233/baz"), .autolink(destination: "mailto:foo@bar.example.com"),
+        ])
+    }
+
+    /// Inside an HTML block the browser reads the tags, and it takes what cmark's inline scanner would not.
+    @Test func htmlBlockTagsAreTheBrowsers() {
+        let text = "<div>\n<a h*#ref=\"hi\">x</a> </p class=\"y\">\n</div>"
+        let hidden = MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
+        #expect(hidden == ["<div>", "<a h*#ref=\"hi\">", "</a>", "</p class=\"y\">", "</div>"])
+    }
+
     /// Raw HTML as cmark reads it: a bad attribute name, an unclosed quote, attributes without space
     /// between them or on a closing tag make text; `<!-->` is a whole comment; processing instructions,
     /// declarations and CDATA are HTML; GFM's tag filter shows `<title>`, `<style>`, `<script>` and the

@@ -93,6 +93,10 @@ struct WebView: NSViewRepresentable {
         private var isLoading = false
         private var pendingBody: String?
         private var pendingScrollY: Double?
+        /// The source line at the top of the viewport, as the page last reported it.
+        private var visibleLine: Double?
+        /// Where to scroll once a page that replaces a dead one has loaded.
+        private var pendingLine: Double?
         private var appliedToken = 0
         private var lastScrollTarget: ScrollTarget?
         private var lineNumbers = false
@@ -137,6 +141,7 @@ struct WebView: NSViewRepresentable {
 
         func receive(_ body: Any) {
             guard let dictionary = body as? [String: Any], let line = dictionary["line"] as? Double else { return }
+            visibleLine = line
             onScroll?(line)
         }
 
@@ -213,6 +218,9 @@ struct WebView: NSViewRepresentable {
             if let scrollY = pendingScrollY {
                 pendingScrollY = nil
                 webView.evaluateJavaScript("window.scrollTo(0, \(scrollY));", completionHandler: nil)
+            } else if let line = pendingLine {
+                pendingLine = nil
+                webView.evaluateJavaScript(PreviewScripts.scrollToLine(line), completionHandler: nil)
             }
             if let pendingBody {
                 self.pendingBody = nil
@@ -224,6 +232,19 @@ struct WebView: NSViewRepresentable {
 
         func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
             isLoading = false
+        }
+
+        /// WebKit lost the page's process (a crash, memory pressure, Activity Monitor): the document is
+        /// gone, and body swaps would run against nothing. The page is loaded again with the latest body
+        /// and scrolled back to the line it showed; its scroll offset went with the process (STAB-7,
+        /// 2026-09-26: the preview stayed blank until the theme or the mode changed).
+        func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            guard page != nil else { return }
+            pendingBody = nil
+            pendingScrollY = nil
+            pendingLine = visibleLine
+            isLoading = true
+            loadPage(in: webView)
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {

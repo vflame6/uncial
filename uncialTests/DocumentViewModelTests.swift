@@ -18,6 +18,16 @@ import UncialCore
         String(decoding: try Data(contentsOf: file), as: UTF8.self)
     }
 
+    /// Waits until `condition` holds, for up to `seconds`: the model's timers run on the main actor,
+    /// which other suites' tests share, so a fixed pause could end before they had run. Waits for
+    /// something not to happen keep their fixed pauses.
+    private func eventually(within seconds: Double = 3, _ condition: () throws -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(seconds)
+        while try !condition(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     /// The attachment search reaches the renderer and a change re-renders.
     @Test func attachmentSearchReRenders() async throws {
         let file = try temporaryFile("![a](a.gif)")
@@ -25,10 +35,10 @@ import UncialCore
         try FileManager.default.createDirectory(at: directory.appendingPathComponent("attachments"), withIntermediateDirectories: true)
         try Data([0x47, 0x49, 0x46]).write(to: directory.appendingPathComponent("attachments/a.gif"))
         let model = DocumentViewModel(fileURL: file, initialText: "![a](a.gif)", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("<img src=\"a.gif\"") }
         #expect(model.body.contains("<img src=\"a.gif\""))
         model.attachmentSearch = AttachmentSearch()
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("<img src=\"data:image/gif;base64,R0lG\"") }
         #expect(model.body.contains("<img src=\"data:image/gif;base64,R0lG\""))
     }
 
@@ -44,10 +54,10 @@ import UncialCore
         try await Task.sleep(for: .milliseconds(500))
         #expect(model.text == "# One")
         model.start()
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("One") }
         #expect(model.body.contains("One"))
         try Data("# Three".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(600))
+        try await eventually { model.text == "# Three" }
         #expect(model.text == "# Three")
     }
 
@@ -56,7 +66,7 @@ import UncialCore
     @Test func closingStopsTheModel() async throws {
         let file = try temporaryFile("# One")
         let model = DocumentViewModel(fileURL: file, initialText: "# One", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.isOpen && model.body.contains("One") }
         #expect(model.isOpen && model.body.contains("One"))
         model.close()
         #expect(!model.isOpen && model.body.isEmpty)
@@ -68,10 +78,10 @@ import UncialCore
     @Test func rendersInitialTextAndEdits() async throws {
         let file = try temporaryFile("# Hi")
         let model = DocumentViewModel(fileURL: file, initialText: "# Hi", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("<h1 id=\"hi\" data-line=\"1\" data-sourcepos=\"1:1-1:4\">Hi</h1>") }
         #expect(model.body.contains("<h1 id=\"hi\" data-line=\"1\" data-sourcepos=\"1:1-1:4\">Hi</h1>"))
         model.updateText("# Yo")
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("<h1 id=\"yo\" data-line=\"1\" data-sourcepos=\"1:1-1:4\">Yo</h1>") }
         #expect(model.body.contains("<h1 id=\"yo\" data-line=\"1\" data-sourcepos=\"1:1-1:4\">Yo</h1>"))
         #expect(model.hasUnsavedChanges == true)
     }
@@ -81,7 +91,7 @@ import UncialCore
         let model = DocumentViewModel(fileURL: file, initialText: "# Hi", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
         #expect(model.statistics == DocumentStatistics(lines: 1, words: 1, characters: 4))
         model.updateText("# Hi there\nmore")
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.statistics == DocumentStatistics(lines: 2, words: 3, characters: 15) }
         #expect(model.statistics == DocumentStatistics(lines: 2, words: 3, characters: 15))
     }
 
@@ -92,7 +102,7 @@ import UncialCore
         model.updateText("ab")
         model.updateText("abc")
         #expect(try contents(of: file) == "a")
-        try await Task.sleep(for: .milliseconds(400))
+        try await eventually { try contents(of: file) == "abc" }
         #expect(try contents(of: file) == "abc")
         #expect(model.hasUnsavedChanges == false)
         #expect(model.saveError == nil)
@@ -140,7 +150,7 @@ import UncialCore
         let model = DocumentViewModel(fileURL: file, initialText: "one")
         try await Task.sleep(for: .milliseconds(150))
         try Data("two".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(600))
+        try await eventually { model.text == "two" && model.body.contains("two") }
         #expect(model.text == "two")
         #expect(model.hasUnsavedChanges == false)
         #expect(model.body.contains("two"))
@@ -155,7 +165,7 @@ import UncialCore
         try FileManager.default.removeItem(at: file)
         try await Task.sleep(for: .milliseconds(1500))
         try Data("two".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(2800))
+        try await eventually(within: 5) { model.text == "two" }
         #expect(model.text == "two")
         #expect(model.hasUnsavedChanges == false)
     }
@@ -169,7 +179,7 @@ import UncialCore
         try Data("theirs".utf8).write(to: file)
         try await Task.sleep(for: .milliseconds(500))
         #expect(model.text == "mine")
-        try await Task.sleep(for: .milliseconds(900))
+        try await eventually { try contents(of: file) == "mine" }
         #expect(try contents(of: file) == "mine")
     }
 
@@ -185,7 +195,7 @@ import UncialCore
         try await Task.sleep(for: .milliseconds(150))
         model.updateText("mine")
         try Data("theirs".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(700))
+        try await eventually { asked == ["doc.md"] && model.text == "theirs" }
         #expect(asked == ["doc.md"])
         #expect(model.text == "theirs")
         #expect(model.hasUnsavedChanges == false)
@@ -204,13 +214,13 @@ import UncialCore
         try await Task.sleep(for: .milliseconds(150))
         model.updateText("mine")
         try Data("theirs".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(600))
+        try await eventually { model.pendingExternalChange == "theirs" }
         #expect(model.pendingExternalChange == "theirs")
         try Data("one".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(600))
+        try await eventually { model.pendingExternalChange == "one" }
         #expect(model.pendingExternalChange == "one")
         answer?.resume(returning: .reload)
-        try await Task.sleep(for: .milliseconds(100))
+        try await eventually { model.text == "one" }
         #expect(model.text == "one")
         #expect(model.hasUnsavedChanges == false)
         #expect(try contents(of: file) == "one")
@@ -227,12 +237,16 @@ import UncialCore
         try await Task.sleep(for: .milliseconds(150))
         model.updateText("mine")
         try Data("theirs".utf8).write(to: file)
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.pendingExternalChange == "theirs" }
         // The question is open: the pending save is held, the file keeps the other program's text.
         #expect(model.pendingExternalChange == "theirs")
         #expect(model.text == "mine" && model.hasUnsavedChanges == true && model.needsSavePrompt == true)
         #expect(try contents(of: file) == "theirs")
-        try await Task.sleep(for: .milliseconds(500))
+        // The answer comes 400 ms after the question; the write follows it (waited for, not timed: the
+        // main actor is shared with other suites' tests).
+        for _ in 0..<30 where model.hasUnsavedChanges {
+            try await Task.sleep(for: .milliseconds(100))
+        }
         #expect(model.pendingExternalChange == nil)
         #expect(try contents(of: file) == "mine")
         #expect(model.hasUnsavedChanges == false && model.needsSavePrompt == false)
@@ -252,7 +266,7 @@ import UncialCore
         model.saveNow()
         #expect(try contents(of: file) == "theirs")
         #expect(model.pendingExternalChange == "theirs")
-        try await Task.sleep(for: .milliseconds(100))
+        try await eventually { asked == 1 && model.pendingExternalChange == nil }
         #expect(asked == 1)
         #expect(model.pendingExternalChange == nil && model.text == "mine" && model.hasUnsavedChanges == true)
         model.saveNow()
@@ -283,10 +297,10 @@ import UncialCore
         let markdown = "![a](https://x.test/a.png)"
         let file = try temporaryFile(markdown)
         let model = DocumentViewModel(fileURL: file, initialText: markdown, renderDelay: .milliseconds(20))
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("data-blocked-src=\"https://x.test/a.png\"") }
         #expect(model.body.contains("data-blocked-src=\"https://x.test/a.png\""))
         model.remoteContent = true
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { model.body.contains("<img src=\"https://x.test/a.png\"") }
         #expect(model.body.contains("<img src=\"https://x.test/a.png\""))
     }
 
@@ -317,7 +331,7 @@ import UncialCore
     @Test func reportsSaveAndReloadProblems() async throws {
         let file = try temporaryFile("# a")
         let model = DocumentViewModel(fileURL: file, initialText: "# a", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
-        try await Task.sleep(for: .milliseconds(300))
+        try await eventually { !model.body.isEmpty }
         #expect(model.problem == nil)
         try FileManager.default.removeItem(at: file)
         model.reload()
@@ -344,7 +358,7 @@ import UncialCore
         #expect(!FileManager.default.fileExists(atPath: file.path))
         try await Task.sleep(for: .milliseconds(300))
         try Data("three".utf8).write(to: renamed)
-        try await Task.sleep(for: .milliseconds(600))
+        try await eventually { model.text == "three" }
         #expect(model.text == "three")
     }
 

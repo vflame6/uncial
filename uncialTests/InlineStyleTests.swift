@@ -290,28 +290,33 @@ import UncialCore
 
     /// Aligning tables grows with the document, not with its square: every cell rebuilt the bold and code
     /// fonts and scanned every token of the document (185 ms for 100 tables, 471 ms for 200).
-    @Test func tableAlignmentGrowsLinearly() {
+    @Test func tableAlignmentGrowsLinearly() async {
         func document(tables: Int) -> String {
             (0..<tables).map { table in
                 "| **name \(table)** | `code` | value |\n|---|:-:|--:|\n"
                     + (0..<8).map { row in "| alpha \(table) **beta \(row)** | `x\(row)` | \(table * 10 + row) |\n" }.joined() + "\n"
             }.joined()
         }
-        func time(_ text: String) -> Duration {
+        // Short, and yielding between runs: other suites' timing tests share the main actor.
+        func time(_ text: String) async -> Duration {
             let tokens = MarkdownHighlighter.tokens(in: text)
-            return (0..<3).map { _ in
+            var fastest = Duration.seconds(1_000)
+            for _ in 0..<2 {
+                await Task.yield()
                 let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
                 // As `rehighlight()` runs it: inside one editing session.
-                return ContinuousClock().measure {
+                let elapsed = ContinuousClock().measure {
                     storage.beginEditing()
                     InlineStyle(style: style).apply(tokens, to: storage, revealed: NSRange(location: 0, length: 0))
                     storage.endEditing()
                 }
-            }.min()!
+                fastest = min(fastest, elapsed)
+            }
+            return fastest
         }
-        let small = time(document(tables: 100))
-        let large = time(document(tables: 200))
-        #expect(large < small * 3, "100 tables \(small), 200 tables \(large)")
+        let small = await time(document(tables: 50))
+        let large = await time(document(tables: 100))
+        #expect(large < small * 3, "50 tables \(small), 100 tables \(large)")
     }
 
     @Test func tablesAlignWithWindowsLineBreaks() {

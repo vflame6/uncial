@@ -77,6 +77,14 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
         window.delegate = self
     }
 
+    /// The window is going: its model saves what saves on its own and stops (SwiftUI keeps the window
+    /// alive, STAB-5). SwiftUI's controller, the delegate before us, hears about it too.
+    func windowWillClose(_ notification: Notification) {
+        model?.saveIfAutomatic()
+        model?.close()
+        next?.windowWillClose?(notification)
+    }
+
     /// Mirrors `DocumentViewModel.needsSavePrompt` into the close button's dot and the title's "Edited".
     func setEdited(_ edited: Bool) {
         guard let window, window.isDocumentEdited != edited else { return }

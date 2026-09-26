@@ -1,5 +1,6 @@
 import AppKit
 import Testing
+import WebKit
 @testable import Uncial
 
 /// Opens real document windows in the test host, so the suite runs one test at a time and closes
@@ -84,6 +85,24 @@ import Testing
         window.performClose(nil)
         try await settle()
         #expect(window.isVisible == false)
+    }
+
+    /// Closing a document window closes its model and takes down the web view and the text view:
+    /// SwiftUI keeps the closed window alive, and with it a WebContent process of about 20 MB.
+    @Test func closingReleasesTheDocument() async throws {
+        let (window, guardian) = try await open(try temporaryFile("# Closing"))
+        let model = try #require(guardian.model)
+        try await settle()
+        func views(of type: NSView.Type, in view: NSView?) -> Int {
+            guard let view else { return 0 }
+            return (view.isKind(of: type) ? 1 : 0) + view.subviews.map { views(of: type, in: $0) }.reduce(0, +)
+        }
+        #expect(views(of: WKWebView.self, in: window.contentView) + views(of: NSTextView.self, in: window.contentView) > 0)
+        window.performClose(nil)
+        try await settle()
+        #expect(window.isVisible == false)
+        #expect(model.isOpen == false)
+        #expect(views(of: WKWebView.self, in: window.contentView) == 0 && views(of: NSTextView.self, in: window.contentView) == 0)
     }
 
     @Test func asksWhenTheFileChangesUnderUnsavedEdits() async throws {

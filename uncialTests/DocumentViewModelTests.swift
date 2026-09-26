@@ -32,6 +32,39 @@ import UncialCore
         #expect(model.body.contains("<img src=\"data:image/gif;base64,R0lG\""))
     }
 
+    /// SwiftUI builds a document view, and so a model, on every re-init and keeps only the first: a model
+    /// renders, watches and observes quitting only once started (DocumentView starts it when it appears),
+    /// so the discarded ones cost nothing (a render per autosave before).
+    @Test func worksOnlyOnceStarted() async throws {
+        let file = try temporaryFile("# One")
+        let model = DocumentViewModel(fileURL: file, initialText: "# One", renderDelay: .milliseconds(20), saveDelay: .seconds(5), starts: false)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.body.isEmpty)
+        try Data("# Two".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(model.text == "# One")
+        model.start()
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.body.contains("One"))
+        try Data("# Three".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(model.text == "# Three")
+    }
+
+    /// A closed window's model stops following its file and lets its page go: SwiftUI keeps closed
+    /// document windows alive, and every document viewed stayed resident and re-rendered on each change.
+    @Test func closingStopsTheModel() async throws {
+        let file = try temporaryFile("# One")
+        let model = DocumentViewModel(fileURL: file, initialText: "# One", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.isOpen && model.body.contains("One"))
+        model.close()
+        #expect(!model.isOpen && model.body.isEmpty)
+        try Data("# Two".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(model.text == "# One" && model.body.isEmpty)
+    }
+
     @Test func rendersInitialTextAndEdits() async throws {
         let file = try temporaryFile("# Hi")
         let model = DocumentViewModel(fileURL: file, initialText: "# Hi", renderDelay: .milliseconds(20), saveDelay: .seconds(5))

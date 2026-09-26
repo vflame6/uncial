@@ -15,8 +15,10 @@ struct DocumentView: View {
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
         self.fileURL = fileURL
+        // Started when the view appears: SwiftUI builds this view again after every save and change on
+        // disk and keeps only the first model (PERF-12).
         let model = DocumentViewModel(fileURL: fileURL, initialText: document.text, encoding: document.encoding,
-                                      isLossy: document.isLossy, theme: settings.theme)
+                                      isLossy: document.isLossy, theme: settings.theme, starts: false)
         model.autosaves = settings.autosave
         model.externalChangePolicy = settings.externalChangePolicy
         model.remoteContent = settings.loadRemoteContent
@@ -30,10 +32,13 @@ struct DocumentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            SplitPanes(showsLeading: mode.showsEditor, showsTrailing: mode.showsPreview, ratio: settings.splitRatio) {
-                editor
-            } trailing: {
-                preview
+            // A closed window's panes go, and with them the web view's WebContent process (STAB-5).
+            if model.isOpen {
+                SplitPanes(showsLeading: mode.showsEditor, showsTrailing: mode.showsPreview, ratio: settings.splitRatio) {
+                    editor
+                } trailing: {
+                    preview
+                }
             }
             // A failed save or reload, whatever panes are showing (Read Only has no editor to show it under).
             if let problem = model.problem {
@@ -90,7 +95,10 @@ struct DocumentView: View {
         .onChange(of: settings.loadRemoteContent) { model.remoteContent = settings.loadRemoteContent }
         .onChange(of: settings.attachmentSearch) { model.attachmentSearch = settings.attachmentSearch }
         .onChange(of: fileURL) { model.relocate(to: fileURL) }
-        .onAppear { updateSync() }
+        .onAppear {
+            model.start()
+            updateSync()
+        }
         .onDisappear { model.saveIfAutomatic() }
     }
 

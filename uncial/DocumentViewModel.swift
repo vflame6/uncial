@@ -88,7 +88,8 @@ final class DocumentViewModel {
         isLossy: Bool = false,
         theme: Theme = .default,
         renderDelay: Duration = .milliseconds(150),
-        saveDelay: Duration = .milliseconds(500)
+        saveDelay: Duration = .milliseconds(500),
+        starts: Bool = true
     ) {
         self.fileURL = fileURL
         self.theme = theme
@@ -99,12 +100,46 @@ final class DocumentViewModel {
         text = initialText
         diskText = initialText
         statistics = DocumentStatistics(text: initialText)
+        if starts { start() }
+    }
+
+    /// Whether the document's window is open; `close()` ends it.
+    private(set) var isOpen = true
+    private var hasStarted = false
+
+    /// Renders, watches the file and saves on quit from now on. DocumentView starts its model when it
+    /// appears: SwiftUI builds the view, and so a model, on every re-init and keeps only the first, and
+    /// the others rendered, watched and observed for nothing (PERF-12). Once only.
+    func start() {
+        guard isOpen, !hasStarted else { return }
+        hasStarted = true
         render()
         watch()
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification, object: nil, queue: .main
         ) { [weak self] _ in
             MainActor.assumeIsolated { self?.saveIfAutomatic() }
+        }
+    }
+
+    /// The window closed (after its last automatic save): the watcher stops, renders and a pending save
+    /// are cancelled and the page goes. SwiftUI keeps closed document windows alive, and every document
+    /// viewed in a session stayed resident and re-rendered on each change of its file (STAB-5).
+    func close() {
+        guard isOpen else { return }
+        isOpen = false
+        watcher?.stop()
+        watcher = nil
+        renderTask?.cancel()
+        renderTask = nil
+        pageRender?.cancel()
+        pageRender = nil
+        saveTask?.cancel()
+        saveTask = nil
+        body = ""
+        if let terminationObserver {
+            NotificationCenter.default.removeObserver(terminationObserver)
+            self.terminationObserver = nil
         }
     }
 
@@ -203,7 +238,7 @@ final class DocumentViewModel {
     /// The document was renamed or moved while open (Finder, `mv`, a sync client): saving,
     /// watching, the title and relative images follow it to `url`.
     func relocate(to url: URL?) {
-        guard url != fileURL else { return }
+        guard url != fileURL, isOpen else { return }
         watcher?.stop()
         watcher = nil
         fileURL = url

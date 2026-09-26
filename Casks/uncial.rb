@@ -3,8 +3,8 @@
 #   brew install --cask uncial
 # `make release` rewrites the version and the checksum for every release.
 cask "uncial" do
-  version "1.1.2"
-  sha256 "9e34100eff1ba51f57137e39490b5b799d09eae445155ad6ac2a6d24dc842316"
+  version "1.1.3"
+  sha256 "2cda0ace0d7c6caca6e4d78b6cace5eedd6489c2093b3d3529768454f16407fe"
 
   url "https://github.com/vflame6/uncial/releases/download/v#{version}/Uncial-#{version}.zip"
   name "Uncial"

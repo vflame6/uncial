@@ -155,11 +155,19 @@ make core-test   # unit tests for the renderer and watcher (swift test)
 make test        # core tests + app unit tests via xcodebuild
 make build       # Release build into ./build
 make highlight   # rebuild the highlight.js bundle (scripts/build-highlight.sh)
+make release 1.2.0   # publish version 1.2.0 (maintainers)
 make clean
 ```
 
 `static/demo.md` exercises every rendering and editing feature with an *Expect* note
 per section; open it in each mode to check a change by eye.
+
+`make release x.y.z` publishes a version from a clean `main` that is up to date with
+GitHub, with `gh` logged in. It runs the tests, sets the version, builds and checks
+the app, zips it, points the Homebrew cask at the zip, then commits, tags and pushes
+everything at once. Finally it creates the GitHub release and checks the uploaded zip
+against the cask. A failure before the push leaves the repository as it was. After a
+later failure, run the same command again to complete the release.
 
 The Makefile exports `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`,
 so the commands work even when `xcode-select` points at the Command Line Tools.

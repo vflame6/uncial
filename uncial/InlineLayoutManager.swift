@@ -5,7 +5,8 @@ import UncialCore
 /// across a fenced code block, a left border per quote level, a rule line, a divider under an h1
 /// or h2, a tinted box per callout level with the callout's icon and default title. Driven by the
 /// `.blockDecoration` paragraph attribute (and `.calloutTitle`), so it needs no NSTextBlock and adds no
-/// padding. Also draws the pictures: images under their paragraph, formulas on their anchor glyph.
+/// padding. Also draws the pictures: images under their paragraph, formulas on their anchor glyph;
+/// and a tinted band behind the revealed lines (the caret's, in the source look).
 final class InlineLayoutManager: NSLayoutManager {
     static let cornerRadius: CGFloat = 6
     static let borderWidth: CGFloat = 3
@@ -21,8 +22,13 @@ final class InlineLayoutManager: NSLayoutManager {
     var calloutIconSize: CGFloat = InlineStyle.calloutIconSize
     /// The paragraphs whose markers are shown; a rule there gives way to its raw text.
     var revealed = NSRange(location: 0, length: 0)
+    /// The band behind the revealed lines, and its room above and below their text.
+    var revealBackground: NSColor = .clear
+    var revealPadding: CGFloat = InlineStyle.revealPadding
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        // First, so the selection and the text's own backgrounds stay on top of it.
+        drawRevealBand(at: origin)
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let storage = textStorage else { return }
         let text = storage.string as NSString
@@ -58,6 +64,27 @@ final class InlineLayoutManager: NSLayoutManager {
                                 width: picture.size.width, height: picture.size.height)
             picture.image.draw(in: target, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         }
+    }
+
+    /// A rounded band across the text column behind the revealed lines, from `revealPadding` above the
+    /// first line's text to as far below the last line's. The text is found from the used rects, which
+    /// hold the line (`ThemedTextView` puts the band's room outside them): the font's line box sits
+    /// below half the extra line height, the paragraph style's line spacing being the other half.
+    /// A newline glyph's location is no baseline (an empty line's reads 4.75 pt low; probed 2026-09-26).
+    private func drawRevealBand(at origin: NSPoint) {
+        guard revealed.length > 0, revealBackground.alphaComponent > 0, let storage = textStorage, NSMaxRange(revealed) <= storage.length,
+              let font = storage.attribute(.font, at: revealed.location, effectiveRange: nil) as? NSFont else { return }
+        let glyphs = glyphRange(forCharacterRange: revealed, actualCharacterRange: nil)
+        guard glyphs.length > 0 else { return }
+        let half = (storage.attribute(.paragraphStyle, at: revealed.location, effectiveRange: nil) as? NSParagraphStyle)?.lineSpacing ?? 0
+        let fragment = lineFragmentRect(forGlyphAt: glyphs.location, effectiveRange: nil)
+        let first = lineFragmentUsedRect(forGlyphAt: glyphs.location, effectiveRange: nil)
+        let last = lineFragmentUsedRect(forGlyphAt: NSMaxRange(glyphs) - 1, effectiveRange: nil)
+        let top = first.minY + half - revealPadding
+        let bottom = last.minY + half + defaultLineHeight(for: font) + revealPadding
+        let band = NSRect(x: origin.x + fragment.minX, y: origin.y + top, width: fragment.width, height: bottom - top)
+        revealBackground.setFill()
+        NSBezierPath(roundedRect: band, xRadius: Self.cornerRadius, yRadius: Self.cornerRadius).fill()
     }
 
     /// The paragraph's image sits in the spacing below its last line fragment, left-aligned with the text.

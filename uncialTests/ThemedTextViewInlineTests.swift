@@ -193,6 +193,59 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(inline.revealed == NSRange(location: 11, length: 4))
     }
 
+    /// The caret's lines sit in a tinted band with room above and below their text, apart from the
+    /// rendered lines around it, also where TextKit 1 would drop paragraph spacing (at the start of the
+    /// text, before a line that starts with hidden markers); the source presentation has none.
+    @Test func drawsABandBehindTheCaretLines() {
+        // "one\n" 0–3, "two\n" 4–7, "\n" 8, "## Four" 9–15.
+        let inline = editor("one\ntwo\n\n## Four", presentation: .inline, caret: 5)
+        let layoutManager = inline.layoutManager as! InlineLayoutManager
+        layoutManager.revealBackground = .red
+        func render() -> NSBitmapImageRep {
+            layout(inline)
+            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+            let context = NSGraphicsContext(bitmapImageRep: rep)!
+            NSGraphicsContext.saveGraphicsState()
+            NSGraphicsContext.current = context
+            NSColor.white.setFill()
+            NSRect(x: 0, y: 0, width: 400, height: 200).fill()
+            context.cgContext.translateBy(x: 0, y: 200)
+            context.cgContext.scaleBy(x: 1, y: -1)
+            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
+            NSGraphicsContext.restoreGraphicsState()
+            return rep
+        }
+        func fragment(_ index: Int) -> NSRect {
+            layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: index), effectiveRange: nil)
+        }
+        func isRed(_ rep: NSBitmapImageRep, _ y: CGFloat) -> Bool {
+            let color = rep.colorAt(x: Int(inline.textContainerOrigin.x + 100), y: Int(inline.textContainerOrigin.y + y))
+            return color.map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false
+        }
+        let font = inline.style.regular
+        func textBox(_ index: Int) -> (top: CGFloat, bottom: CGFloat) {
+            let baseline = fragment(index).minY + layoutManager.location(forGlyphAt: layoutManager.glyphIndexForCharacter(at: index)).y
+            return (baseline - font.ascender, baseline - font.descender)
+        }
+        var rep = render()
+        // The caret's line is not squeezed between the rendered ones; its text has room in the band,
+        // and a gap on either side keeps the band off the rendered lines.
+        #expect(fragment(4).height > fragment(0).height, "caret line \(fragment(4)) under \(fragment(0))")
+        #expect(isRed(rep, textBox(4).top - 2) && isRed(rep, textBox(4).bottom + 2))
+        #expect(!isRed(rep, fragment(0).maxY - 1) && !isRed(rep, fragment(8).minY) && !isRed(rep, fragment(8).midY))
+        // At the start of the text.
+        inline.setSelectedRange(NSRange(location: 1, length: 0))
+        rep = render()
+        #expect(isRed(rep, textBox(0).top - 2) && isRed(rep, textBox(0).bottom + 2) && !isRed(rep, fragment(4).midY))
+        // An empty line before a heading, whose hidden markers share the empty line's fragment.
+        inline.setSelectedRange(NSRange(location: 8, length: 0))
+        rep = render()
+        let heading = fragment(12)
+        #expect(isRed(rep, heading.minY - InlineStyle.revealGap - 2) && !isRed(rep, heading.minY) && !isRed(rep, fragment(4).maxY - 1))
+        inline.presentation = .source
+        #expect(inline.revealed.length == 0 && !isRed(render(), heading.minY - InlineStyle.revealGap - 2))
+    }
+
     /// Remote images load asynchronously through the injected loader and then hide their markers.
     @Test func revealsAWholeCalloutAroundTheCaret() {
         // Lines: `> [!note] Hi` 0–11, `> body` 13–18, `after` 20–24.

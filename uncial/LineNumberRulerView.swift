@@ -69,8 +69,11 @@ final class LineNumberRulerView: NSRulerView {
         let caretLine = lineIndex.line(at: textView.selectedRange().location)
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .right
-        func draw(line: Int, fragment: NSRect) {
-            let top = convert(NSPoint(x: 0, y: fragment.minY + inset.height), from: textView).y
+        // A number stands on its line's baseline: Live Preview lines keep room above their text (the
+        // page's line height, the band around the caret's lines).
+        let baselineOffset = layoutManager.defaultBaselineOffset(for: style.regular)
+        func draw(line: Int, fragment: NSRect, baseline: CGFloat) {
+            let top = convert(NSPoint(x: 0, y: fragment.minY + baseline - baselineOffset + inset.height), from: textView).y
             let box = NSRect(x: 0, y: top, width: ruleThickness - GutterMetrics.padding, height: fragment.height)
             guard box.intersects(rect) else { return }
             let color = line == caretLine ? style.foreground : style.muted
@@ -88,13 +91,30 @@ final class LineNumberRulerView: NSRulerView {
             guard fragmentGlyphs.length > 0 else { break }
             let line = lineIndex.line(at: layoutManager.characterIndexForGlyph(at: fragmentGlyphs.location))
             if line != lastLine {
-                draw(line: line, fragment: fragment)
+                draw(line: line, fragment: fragment, baseline: Self.baseline(ofFragment: fragment, at: fragmentGlyphs.location, in: layoutManager))
                 lastLine = line
             }
             glyph = NSMaxRange(fragmentGlyphs)
         }
         if layoutManager.extraLineFragmentTextContainer != nil, lastLine != lineIndex.count - 1 {
-            draw(line: lineIndex.count - 1, fragment: layoutManager.extraLineFragmentRect)
+            draw(line: lineIndex.count - 1, fragment: layoutManager.extraLineFragmentRect, baseline: baselineOffset)
         }
+    }
+
+    /// The baseline of a fragment's text from its top: the first glyph's, or for an empty line, whose
+    /// line break glyph reports the bottom of the line instead (probed 2026-09-26), where its font sits
+    /// in the used rect: below the extra room a line height multiple puts above the text.
+    static func baseline(ofFragment fragment: NSRect, at glyph: Int, in layoutManager: NSLayoutManager) -> CGFloat {
+        guard let storage = layoutManager.textStorage else { return 0 }
+        let character = layoutManager.characterIndexForGlyph(at: glyph)
+        let text = storage.string as NSString
+        guard character < text.length, [0x0A, 0x0D, 0x2028, 0x2029].contains(text.character(at: character)),
+              let font = storage.attribute(.font, at: character, effectiveRange: nil) as? NSFont else {
+            return layoutManager.location(forGlyphAt: glyph).y
+        }
+        let used = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+        let multiple = (storage.attribute(.paragraphStyle, at: character, effectiveRange: nil) as? NSParagraphStyle)?.lineHeightMultiple ?? 0
+        let extra = multiple > 1 ? layoutManager.defaultLineHeight(for: font) * (multiple - 1) : 0
+        return used.minY - fragment.minY + extra + layoutManager.defaultBaselineOffset(for: font)
     }
 }

@@ -69,7 +69,9 @@ final class MathPicture: NSObject {
 /// role color with their icon and title, the decoration a stack per quote level (`callout:<type>` or
 /// `quote`, `quote:N` for plain quotes). The revealed lines, the caret's paragraph
 /// or its fenced block, keep the source look: SF Mono and the source presentation's coloring, no
-/// decorations, no pictures. Attribute-only, so undo never sees it.
+/// decorations, no pictures; at the page's line height, with room above and below (`revealRoom`,
+/// added by `ThemedTextView` in layout) for the band `InlineLayoutManager` draws behind them.
+/// Attribute-only, so undo never sees it.
 struct InlineStyle {
     static let quoteIndent: CGFloat = 16
     /// A callout's icon, in points at the system size, and the room between it and the title.
@@ -86,6 +88,10 @@ struct InlineStyle {
     static let imageGap: CGFloat = 8
     /// Room kept between a formula's picture and the lines around it.
     static let mathGap: CGFloat = 2
+    /// Room between the caret's lines and the edges of the band behind them, above and below their
+    /// text, at the system size; and between the band and the lines around it.
+    static let revealPadding: CGFloat = 3
+    static let revealGap: CGFloat = 2
 
     /// What `apply` drew as pictures: the image tokens' locations, the opening fences of diagrams,
     /// and for formulas the token or block start → the character that stands for the picture (the
@@ -124,6 +130,8 @@ struct InlineStyle {
     let characterWidth: CGFloat
 
     var codeBackground: NSColor { style.foreground.withAlphaComponent(0.06) }
+    /// The band behind the caret's lines: the accent, faint, so it reads apart from code's gray.
+    var revealBackground: NSColor { style.accent.withAlphaComponent(style.isDark ? 0.14 : 0.08) }
 
     init(style: EditorStyle) {
         self.style = style
@@ -169,6 +177,7 @@ struct InlineStyle {
             for span in MarkdownHighlighter.spans(from: tokens) where NSLocationInRange(span.range.location, revealed) && NSMaxRange(span.range) <= text.length {
                 storage.addAttributes(style.attributes(for: span.kind), range: span.range)
             }
+            setRevealedRhythm(revealed, in: storage)
         }
         let callouts = MarkdownHighlighter.calloutBlocks(in: tokens, text: text)
         for token in tokens where !NSLocationInRange(token.range.location, revealed) {
@@ -303,6 +312,24 @@ struct InlineStyle {
                         diagrams: reserveDiagrams(blocks, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth),
                         math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth),
                         pictureBlocks: blocks.filter { $0.isDiagram || $0.isMath }.map(\.range))
+    }
+
+    /// The revealed lines take the page's rhythm in the source font (`EditorStyle.revealedParagraphStyle`).
+    /// The room for the band around them is added in layout (`revealRoom`), since TextKit 1 drops
+    /// paragraph spacing where the next paragraph's hidden markers share the last line's fragment.
+    private func setRevealedRhythm(_ revealed: NSRange, in storage: NSTextStorage) {
+        let text = storage.string as NSString
+        let range = NSIntersectionRange(revealed, NSRange(location: 0, length: text.length))
+        guard range.length > 0 else { return }
+        storage.addAttribute(.paragraphStyle, value: style.revealedParagraphStyle(), range: text.paragraphRange(for: range))
+    }
+
+    /// Room the band around the revealed lines needs above their first line and below their last, on
+    /// top of the line height: the band's padding, less the half of the extra line height already on
+    /// that side of the text, plus a gap to the lines around it (a heading's text reaches the top of
+    /// its line, a body line's descenders the bottom of its).
+    var revealRoom: CGFloat {
+        max(0, Self.revealPadding * style.scale - style.revealedParagraphStyle().lineSpacing) + Self.revealGap * style.scale
     }
 
     /// One entry per quote level of a line at `location`: `callout:<type>` where a callout block of

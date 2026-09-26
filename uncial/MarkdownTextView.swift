@@ -218,6 +218,8 @@ final class ThemedTextView: NSTextView {
         linkTextAttributes = [.foregroundColor: style.accent, .cursor: NSCursor.iBeam]
         if let layoutManager = layoutManager as? InlineLayoutManager {
             layoutManager.codeBackground = InlineStyle(style: style).codeBackground
+            layoutManager.revealBackground = InlineStyle(style: style).revealBackground
+            layoutManager.revealPadding = InlineStyle.revealPadding * style.scale
             layoutManager.lineColor = style.muted
             layoutManager.accent = style.accent
             layoutManager.separatorColor = style.muted.withAlphaComponent(0.35)
@@ -269,6 +271,7 @@ final class ThemedTextView: NSTextView {
                     textStorage.addAttributes(style.attributes(for: span.kind), range: span.range)
                 }
                 markers = .empty
+                revealed = NSRange(location: 0, length: 0)
             case .inline:
                 let textWidth = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
                 // A diagram or formula the caret is in stays source, so the reveal is settled first, from the new tokens.
@@ -287,6 +290,7 @@ final class ThemedTextView: NSTextView {
             CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)
         } else {
             markers = .empty
+            revealed = NSRange(location: 0, length: 0)
         }
         if presentation == .source {
             resolvedImages = []
@@ -386,7 +390,11 @@ final class ThemedTextView: NSTextView {
     private var layoutWidth: CGFloat = 0
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
     private(set) var revealed = NSRange(location: 0, length: 0) {
-        didSet { (layoutManager as? InlineLayoutManager)?.revealed = revealed }
+        didSet {
+            (layoutManager as? InlineLayoutManager)?.revealed = revealed
+            // The band behind the revealed lines moves with them; repaint rather than rely on the layout pass.
+            if revealed != oldValue { setNeedsDisplay(visibleRect) }
+        }
     }
     private var bulletCache: (font: NSFont, glyph: CGGlyph?)?
 
@@ -863,9 +871,14 @@ extension ThemedTextView: NSLayoutManagerDelegate {
     }
 
     /// …and its line grows to hold the picture above and below the baseline, since the box's own
-    /// height is ignored (probed 2026-09-16); the lines after follow.
+    /// height is ignored (probed 2026-09-16); the lines after follow. The revealed lines' first and
+    /// last fragments get the room for the band behind them (`InlineStyle.revealRoom`) outside their
+    /// used rect, which the caret spans: paragraph spacing would not do, since TextKit 1 applies none
+    /// before the text's first paragraph and none after a line whose fragment also holds the next
+    /// paragraph's hidden markers (probed 2026-09-26).
     func layoutManager(_ layoutManager: NSLayoutManager, shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>, lineFragmentUsedRect: UnsafeMutablePointer<NSRect>, baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer, forGlyphRange glyphRange: NSRange) -> Bool {
-        guard !markers.anchors.isEmpty else { return false }
+        let reveals = presentation == .inline && revealed.length > 0
+        guard !markers.anchors.isEmpty || reveals else { return false }
         let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
         var above: CGFloat = 0
         var below: CGFloat = 0
@@ -876,10 +889,16 @@ extension ThemedTextView: NSLayoutManagerDelegate {
         }
         let extraAbove = max(0, above - baselineOffset.pointee)
         let extraBelow = max(0, below - (lineFragmentRect.pointee.height - baselineOffset.pointee))
-        guard extraAbove > 0 || extraBelow > 0 else { return false }
-        lineFragmentRect.pointee.size.height += extraAbove + extraBelow
+        let startsReveal = reveals && NSLocationInRange(revealed.location, characters)
+        let endsReveal = reveals && NSLocationInRange(NSMaxRange(revealed) - 1, characters)
+        let room = startsReveal || endsReveal ? InlineStyle(style: style).revealRoom : 0
+        let roomAbove = startsReveal ? room : 0
+        let roomBelow = endsReveal ? room : 0
+        guard extraAbove > 0 || extraBelow > 0 || roomAbove > 0 || roomBelow > 0 else { return false }
+        lineFragmentRect.pointee.size.height += extraAbove + extraBelow + roomAbove + roomBelow
         lineFragmentUsedRect.pointee.size.height += extraAbove + extraBelow
-        baselineOffset.pointee += extraAbove
+        lineFragmentUsedRect.pointee.origin.y += roomAbove
+        baselineOffset.pointee += extraAbove + roomAbove
         return true
     }
 

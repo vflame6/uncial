@@ -41,7 +41,8 @@ A footnote reference[^note] and inline <b>HTML</b> tags <!-- with a comment -->.
 [^note]: Footnote definitions render on their own line.
 
 *Expect:* markers hidden off the cursor line; the cursor's line is the raw
-source, colored like the Raw Editor; body text in the theme's page font, the code
+source, colored like the Raw Editor, on a tinted band with room above and below
+(its line number on its baseline); body text in the theme's page font, the code
 in the mono font on a tint; the link is in the accent color and ⌘-click opens it; the
 footnote mark is a small raised "note"; escape backslashes and HTML tags hide
 with the other markers, so the comment vanishes and HTML reads bold.

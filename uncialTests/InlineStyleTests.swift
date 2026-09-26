@@ -98,12 +98,36 @@ import UncialCore
         #expect(font(shown, 2).pointSize == 32 && font(shown, 20) == style.body)
         #expect(font(shown, 8) == style.regular && font(shown, 14) == style.regular)
         #expect(color(shown, 14) == style.code && shown.attribute(.backgroundColor, at: 14, effectiveRange: nil) == nil)
-        #expect(paragraph(shown, 8) == nil && paragraph(shown, 17)?.headIndent ?? 0 > 0)
+        #expect(paragraph(shown, 8)?.headIndent == 0 && paragraph(shown, 17)?.headIndent ?? 0 > 0)
         let heading = NSTextStorage(string: text, attributes: style.baseAttributes)
         InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: heading, revealed: NSRange(location: 0, length: 8))
         #expect(font(heading, 2) == style.bold && color(heading, 0) == style.accent && decoration(heading, 0) == nil)
         #expect(InlineStyle.complement(of: NSRange(location: 8, length: 9), in: NSRange(location: 0, length: 23)) == [NSRange(location: 0, length: 8), NSRange(location: 17, length: 6)])
         #expect(InlineStyle.complement(of: NSRange(location: 0, length: 0), in: NSRange(location: 0, length: 23)) == [NSRange(location: 0, length: 23)])
+    }
+
+    /// The caret's lines take the page's rhythm in the source font, their text centered in each line
+    /// (the room for the band around them is added in layout, by `ThemedTextView`).
+    @Test func revealedLinesTakeThePageRhythm() {
+        // "a\n" 0–1, "b\n" 2–3, "c\n" 4–5, "d\n" 6–7, "e" 8.
+        let text = "a\nb\nc\nd\ne"
+        let shown = NSTextStorage(string: text, attributes: style.baseAttributes)
+        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: shown, revealed: NSRange(location: 2, length: 6))
+        let layoutManager = NSLayoutManager()
+        shown.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: 400, height: 1000))
+        layoutManager.addTextContainer(container)
+        layoutManager.ensureLayout(for: container)
+        #expect(font(shown, 4) == style.regular && font(shown, 8) == style.body)
+        for index in [2, 4, 6] {
+            // The fragment, and the mono line box inside it found from the baseline.
+            let glyph = layoutManager.glyphIndexForCharacter(at: index)
+            let rect = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: nil)
+            let top = rect.minY + layoutManager.location(forGlyphAt: glyph).y - layoutManager.defaultBaselineOffset(for: style.regular)
+            let bottom = top + layoutManager.defaultLineHeight(for: style.regular)
+            #expect(abs(rect.height - style.regular.pointSize * 1.5) < 0.01, "line at \(index): \(rect)")
+            #expect(abs((top - rect.minY) - (rect.maxY - bottom)) < 0.01, "line at \(index): text from \(top) to \(bottom) in \(rect)")
+        }
     }
 
     @Test func inlineConstructsStyleTheirText() {

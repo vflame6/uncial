@@ -117,6 +117,18 @@ struct EditorStyle {
 
     private static let measure = NSLayoutManager()
 
+    /// The caret's lines in Live Preview: the source font at the page's line height, the text centered
+    /// in its line (half the extra room above it through `lineHeightMultiple`, half below through
+    /// `lineSpacing`), so a revealed paragraph that wraps or a revealed block keeps the page's rhythm.
+    func revealedParagraphStyle() -> NSMutableParagraphStyle {
+        let natural = Self.measure.defaultLineHeight(for: regular)
+        let half = max(0, regular.pointSize * CGFloat(typography.lineHeight) - natural) / 2
+        let style = NSMutableParagraphStyle()
+        style.lineHeightMultiple = natural > 0 ? (natural + half) / natural : 1
+        style.lineSpacing = half
+        return style
+    }
+
     func paragraphStyle(for font: NSFont, lineHeight: Double) -> NSMutableParagraphStyle {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = lineHeightMultiple(for: font, lineHeight: lineHeight)

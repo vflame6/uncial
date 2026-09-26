@@ -25,6 +25,15 @@ import Testing
         #expect(!has(text, .emphasis, "*1*"))
     }
 
+    /// Front matter, fenced code (fences included) and `$$` blocks are literal text, one range per
+    /// block; display math on an ordinary line is not.
+    @Test func literalBlocksCoverFencesMathAndFrontMatter() {
+        let text = "---\ntags:\n  - a\n---\n- item\n```yaml\n  - \n```\n$$\nx^2\n$$\nsee $$y$$\n~~~\nopen"
+        let ranges = MarkdownHighlighter.literalBlocks(in: MarkdownHighlighter.tokens(in: text))
+        let blocks = ranges.map { (text as NSString).substring(with: $0) }
+        #expect(blocks == ["---\ntags:\n  - a\n---", "```yaml\n  - \n```", "$$\nx^2\n$$", "~~~\nopen"])
+    }
+
     @Test func tildeFencesAndLongerClosersWork() {
         let text = "~~~\n```\nstill code\n~~~~\ndone"
         #expect(kinds(text).filter { $0.0 == .codeBlock }.count == 4)

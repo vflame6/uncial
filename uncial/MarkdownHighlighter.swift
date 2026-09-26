@@ -253,6 +253,37 @@ nonisolated enum MarkdownHighlighter {
         return tokens
     }
 
+    /// The blocks Markdown takes literally, one range per block from its first line to the end of its
+    /// last: front matter, fenced code with its fences, and `$$` blocks. Display math on an ordinary
+    /// line (with its dollars as markers) is not one.
+    static func literalBlocks(in tokens: [Token]) -> [NSRange] {
+        var blocks: [NSRange] = []
+        var inFrontMatter = false, inFence = false, inMath = false
+        func extend(_ range: NSRange) {
+            blocks[blocks.count - 1] = NSUnionRange(blocks[blocks.count - 1], range)
+        }
+        for token in tokens {
+            switch token.kind {
+            case .frontMatter:
+                if inFrontMatter { extend(token.range) } else { blocks.append(token.range) }
+                inFrontMatter = true
+            case .fence:
+                if inFence { extend(token.range) } else { blocks.append(token.range) }
+                inFence.toggle()
+            case .code where inFence:
+                extend(token.range)
+            case .mathFence:
+                if inMath { extend(token.range) } else { blocks.append(token.range) }
+                inMath.toggle()
+            case .math(display: true) where inMath && token.markers.isEmpty:
+                extend(token.range)
+            default:
+                inFrontMatter = false
+            }
+        }
+        return blocks
+    }
+
     /// The quote depth of the line before `index` (0 for the first line and for lines without a `>` prefix).
     private static func quoteDepth(ofLineBefore index: Int, lines: [NSRange], source: NSString) -> Int {
         guard index > 0 else { return 0 }

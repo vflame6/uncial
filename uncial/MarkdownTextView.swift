@@ -265,6 +265,7 @@ final class ThemedTextView: NSTextView {
         textStorage.setAttributes(style.baseAttributes, range: full)
         if textStorage.length <= Self.highlightingLimit {
             let tokens = MarkdownHighlighter.tokens(in: text)
+            literalBlocks = MarkdownHighlighter.literalBlocks(in: tokens)
             switch presentation {
             case .source:
                 for span in MarkdownHighlighter.spans(from: tokens) where NSMaxRange(span.range) <= textStorage.length {
@@ -291,6 +292,7 @@ final class ThemedTextView: NSTextView {
         } else {
             markers = .empty
             revealed = NSRange(location: 0, length: 0)
+            literalBlocks = []
         }
         if presentation == .source {
             resolvedImages = []
@@ -707,6 +709,15 @@ final class ThemedTextView: NSTextView {
 
     var autoPairingEnabled = true
     var continuesLists = true
+
+    /// Front matter, fenced code and `$$` blocks as of the last highlighting pass: Markdown takes them
+    /// literally, so Return there is a line break, not a list or quote continuation that removed a
+    /// marker-only YAML or console line or added `+ ` after a diff line (BUG-27).
+    private var literalBlocks: [NSRange] = []
+
+    private func isInLiteralBlock(_ location: Int) -> Bool {
+        literalBlocks.contains { $0.location <= location && location <= NSMaxRange($0) }
+    }
     private var pairing = AutoPairing()
     private var isApplyingPairEdit = false
     private var isMultiRangeChange = false
@@ -731,7 +742,8 @@ final class ThemedTextView: NSTextView {
         }
         if autoPairingEnabled, let edit = pairing.newline(in: currentText, selection: selectedRange()) {
             apply(edit)
-        } else if continuesLists, let edit = ListContinuation.edit(in: currentText, at: selectedRange().location) {
+        } else if continuesLists, !isInLiteralBlock(selectedRange().location),
+                  let edit = ListContinuation.edit(in: currentText, at: selectedRange().location) {
             pairing.textChanged(in: edit.range, replacementLength: (edit.replacement as NSString).length)
             apply(edit)
         } else {

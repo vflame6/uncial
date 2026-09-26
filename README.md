@@ -27,8 +27,8 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 - Local images, heading anchors, YAML front matter, and links that open in the
   browser or, for local Markdown files, in a new window. Nothing is loaded from
   the web unless you allow it in Settings ▸ General: remote images and other
-  references stay unloaded in the window, in Live Preview and in Quick Look, so
-  opening a file tells no server about it.
+  references stay unloaded in the window, in Live Preview, in the diagrams and in
+  Quick Look, so opening a file tells no server about it.
 - Attachments found where you keep them: an image or linked file that is not
   next to the document is looked for in its `attachments` folder and then,
   folder by folder, above the document. Settings ▸ General sets the folder

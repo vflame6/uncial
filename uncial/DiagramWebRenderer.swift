@@ -251,6 +251,11 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         } else {
             let configuration = WKWebViewConfiguration()
             configuration.websiteDataStore = .nonPersistent()
+            // mermaid.js comes in as a string and the page needs nothing from the web: whatever a
+            // diagram names (an image shape's URL) is not fetched, whether remote content is on or off.
+            if let rules = await RemoteContentBlocker.shared.ruleList() {
+                configuration.userContentController.add(rules)
+            }
             let view = WKWebView(frame: NSRect(x: 0, y: 0, width: 1200, height: 900), configuration: configuration)
             // Transparent snapshots, so a picture shows the editor's selection through (the page's own
             // background is transparent too).

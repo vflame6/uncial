@@ -1,9 +1,9 @@
 import WebKit
 
-/// Blocks every load from the web in the preview's web view: the content rule list `WebView` adds
-/// while remote content is off, so a document cannot reach a server through an image, a style
-/// sheet, media or anything else a raw HTML block names. Compiled once per process (WebKit keeps
-/// the compiled list on disk under the identifier) and shared by every window.
+/// Blocks every load from the web: the content rule list `WebView` adds while remote content is
+/// off, so a document cannot reach a server through an image, a style sheet, media or anything else
+/// a raw HTML block names, and that `DiagramWebRenderer` always adds to its hidden stage. Compiled
+/// once per process (WebKit keeps the compiled list on disk under the identifier) and shared.
 @MainActor
 final class RemoteContentBlocker {
     static let shared = RemoteContentBlocker()

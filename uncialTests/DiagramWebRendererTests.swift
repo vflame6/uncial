@@ -1,11 +1,75 @@
 import AppKit
+import Network
 import Testing
 import UncialCore
 @testable import Uncial
 
+/// A TCP listener on 127.0.0.1 that counts the connections it gets and drops them.
+final class LoopbackListener: @unchecked Sendable {
+    private let listener: NWListener
+    private let lock = NSLock()
+    private var accepted = 0
+
+    var connections: Int { lock.withLock { accepted } }
+    var port: UInt16 { listener.port?.rawValue ?? 0 }
+
+    init() throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        listener = try NWListener(using: parameters)
+        listener.newConnectionHandler = { [weak self] connection in
+            self?.count()
+            connection.cancel()
+        }
+    }
+
+    private func count() {
+        lock.withLock { accepted += 1 }
+    }
+
+    func start() async {
+        let ready = AsyncStream<Void> { continuation in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready, .failed, .cancelled:
+                    continuation.yield()
+                    continuation.finish()
+                default:
+                    break
+                }
+            }
+        }
+        listener.start(queue: DispatchQueue(label: "uncial-tests-loopback"))
+        for await _ in ready { break }
+    }
+
+    func stop() {
+        listener.cancel()
+    }
+}
+
 /// Real WebKit: the hidden mermaid.js stage the app and the Quick Look extension share.
 @MainActor
 @Suite(.serialized) struct DiagramWebRendererTests {
+    /// The stage needs no network: a diagram naming a web image (mermaid's image shape; front
+    /// matter sends any flowchart to mermaid.js) must not reach the server, whatever the setting.
+    @Test func stageLoadsNothingFromTheWeb() async throws {
+        let listener = try LoopbackListener()
+        await listener.start()
+        defer { listener.stop() }
+        let url = "http://127.0.0.1:\(listener.port)/beacon.png"
+        let source = "---\ntitle: Beacon\n---\nflowchart TD\n    A@{ img: \"\(url)\", label: \"x\", pos: \"t\", w: 60, h: 60, constraint: \"off\" }\n    A --> B"
+        let renderer = DiagramWebRenderer()
+        _ = await renderer.render([source], theme: .github)
+        _ = await renderer.image(for: DiagramRequest(source: source, theme: .github, dark: false, scale: 1, width: 600))
+        try await Task.sleep(for: .milliseconds(500))
+        #expect(listener.connections == 0)
+        // Control: the listener does count connections (URLSession retries a dropped one).
+        _ = try? await URLSession.shared.data(from: URL(string: url)!)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(listener.connections >= 1)
+    }
+
     @Test func rendersTheTypesBeautifulMermaidLacks() async throws {
         let renderer = DiagramWebRenderer()
         let store = DiagramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent("uncial-diagrams-test-\(UUID().uuidString)", isDirectory: true))

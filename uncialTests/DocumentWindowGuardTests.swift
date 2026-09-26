@@ -148,6 +148,31 @@ import Testing
         #expect(try contents(of: file) == "two")
     }
 
+    /// Another program wrote the file right before Save was clicked, before the watcher reported it:
+    /// the window asks about the change instead of closing without writing.
+    @Test func saveInTheCloseSheetAsksAboutAnUnreportedChange() async throws {
+        let file = try temporaryFile("one")
+        let (window, guardian) = try await open(file)
+        let model = try #require(guardian.model)
+        model.autosaves = false
+        model.externalChangePolicy = .ask
+        model.updateText("mine")
+        try await settle()
+        window.performClose(nil)
+        try await settle()
+        #expect(window.attachedSheet != nil)
+        try Data("theirs".utf8).write(to: file)
+        try click("Save", onSheetOf: window)
+        try await settle()
+        #expect(window.isVisible == true)
+        #expect(try contents(of: file) == "theirs")
+        #expect(window.attachedSheet != nil)
+        try click("Keep My Edits", onSheetOf: window)
+        try await settle()
+        #expect(try contents(of: file) == "mine")
+        #expect(window.isVisible == false)
+    }
+
     @Test func cancelKeepsTheWindowAndTheEdits() async throws {
         let file = try temporaryFile("one")
         let (window, guardian) = try await open(file)

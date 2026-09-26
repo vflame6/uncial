@@ -94,7 +94,7 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
     }
 
     /// Presents the Save / Cancel / Don't Save sheet and returns whether the window may go: saved
-    /// (and the write succeeded) or discarded. A window that is already showing a sheet counts as
+    /// (the edits are on disk) or discarded. A window that is already showing a sheet counts as
     /// Cancel: a second sheet would queue behind the first, and a queued sheet never answers once the
     /// first one closes the window.
     private func resolveUnsavedChanges() async -> Bool {
@@ -102,13 +102,38 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
         guard window.attachedSheet == nil else { return false }
         switch await UnsavedChangesAlert.ask(documentName: model.title, in: window) {
         case .save:
-            model.saveNow()
-            return model.saveError == nil
+            return await save(model, in: window)
         case .discard:
             return true
         case .cancel:
             return false
         }
+    }
+
+    /// Save for a window that is about to go: true once the edits are on disk (or the Reload policy
+    /// replaced them). A change on disk the watcher has not reported yet is asked about on this
+    /// window first; a failed write keeps the window, its error in the editor.
+    private func save(_ model: DocumentViewModel, in window: NSWindow) async -> Bool {
+        switch model.saveBeforeClosing() {
+        case .written, .unchanged, .adopted:
+            return true
+        case .failed:
+            return false
+        case .needsDecision:
+            guard await sheetIsGone(from: window) else { return false }
+            let choice = await UnsavedChangesAlert.askExternalChange(documentName: model.title, in: window)
+            model.resolveExternalChange(choice)
+            if choice == .reload { return true }
+            return await save(model, in: window)
+        }
+    }
+
+    /// A dismissed sheet stays attached while it animates out; the next one waits for it.
+    private func sheetIsGone(from window: NSWindow) async -> Bool {
+        for _ in 0..<40 where window.attachedSheet != nil {
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return window.attachedSheet == nil
     }
 
     // MARK: - NSWindowDelegate

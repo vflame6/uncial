@@ -214,6 +214,37 @@ import UncialCore
         #expect(model.hasUnsavedChanges == true)
     }
 
+    /// Saving says what it did, so a closing window can tell a write from a save that waits for an
+    /// answer. Before closing, a change on disk is left for the window to ask about.
+    @Test func saveReportsWhatItDid() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))
+        var asked = 0
+        model.externalChangeResolver = { _ in
+            asked += 1
+            return .keepLocal
+        }
+        #expect(model.saveNow() == .unchanged)
+        model.updateText("mine")
+        #expect(model.saveNow() == .written)
+        model.updateText("mine again")
+        try Data("theirs".utf8).write(to: file)
+        #expect(model.saveBeforeClosing() == .needsDecision)
+        #expect(model.pendingExternalChange == "theirs")
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(asked == 0)
+        #expect(try contents(of: file) == "theirs")
+        model.resolveExternalChange(.keepLocal)
+        #expect(model.saveBeforeClosing() == .written)
+        #expect(try contents(of: file) == "mine again")
+        try await Task.sleep(for: .milliseconds(200))
+        model.externalChangePolicy = .reload
+        model.updateText("edited")
+        try Data("theirs 2".utf8).write(to: file)
+        #expect(model.saveBeforeClosing() == .adopted)
+        #expect(model.text == "theirs 2")
+    }
+
     @Test func savesOnlyOnRequestByDefault() async throws {
         let file = try temporaryFile("a")
         let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .milliseconds(50))

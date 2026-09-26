@@ -112,15 +112,47 @@ final class DocumentViewModel {
         }
     }
 
+    /// What a save did.
+    enum SaveOutcome: Equatable {
+        /// The editor text is on disk.
+        case written
+        /// Nothing to write: no unsaved edits, or no file.
+        case unchanged
+        /// The file changed under the edits and the Ask policy wants an answer first; nothing was written.
+        case needsDecision
+        /// The file changed and its contents replaced the edits (the Reload policy).
+        case adopted
+        /// The write failed; `saveError` says why.
+        case failed
+    }
+
     /// Writes the editor text now when it differs from the file. A change another program made
     /// that the watcher has not reported yet gets the same treatment as a reported one first, so the
     /// write never lands blindly; an explicit save while the Ask question is open keeps the edits.
-    func saveNow() {
+    @discardableResult
+    func saveNow() -> SaveOutcome {
+        save(asking: true)
+    }
+
+    /// `saveNow()` for a window about to close or quit, which asks about a change on disk itself,
+    /// on its own sheet: the change is held (`.needsDecision`) instead of asked about, and an open
+    /// question is not overridden.
+    func saveBeforeClosing() -> SaveOutcome {
+        save(asking: false)
+    }
+
+    private func save(asking: Bool) -> SaveOutcome {
         saveTask?.cancel()
         saveTask = nil
-        guard let fileURL, hasUnsavedChanges else { return }
-        if pendingExternalChange == nil, let data = try? Data(contentsOf: fileURL), !reconcile(disk: MarkdownText.decode(data)) {
-            return
+        guard let fileURL, hasUnsavedChanges else { return .unchanged }
+        if pendingExternalChange != nil {
+            guard asking else { return .needsDecision }
+        } else if let data = try? Data(contentsOf: fileURL) {
+            switch reconcile(disk: MarkdownText.decode(data), asking: asking) {
+            case .write: break
+            case .adopted: return .adopted
+            case .pending: return .needsDecision
+            }
         }
         pendingExternalChange = nil
         let textToSave = text
@@ -129,8 +161,10 @@ final class DocumentViewModel {
             diskText = textToSave
             saveError = nil
             syncDocumentModificationDate(for: fileURL)
+            return .written
         } catch {
             saveError = error.localizedDescription
+            return .failed
         }
     }
 
@@ -160,27 +194,43 @@ final class DocumentViewModel {
         _ = reconcile(disk: MarkdownText.decode(data))
     }
 
+    /// What `reconcile` left for the editor text.
+    private enum Reconciled {
+        /// It may be written now.
+        case write
+        /// The file's contents replaced it.
+        case adopted
+        /// The Ask question holds it until answered.
+        case pending
+    }
+
     /// Applies the file's current text per `DiskSync` and, with local edits pending, the policy.
-    /// Returns whether the editor text may be written now: not when the file was adopted, and not
-    /// while the Ask question is open (its answer decides).
-    private func reconcile(disk: String) -> Bool {
+    /// Under the Ask policy the question is asked through `externalChangeResolver`, unless `asking`
+    /// is off: then the change is only held, for a closing window to ask about itself.
+    private func reconcile(disk: String, asking: Bool = true) -> Reconciled {
         switch DiskSync.decide(disk: disk, text: text, diskText: diskText) {
         case .ignore:
-            return true
+            return .write
         case .adopt:
             adopt(disk)
-            return false
+            return .adopted
         case .keepLocal:
             switch externalChangePolicy {
             case .keepLocal:
                 diskText = disk
-                return true
+                return .write
             case .reload:
                 adopt(disk)
-                return false
+                return .adopted
             case .ask:
-                askAboutExternalChange(disk)
-                return false
+                if asking {
+                    askAboutExternalChange(disk)
+                } else {
+                    saveTask?.cancel()
+                    saveTask = nil
+                    pendingExternalChange = disk
+                }
+                return .pending
             }
         }
     }

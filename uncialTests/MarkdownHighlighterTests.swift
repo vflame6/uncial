@@ -240,6 +240,17 @@ import Testing
     /// Definitions as CommonMark reads them: none inside code, none interrupting a paragraph, nothing but
     /// a title after the destination; and a footnote reference needs its definition. Live Preview made
     /// links of brackets the page shows as text (BUG-28; spec examples 166, 170, 181, 182).
+    /// cmark's lines break at `\n`, `\r\n` and `\r` only; the editor's also at U+2028, U+2029 and U+0085.
+    /// Blocks keep to their lines either way.
+    @Test func blocksKeepToTheirLinesAcrossUnicodeSeparators() {
+        for separator in ["\u{2028}", "\u{2029}", "\u{85}", "\u{0B}"] {
+            let text = "a\(separator)b\n\n    code\n\n[x]: /x\n\n*e* [x]"
+            let tokens = MarkdownHighlighter.tokens(in: text)
+            #expect(tokens.map(\.kind) == [.code, .linkDefinition, .emphasis, .link(destination: "/x")])
+            #expect(tokens.prefix(2).map { (text as NSString).substring(with: $0.range) } == ["    code", "[x]: /x"])
+        }
+    }
+
     @Test func definitionsFollowCommonMark() {
         func references(_ text: String) -> [MarkdownHighlighter.Token.Kind] {
             MarkdownHighlighter.tokens(in: text).map(\.kind).filter {

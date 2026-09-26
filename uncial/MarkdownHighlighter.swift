@@ -128,10 +128,12 @@ nonisolated enum MarkdownHighlighter {
         let bodyStart = FrontMatter.bodyLineOffset(of: text)
         let blocks = MarkdownBlocks(bodyStart > 0 ? FrontMatter.split(text).body : text)
         let definitions = References(blocks, bodyStart: bodyStart)
+        let cmarkLines = cmarkLineNumbers(of: lines, in: source)
 
         while index < lines.count {
             let current = index
             index += 1
+            let cmarkLine = cmarkLines[current]
             let contentRange = lines[current]
             let lineStart = contentRange.location
             let line = source.substring(with: contentRange)
@@ -153,7 +155,7 @@ nonisolated enum MarkdownHighlighter {
             // Code and HTML as cmark reads them (CommonMark's fence rules included: ```npm install``` is
             // inline code, ```js inside a block is content). Blocks inside a quote are left to the quote
             // path, which draws the bars and callouts.
-            if current >= bodyStart, let block = blocks.kind(ofLine: current - bodyStart) {
+            if cmarkLine >= bodyStart, let block = blocks.kind(ofLine: cmarkLine - bodyStart) {
                 switch block {
                 case .fenceOpening, .fenceClosing:
                     let marker = fenceRun.firstMatch(in: line, range: whole).map { [shifted($0.range)] } ?? []
@@ -222,7 +224,7 @@ nonisolated enum MarkdownHighlighter {
                 let box = match.range(at: 2).location == NSNotFound ? nil : shifted(match.range(at: 2))
                 let markers = box.map { [NSRange(location: $0.location, length: 1), NSRange(location: $0.location + 2, length: 1)] } ?? []
                 tokens.append(Token(range: shifted(match.range), kind: .listItem(bullet: isBullet ? lineStart + marker.location : nil, box: box), markers: markers))
-                if definitions.lines.contains(current) {
+                if definitions.lines.contains(cmarkLine) {
                     tokens.append(Token(range: shifted(NSRange(location: match.range.length, length: whole.length - match.range.length)), kind: .linkDefinition, markers: []))
                 } else {
                     tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
@@ -239,7 +241,7 @@ nonisolated enum MarkdownHighlighter {
                 tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
                 continue
             }
-            if definitions.lines.contains(current) {
+            if definitions.lines.contains(cmarkLine) {
                 tokens.append(Token(range: contentRange, kind: .linkDefinition, markers: []))
                 continue
             }
@@ -349,6 +351,19 @@ nonisolated enum MarkdownHighlighter {
     /// A label as cmark matches it: case-folded (`ẞ` is `SS`), inner whitespace collapsed.
     private static func normalized(label: String) -> String {
         label.folding(options: .caseInsensitive, locale: nil).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    }
+
+    /// The cmark line each of `lines` belongs to: cmark breaks lines at `\n`, `\r\n` and `\r` only, NSString
+    /// also at U+2028, U+2029 and U+0085, and one of those shifted every block below it.
+    private static func cmarkLineNumbers(of lines: [NSRange], in source: NSString) -> [Int] {
+        var numbers: [Int] = []
+        numbers.reserveCapacity(lines.count)
+        var number = 0
+        for line in lines {
+            if line.location > 0, [0x0A, 0x0D].contains(source.character(at: line.location - 1)) { number += 1 }
+            numbers.append(number)
+        }
+        return numbers
     }
 
     /// Content ranges of every line (without line breaks), in order.

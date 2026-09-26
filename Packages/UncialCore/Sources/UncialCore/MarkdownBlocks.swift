@@ -46,8 +46,7 @@ public struct MarkdownBlocks: Sendable, Equatable {
 
     public init(_ markdown: String) {
         var kinds: [Int: Kind] = [:]
-        // Lines as cmark counts them: `\r\n` is one break (and one Character).
-        let lines = markdown.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline).map(String.init)
+        let lines = Self.lines(of: markdown)
         // Where definitions may start: paragraphs (and setext headings) with the byte column their
         // content starts at, and the lines no block covers.
         var paragraphs: [(lines: ClosedRange<Int>, column: Int)] = []
@@ -171,6 +170,12 @@ public struct MarkdownBlocks: Sendable, Equatable {
 
     public func kind(ofLine line: Int) -> Kind? {
         kinds[line]
+    }
+
+    /// The lines as cmark counts them: broken at `\n`, `\r\n` (one Character) and `\r` only, not at a
+    /// vertical tab, a form feed or U+2028, which `Character.isNewline` also takes.
+    public static func lines(of markdown: String) -> [String] {
+        markdown.split(omittingEmptySubsequences: false, whereSeparator: { $0 == "\n" || $0 == "\r\n" || $0 == "\r" }).map(String.init)
     }
 
     /// cmark's `cmark_parse_reference_inline` (inlines.c) over a paragraph's content, byte for byte.

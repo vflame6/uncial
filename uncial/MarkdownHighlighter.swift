@@ -491,24 +491,30 @@ nonisolated enum MarkdownHighlighter {
             [NSRange(location: offset + range.location, length: open),
              NSRange(location: offset + NSMaxRange(range) - close, length: close)]
         }
+        // Every construct needs a character most lines lack; a pass whose character is missing cannot
+        // match and is skipped (the regexes ran on every line: two thirds of tokenizing, PERF-2).
+        let units = line.utf16
+        let hasBacktick = units.contains(0x60), hasBackslash = units.contains(0x5C), hasDollar = units.contains(0x24)
+        let hasAngle = units.contains(0x3C), hasBracket = units.contains(0x5B), hasTilde = units.contains(0x7E)
+        let hasEmphasis = units.contains(0x2A) || units.contains(0x5F)
 
-        for span in codeSpans(in: line as NSString, region: region) {
+        for span in hasBacktick ? codeSpans(in: line as NSString, region: region) : [] {
             tokens.append(Token(range: shifted(span.range), kind: .inlineCode, markers: edges(span.range, open: span.run, close: span.run)))
             mask(span.range)
         }
-        for match in escape.matches(in: scratch as String, range: region) {
+        for match in hasBackslash ? escape.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .escape, markers: [NSRange(location: offset + match.range.location, length: 1)]))
             mask(match.range)
         }
-        for match in displayMath.matches(in: scratch as String, range: region) {
+        for match in hasDollar ? displayMath.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .math(display: true), markers: edges(match.range, open: 2, close: 2)))
             mask(match.range)
         }
-        for match in inlineMath.matches(in: scratch as String, range: region) {
+        for match in hasDollar ? inlineMath.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .math(display: false), markers: edges(match.range, open: 1, close: 1)))
             mask(match.range)
         }
-        for match in autolink.matches(in: scratch as String, range: region) {
+        for match in hasAngle ? autolink.matches(in: scratch as String, range: region) : [] {
             let inner = NSRange(location: match.range.location + 1, length: match.range.length - 2)
             tokens.append(Token(range: shifted(match.range), kind: .autolink(destination: scratch.substring(with: inner)), markers: edges(match.range, open: 1, close: 1)))
             mask(match.range)
@@ -516,7 +522,7 @@ nonisolated enum MarkdownHighlighter {
         // Inline links and images, read the way CommonMark reads them (`inlineLink`): images first, so a
         // badge (a link around an image) keeps both, and before the HTML pass, which took a `<…>`
         // destination for a tag. Only the markers are masked; the text still parses.
-        for isImage in [true, false] {
+        for isImage in hasBracket ? [true, false] : [] {
             var index = region.location
             while index < NSMaxRange(region) {
                 let start = isImage ? index + 1 : index
@@ -536,12 +542,12 @@ nonisolated enum MarkdownHighlighter {
                 index = start + 1
             }
         }
-        tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask)
-        for match in footnoteReference.matches(in: scratch as String, range: region) {
+        if hasAngle { tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask) }
+        for match in hasBracket ? footnoteReference.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .footnoteReference, markers: edges(match.range, open: 2, close: 1)))
             mask(match.range)
         }
-        for match in referenceLink.matches(in: scratch as String, range: region) {
+        for match in hasBracket ? referenceLink.matches(in: scratch as String, range: region) : [] {
             let text = match.range(at: 2)
             let explicit = match.range(at: 3)
             let label = explicit.location != NSNotFound && explicit.length > 0 ? explicit : text
@@ -552,20 +558,20 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination), markers: [open, close]))
             mask(match.range)
         }
-        for match in boldItalic.matches(in: scratch as String, range: region) {
+        for match in hasEmphasis ? boldItalic.matches(in: scratch as String, range: region) : [] {
             // `***text***`: strong over the whole with three-character markers, emphasis on the text itself.
             tokens.append(Token(range: shifted(match.range), kind: .strong, markers: edges(match.range, open: 3, close: 3)))
             tokens.append(Token(range: shifted(NSRange(location: match.range.location + 3, length: match.range.length - 6)), kind: .emphasis, markers: []))
             mask(match.range)
         }
-        for match in strong.matches(in: scratch as String, range: region) {
+        for match in hasEmphasis ? strong.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .strong, markers: edges(match.range, open: 2, close: 2)))
             mask(match.range)
         }
-        for match in emphasis.matches(in: scratch as String, range: region) {
+        for match in hasEmphasis ? emphasis.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .emphasis, markers: edges(match.range, open: 1, close: 1)))
         }
-        for match in strikethrough.matches(in: scratch as String, range: region) {
+        for match in hasTilde ? strikethrough.matches(in: scratch as String, range: region) : [] {
             tokens.append(Token(range: shifted(match.range), kind: .strikethrough, markers: edges(match.range, open: 2, close: 2)))
         }
         return tokens.sorted { $0.range.location < $1.range.location }

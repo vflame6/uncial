@@ -255,6 +255,7 @@ final class ThemedTextView: NSTextView {
     /// paragraph, since the raw look moves with it.
     func rehighlight() {
         guard let textStorage, !isRehighlighting else { return }
+        passes += 1
         isRehighlighting = true
         defer { isRehighlighting = false }
         let text = string
@@ -443,8 +444,9 @@ final class ThemedTextView: NSTextView {
                 guard let self else { return }
                 self.pendingImages.remove(destination)
                 self.imageCache[destination] = .some(image)
+                // Pictures that land together share one pass (each ran a whole one, PERF-2).
                 if image != nil, self.presentation == .inline {
-                    self.rehighlight()
+                    self.scheduleRehighlight()
                 }
             }
         }
@@ -757,6 +759,8 @@ final class ThemedTextView: NSTextView {
 
     var autoPairingEnabled = true
     var continuesLists = true
+    /// How many whole styling passes (`rehighlight()`) ran, for tests.
+    private(set) var passes = 0
 
     /// Front matter, fenced code and `$$` blocks as of the last highlighting pass: Markdown takes them
     /// literally, so Return there is a line break, not a list or quote continuation that removed a

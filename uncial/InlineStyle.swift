@@ -138,6 +138,46 @@ struct InlineStyle {
         characterWidth = Self.advance(of: "0", in: style.regular)
     }
 
+    /// Widths measured in this pass: list prefixes and table cells repeat, and each measurement lays out
+    /// a line (a fifth of a dense document's pass, PERF-2).
+    private let measured = MeasuredWidths()
+
+    private final class MeasuredWidths {
+        struct Key: Hashable {
+            let text: String
+            let font: NSFont
+        }
+        var widths: [Key: CGFloat] = [:]
+    }
+
+    /// `width(of:in:)`, remembered for this pass.
+    private func measure(_ text: String, in font: NSFont) -> CGFloat {
+        let key = MeasuredWidths.Key(text: text, font: font)
+        if let width = measured.widths[key] { return width }
+        let width = Self.width(of: text, in: font)
+        measured.widths[key] = width
+        return width
+    }
+
+    /// Fonts with a trait added, for every pass: a document uses a handful, and converting one through
+    /// NSFontManager for every bold or italic span was a quarter of a dense document's pass (PERF-2).
+    private static var convertedFonts: [ConvertedFont: NSFont] = [:]
+
+    private struct ConvertedFont: Hashable {
+        let font: NSFont
+        let trait: UInt
+    }
+
+    private static func font(_ font: NSFont, with trait: NSFontTraitMask) -> NSFont {
+        let key = ConvertedFont(font: font, trait: trait.rawValue)
+        if let converted = convertedFonts[key] { return converted }
+        let converted = NSFontManager.shared.convert(font, toHaveTrait: trait)
+        // Text-size and theme changes bring new fonts; a few hundred is far more than a session sees.
+        if convertedFonts.count > 512 { convertedFonts.removeAll() }
+        convertedFonts[key] = converted
+        return converted
+    }
+
     /// The advance of one character in a font, straight from CoreText.
     static func advance(of character: Character, in font: NSFont) -> CGFloat {
         var characters = Array(String(character).utf16)
@@ -218,12 +258,12 @@ struct InlineStyle {
                 // The item hangs by the width of its visible prefix (indentation, bullet or number,
                 // and a task box's room); the box's brackets are hidden and its middle character is
                 // kerned out to the box's width.
-                var hanging = Self.width(of: visiblePrefix(of: token, bullet: bullet, box: box, from: paragraph.location, in: text), in: style.body)
+                var hanging = measure(visiblePrefix(of: token, bullet: bullet, box: box, from: paragraph.location, in: text), in: style.body)
                 if let box {
                     let checked = text.character(at: box.location + 1) != 0x20
                     storage.addAttribute(.taskBox, value: checked ? "checked" : "unchecked", range: box)
                     let middle = NSRange(location: box.location + 1, length: 1)
-                    let kern = max(0, Self.taskBoxWidth - Self.width(of: text.substring(with: middle), in: style.body))
+                    let kern = max(0, Self.taskBoxWidth - measure(text.substring(with: middle), in: style.body))
                     storage.addAttribute(.kern, value: kern, range: middle)
                     hanging += kern
                 }
@@ -566,7 +606,7 @@ struct InlineStyle {
             let runFont = font(at: index)
             var runEnd = index + 1
             while runEnd < end, !markers.isHidden(runEnd), font(at: runEnd) == runFont { runEnd += 1 }
-            width += Self.width(of: text.substring(with: NSRange(location: index, length: runEnd - index)), in: runFont)
+            width += measure(text.substring(with: NSRange(location: index, length: runEnd - index)), in: runFont)
             index = runEnd
         }
         return width
@@ -712,7 +752,7 @@ struct InlineStyle {
     private func addTrait(_ trait: NSFontTraitMask, to storage: NSTextStorage, in range: NSRange) {
         storage.enumerateAttribute(.font, in: range, options: []) { value, subrange, _ in
             let font = (value as? NSFont) ?? style.regular
-            storage.addAttribute(.font, value: NSFontManager.shared.convert(font, toHaveTrait: trait), range: subrange)
+            storage.addAttribute(.font, value: Self.font(font, with: trait), range: subrange)
         }
     }
 }

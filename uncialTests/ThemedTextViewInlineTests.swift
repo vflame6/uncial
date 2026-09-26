@@ -288,6 +288,40 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(requested.count == 1)
     }
 
+    /// Restyles like the SwiftUI coordinator: once per text change.
+    private final class RestylingDelegate: NSObject, NSTextViewDelegate {
+        func textDidChange(_ notification: Notification) {
+            (notification.object as? ThemedTextView)?.rehighlight()
+        }
+    }
+
+    /// A Live Preview edit restyles the document once (the pass inside the storage's own edit processing
+    /// ran too, PERF-1), and pictures that land together restyle it once (every remote image ran a whole
+    /// pass of its own, PERF-2).
+    @Test func onePassPerEditAndPerLanding() async throws {
+        let picture = NSImage(size: NSSize(width: 10, height: 10))
+        let delegate = RestylingDelegate()
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
+        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
+        inline.delegate = delegate
+        inline.presentation = .inline
+        inline.loadsRemoteImages = true
+        var pending: [(NSImage?) -> Void] = []
+        inline.remoteImageLoader = { _, completion in pending.append(completion) }
+        inline.replaceText(with: "![a](https://example.com/a.png)\n\n![b](https://example.com/b.png)\n\n![c](https://example.com/c.png)\n\nend")
+        inline.setSelectedRange(NSRange(location: (inline.string as NSString).length, length: 0))
+        #expect(pending.count == 3)
+        let beforeLanding = inline.passes
+        for completion in pending { completion(picture) }
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(inline.passes - beforeLanding == 1)
+        #expect(inline.resolvedImages.count == 3)
+        let beforeTyping = inline.passes
+        inline.insertText("x", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(inline.passes - beforeTyping == 1)
+    }
+
     /// Off by default: no fetch, the image stays source; turning it on fetches.
     @Test func leavesRemoteImagesAloneUnlessAllowed() {
         var requested = 0

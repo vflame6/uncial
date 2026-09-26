@@ -43,7 +43,12 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
     private var libraryLoaded = false
     private var stageTheme: Theme?
     private var svgCache: [String: PreRenderedDiagram] = [:]
+    /// Bitmaps drawn for Live Preview, oldest first out once they hold more than `imageCacheLimit`
+    /// bytes of pixels (WebKit's snapshots keep their pixels resident in its helper process).
     private var imageCache: [DiagramRequest: NSImage] = [:]
+    private var imageCacheOrder: [DiagramRequest] = []
+    private var imageCacheBytes = 0
+    static let imageCacheLimit = 128 * 1024 * 1024
     private var mathCache: [MathRequest: MathPicture] = [:]
     private var nextID = 0
     private var last: Task<Void, Never> = Task {}
@@ -176,8 +181,24 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             let rect = CGRect(x: box[0], y: box[1], width: box[2].rounded(.up), height: box[3].rounded(.up))
             return await self.snapshot(of: rect, pixelsPerPoint: 2 * request.scale, pointSize: NSSize(width: rect.width * request.scale, height: rect.height * request.scale), in: webView)
         }
-        if let image { imageCache[request] = image }
+        if let image { cache(image, for: request) }
         return image
+    }
+
+    private func cache(_ image: NSImage, for request: DiagramRequest) {
+        guard imageCache.updateValue(image, forKey: request) == nil else { return }
+        imageCacheOrder.append(request)
+        imageCacheBytes += Self.bytes(of: image)
+        while imageCacheBytes > Self.imageCacheLimit, imageCacheOrder.count > 1 {
+            let oldest = imageCacheOrder.removeFirst()
+            if let evicted = imageCache.removeValue(forKey: oldest) {
+                imageCacheBytes -= Self.bytes(of: evicted)
+            }
+        }
+    }
+
+    private static func bytes(of image: NSImage) -> Int {
+        image.representations.map { $0.pixelsWide * $0.pixelsHigh * 4 }.max() ?? 0
     }
 
     /// The formula at `request.fontSize` in the page's text color, with 2× pixels and its baseline;

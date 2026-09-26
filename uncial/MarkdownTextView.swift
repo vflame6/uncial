@@ -438,25 +438,63 @@ final class ThemedTextView: NSTextView {
         return nil
     }
 
+    /// Diagram pictures are drawn for text widths in steps of this many points, so a resize asks
+    /// for few of them; `InlineStyle.reserveDiagrams` scales a picture down to the text width.
+    static let diagramWidthStep: CGFloat = 32
+
+    /// A diagram in one look, whatever the width.
+    private struct DiagramLook: Hashable {
+        let source: String
+        let theme: Theme
+        let dark: Bool
+        let scale: CGFloat
+
+        init(_ request: DiagramRequest) {
+            source = request.source
+            theme = request.theme
+            dark = request.dark
+            scale = request.scale
+        }
+    }
+
+    /// The last picture drawn of each diagram, shown while one for a new width is on its way.
+    private var latestDiagrams: [DiagramLook: NSImage] = [:]
+
     /// A diagram's picture in the current look, once `diagramRenderer` has drawn it; the first call
-    /// starts the drawing and re-renders the text when it lands. Every outcome is cached, misses too.
+    /// starts the drawing and re-renders the text when it lands (one pass however many land
+    /// together). Meanwhile, and during a live resize, the picture drawn for another width stands
+    /// in. Every outcome is cached, misses too, one width per diagram.
     func image(forDiagram source: String) -> NSImage? {
-        let width = ((textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)).rounded()
-        let request = DiagramRequest(source: source, theme: theme, dark: style.isDark, scale: style.scale, width: max(0, width))
+        let room = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
+        let width = max(Self.diagramWidthStep, (room / Self.diagramWidthStep).rounded(.down) * Self.diagramWidthStep)
+        let request = DiagramRequest(source: source, theme: theme, dark: style.isDark, scale: style.scale, width: width)
         if let cached = diagramCache[request] { return cached }
-        guard !pendingDiagrams.contains(request) else { return nil }
+        let look = DiagramLook(request)
+        let latest = latestDiagrams[look]
+        if inLiveResize, latest != nil { return latest }
+        guard !pendingDiagrams.contains(request) else { return latest }
         pendingDiagrams.insert(request)
         diagramRenderer(request) { [weak self] image in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.pendingDiagrams.remove(request)
+                self.diagramCache = self.diagramCache.filter { DiagramLook($0.key) != look }
                 self.diagramCache[request] = .some(image)
+                if let image { self.latestDiagrams[look] = image }
                 if image != nil, self.presentation == .inline {
-                    self.rehighlight()
+                    self.scheduleRehighlight()
                 }
             }
         }
-        return nil
+        return latest
+    }
+
+    /// Pictures stood in at the old width while the window was resized; the new width's are drawn now.
+    override func viewDidEndLiveResize() {
+        super.viewDidEndLiveResize()
+        if presentation == .inline, !resolvedDiagrams.isEmpty {
+            rehighlight()
+        }
     }
 
     /// A formula's picture in the current look, once `mathRenderer` has drawn it; the first call

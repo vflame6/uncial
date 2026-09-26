@@ -252,6 +252,43 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(requested == 1)
     }
 
+    /// Resizing Live Preview asks for a new diagram picture only when the text width reaches another
+    /// step, and the picture it has stays on screen meanwhile: every point of width used to queue a
+    /// WebKit bitmap on the shared stage and show the diagram's source until it landed.
+    @Test func resizingKeepsDiagramPicturesAndAsksForFew() async throws {
+        let picture = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
+            NSColor.blue.setFill()
+            rect.fill()
+            return true
+        }
+        var requests: [DiagramRequest] = []
+        var pending: [(NSImage?) -> Void] = []
+        let inline = ThemedTextView.standalone()
+        inline.frame = NSRect(x: 0, y: 0, width: 700, height: 300)
+        inline.textContainer?.containerSize = NSSize(width: 700, height: CGFloat.greatestFiniteMagnitude)
+        inline.presentation = .inline
+        inline.diagramRenderer = { request, completion in
+            requests.append(request)
+            pending.append(completion)
+        }
+        inline.replaceText(with: "intro\n```mermaid\ngraph TD\n  A --> B\n```\nafter")
+        inline.setSelectedRange(NSRange(location: 0, length: 0))
+        func land() async throws {
+            let waiting = pending
+            pending = []
+            waiting.forEach { $0(picture) }
+            try await Task.sleep(for: .milliseconds(5))
+        }
+        try await land()
+        #expect(inline.resolvedDiagrams == [6])
+        for width in stride(from: 699.0, through: 600.0, by: -1.0) {
+            inline.setFrameSize(NSSize(width: width, height: 300))
+            #expect(inline.resolvedDiagrams == [6], "no picture at width \(width)")
+            try await land()
+        }
+        #expect(requests.count <= 6, "\(requests.count) pictures for a 100-point resize")
+    }
+
     @Test func drawsDiagramsUnlessTheCaretIsInside() async throws {
         let picture = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
             NSColor.blue.setFill()

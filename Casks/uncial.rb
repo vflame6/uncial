@@ -23,10 +23,17 @@ cask "uncial" do
   uninstall quit: "com.maksimradaev.uncial"
 
   zap trash: [
+    "~/Library/Application Scripts/com.maksimradaev.uncial.QuickLook",
+    "~/Library/Application Scripts/com.maksimradaev.uncial.Thumbnail",
+    "~/Library/Application Scripts/XWTLHG45H7.com.maksimradaev.uncial",
+    "~/Library/Caches/com.maksimradaev.uncial",
     "~/Library/Containers/com.maksimradaev.uncial.QuickLook",
     "~/Library/Containers/com.maksimradaev.uncial.Thumbnail",
     "~/Library/Group Containers/XWTLHG45H7.com.maksimradaev.uncial",
+    "~/Library/HTTPStorages/com.maksimradaev.uncial",
+    "~/Library/HTTPStorages/com.maksimradaev.uncial.binarycookies",
     "~/Library/Preferences/com.maksimradaev.uncial.plist",
+    "~/Library/WebKit/com.maksimradaev.uncial",
   ]
 
   caveats <<~EOS

@@ -214,6 +214,35 @@ import UncialCore
         #expect(model.hasUnsavedChanges == true)
     }
 
+    /// A legacy-encoded file is written back in its own encoding, so only the edited characters
+    /// change; a character that encoding cannot hold makes the file UTF-8, every character kept.
+    @Test func savesInTheFilesOwnEncoding() throws {
+        let latin1 = Data([0x23, 0x20, 0x43, 0x61, 0x66, 0xE9, 0x0A])
+        let file = try temporaryFile("")
+        try latin1.write(to: file)
+        let decoded = MarkdownText.read(latin1)
+        let model = DocumentViewModel(fileURL: file, initialText: decoded.text, encoding: decoded.encoding, saveDelay: .seconds(5))
+        model.updateText(decoded.text + "x")
+        #expect(model.saveNow() == .written)
+        #expect(try Data(contentsOf: file) == latin1 + Data([0x78]))
+        model.updateText(model.text + "日")
+        #expect(model.saveNow() == .written)
+        #expect(try Data(contentsOf: file) == Data("# Café\nx日".utf8))
+    }
+
+    /// Text read with replacement characters is never written back silently: the bytes they stand
+    /// for would be lost.
+    @Test func doesNotWriteALossyRead() throws {
+        let bytes = Data([0x23, 0x20, 0xFF, 0x0A])
+        let file = try temporaryFile("")
+        try bytes.write(to: file)
+        let model = DocumentViewModel(fileURL: file, initialText: String(decoding: bytes, as: UTF8.self), encoding: .utf8, isLossy: true, saveDelay: .seconds(5))
+        model.updateText("# edited\n")
+        #expect(model.saveNow() == .failed)
+        #expect(model.saveError != nil)
+        #expect(try Data(contentsOf: file) == bytes)
+    }
+
     /// A write that fails under automatic saving leaves edits nothing will write: closing and
     /// quitting must ask. Reloading drops the edits and the stale error with them.
     @Test func failedAutomaticSaveNeedsThePrompt() throws {

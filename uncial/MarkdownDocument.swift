@@ -7,6 +7,9 @@ nonisolated struct MarkdownDocument: FileDocument {
     static let readableContentTypes: [UTType] = [.markdown, .markdownVariant]
 
     var text: String
+    /// How the file was read and is written back (`MarkdownText.Decoded`).
+    var encoding: String.Encoding = .utf8
+    var isLossy = false
 
     init(text: String = "") {
         self.text = text
@@ -16,11 +19,14 @@ nonisolated struct MarkdownDocument: FileDocument {
         guard let data = configuration.file.regularFileContents else {
             throw CocoaError(.fileReadCorruptFile)
         }
-        text = MarkdownText.decode(data)
+        let decoded = MarkdownText.read(data)
+        text = decoded.text
+        encoding = decoded.encoding
+        isLossy = decoded.isLossy
     }
 
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: Data(text.utf8))
+        FileWrapper(regularFileWithContents: text.data(using: encoding, allowLossyConversion: false) ?? Data(text.utf8))
     }
 }
 

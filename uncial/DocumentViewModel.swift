@@ -52,10 +52,16 @@ final class DocumentViewModel {
     /// window's guard answers with a sheet; without one (no window yet) the edits stay.
     @ObservationIgnored var externalChangeResolver: ((String) async -> ExternalChangeChoice)?
     /// The disk text waiting for an answer; nothing is written meanwhile.
-    private(set) var pendingExternalChange: String?
+    var pendingExternalChange: String? { pendingDisk?.text }
+    private var pendingDisk: MarkdownText.Decoded?
 
     /// What we last loaded from or wrote to the file.
     private var diskText: String
+    /// The encoding saving writes (`MarkdownText.Decoded.encoding`): the file's own for a legacy
+    /// encoding, UTF-8 otherwise or when a typed character does not fit it.
+    private(set) var encoding: String.Encoding
+    /// The text was read with replacement characters (`MarkdownText.Decoded.isLossy`), so it is not written back.
+    private var isLossy: Bool
     private let renderer = MarkdownRenderer()
     private let renderDelay: Duration
     private let saveDelay: Duration
@@ -68,6 +74,8 @@ final class DocumentViewModel {
     init(
         fileURL: URL?,
         initialText: String,
+        encoding: String.Encoding = .utf8,
+        isLossy: Bool = false,
         theme: Theme = .default,
         renderDelay: Duration = .milliseconds(150),
         saveDelay: Duration = .milliseconds(500)
@@ -76,6 +84,8 @@ final class DocumentViewModel {
         self.theme = theme
         self.renderDelay = renderDelay
         self.saveDelay = saveDelay
+        self.encoding = encoding
+        self.isLossy = isLossy
         text = initialText
         diskText = initialText
         statistics = DocumentStatistics(text: initialText)
@@ -147,20 +157,27 @@ final class DocumentViewModel {
         saveTask?.cancel()
         saveTask = nil
         guard let fileURL, hasUnsavedChanges else { return .unchanged }
-        if pendingExternalChange != nil {
+        guard !isLossy else {
+            saveError = "“\(title)” is in a text encoding Uncial could not read without loss; saving would replace the characters it could not read."
+            return .failed
+        }
+        if pendingDisk != nil {
             guard asking else { return .needsDecision }
-        } else if let data = try? Data(contentsOf: fileURL) {
-            switch reconcile(disk: MarkdownText.decode(data), asking: asking) {
+        } else if let disk = try? read(fileURL) {
+            switch reconcile(disk: disk, asking: asking) {
             case .write: break
             case .adopted: return .adopted
             case .pending: return .needsDecision
             }
         }
-        pendingExternalChange = nil
+        pendingDisk = nil
         let textToSave = text
+        // The file's own encoding when every character fits (a legacy file keeps its bytes), UTF-8 otherwise.
+        let legacy = encoding == .utf8 ? nil : textToSave.data(using: encoding, allowLossyConversion: false)
         do {
-            try Data(textToSave.utf8).write(to: fileURL, options: .atomic)
+            try (legacy ?? Data(textToSave.utf8)).write(to: fileURL, options: .atomic)
             diskText = textToSave
+            if legacy == nil { encoding = .utf8 }
             saveError = nil
             syncDocumentModificationDate(for: fileURL)
             return .written
@@ -174,10 +191,15 @@ final class DocumentViewModel {
     func reload() {
         guard let fileURL else { return }
         do {
-            adopt(MarkdownText.decode(try Data(contentsOf: fileURL)))
+            adopt(try read(fileURL))
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// The file's text, read the way it was read before when its bytes are not UTF-8.
+    private func read(_ fileURL: URL) throws -> MarkdownText.Decoded {
+        MarkdownText.read(try Data(contentsOf: fileURL), preferring: encoding)
     }
 
     // MARK: - Private
@@ -192,8 +214,8 @@ final class DocumentViewModel {
     }
 
     private func syncFromDisk() {
-        guard let fileURL, let data = try? Data(contentsOf: fileURL) else { return }
-        _ = reconcile(disk: MarkdownText.decode(data))
+        guard let fileURL, let disk = try? read(fileURL) else { return }
+        _ = reconcile(disk: disk)
     }
 
     /// What `reconcile` left for the editor text.
@@ -209,8 +231,8 @@ final class DocumentViewModel {
     /// Applies the file's current text per `DiskSync` and, with local edits pending, the policy.
     /// Under the Ask policy the question is asked through `externalChangeResolver`, unless `asking`
     /// is off: then the change is only held, for a closing window to ask about itself.
-    private func reconcile(disk: String, asking: Bool = true) -> Reconciled {
-        switch DiskSync.decide(disk: disk, text: text, diskText: diskText) {
+    private func reconcile(disk: MarkdownText.Decoded, asking: Bool = true) -> Reconciled {
+        switch DiskSync.decide(disk: disk.text, text: text, diskText: diskText) {
         case .ignore:
             return .write
         case .adopt:
@@ -219,7 +241,7 @@ final class DocumentViewModel {
         case .keepLocal:
             switch externalChangePolicy {
             case .keepLocal:
-                diskText = disk
+                diskText = disk.text
                 return .write
             case .reload:
                 adopt(disk)
@@ -230,7 +252,7 @@ final class DocumentViewModel {
                 } else {
                     saveTask?.cancel()
                     saveTask = nil
-                    pendingExternalChange = disk
+                    pendingDisk = disk
                 }
                 return .pending
             }
@@ -239,14 +261,14 @@ final class DocumentViewModel {
 
     /// Holds the pending save and asks; a further change while the question is open only updates
     /// what a reload would adopt.
-    private func askAboutExternalChange(_ disk: String) {
+    private func askAboutExternalChange(_ disk: MarkdownText.Decoded) {
         saveTask?.cancel()
         saveTask = nil
-        if pendingExternalChange != nil {
-            pendingExternalChange = disk
+        if pendingDisk != nil {
+            pendingDisk = disk
             return
         }
-        pendingExternalChange = disk
+        pendingDisk = disk
         guard let externalChangeResolver else {
             resolveExternalChange(.keepLocal)
             return
@@ -261,26 +283,28 @@ final class DocumentViewModel {
     /// Settles a pending external change: keep the edits (the file's new contents go at the next
     /// save, right away with automatic saving) or reload the file and drop them.
     func resolveExternalChange(_ choice: ExternalChangeChoice) {
-        guard let disk = pendingExternalChange else { return }
-        pendingExternalChange = nil
+        guard let disk = pendingDisk else { return }
+        pendingDisk = nil
         switch choice {
         case .keepLocal:
-            diskText = disk
+            diskText = disk.text
             if autosaves { scheduleSave() }
         case .reload:
             adopt(disk)
         }
     }
 
-    private func adopt(_ disk: String) {
+    private func adopt(_ disk: MarkdownText.Decoded) {
         saveTask?.cancel()
         saveTask = nil
-        pendingExternalChange = nil
-        diskText = disk
+        pendingDisk = nil
+        diskText = disk.text
+        encoding = disk.encoding
+        isLossy = disk.isLossy
         loadError = nil
         saveError = nil
-        if text != disk {
-            text = disk
+        if text != disk.text {
+            text = disk.text
         }
         render()
     }

@@ -11,7 +11,8 @@ struct DocumentView: View {
     private let settings: AppSettings
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
-        let model = DocumentViewModel(fileURL: fileURL, initialText: document.text, theme: settings.theme)
+        let model = DocumentViewModel(fileURL: fileURL, initialText: document.text, encoding: document.encoding,
+                                      isLossy: document.isLossy, theme: settings.theme)
         model.autosaves = settings.autosave
         model.externalChangePolicy = settings.externalChangePolicy
         model.remoteContent = settings.loadRemoteContent

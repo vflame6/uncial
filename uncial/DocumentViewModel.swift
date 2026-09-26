@@ -243,6 +243,13 @@ final class DocumentViewModel {
 
     private func syncFromDisk() {
         guard let fileURL, let disk = try? read(fileURL) else { return }
+        // While the question is open, Reload adopts what the file holds now, whatever it is: a change
+        // back to the saved text would otherwise pass for our own write and leave the older change
+        // pending, and Reload would show text the file no longer has, marked as saved.
+        if pendingDisk != nil {
+            pendingDisk = disk
+            return
+        }
         _ = reconcile(disk: disk)
     }
 

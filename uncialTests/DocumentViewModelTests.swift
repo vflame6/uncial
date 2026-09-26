@@ -160,6 +160,29 @@ import UncialCore
         #expect(try contents(of: file) == "theirs")
     }
 
+    /// While the question is open the file can change again, even back to the text it had: Reload
+    /// adopts what the file holds when the answer comes, not what it held when the question was asked.
+    @Test func reloadAdoptsTheFileAsItIsWhenAnswered() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))
+        model.externalChangePolicy = .ask
+        var answer: CheckedContinuation<ExternalChangeChoice, Never>?
+        model.externalChangeResolver = { _ in await withCheckedContinuation { answer = $0 } }
+        try await Task.sleep(for: .milliseconds(150))
+        model.updateText("mine")
+        try Data("theirs".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(model.pendingExternalChange == "theirs")
+        try Data("one".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(model.pendingExternalChange == "one")
+        answer?.resume(returning: .reload)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(model.text == "one")
+        #expect(model.hasUnsavedChanges == false)
+        #expect(try contents(of: file) == "one")
+    }
+
     @Test func keptEditsAreWrittenOnlyAfterTheAnswer() async throws {
         let file = try temporaryFile("one")
         let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .milliseconds(50))

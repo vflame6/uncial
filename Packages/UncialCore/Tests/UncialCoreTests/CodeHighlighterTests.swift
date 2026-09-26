@@ -31,6 +31,48 @@ import Testing
         }
     }
 
+    /// highlight.js's markdown grammar is quadratic in the length of a line of unmatched `[` (one line
+    /// of 32,000 took 10.8 s, and JavaScriptCore cannot interrupt it): a block with a line over the
+    /// limit, or longer than the size limit, stays plain code.
+    @Test func boundsTheWorkPerBlock() {
+        var plain = false
+        let elapsed = ContinuousClock().measure {
+            plain = CodeHighlighter.html(for: String(repeating: "[", count: 5_000), language: "markdown") == nil
+        }
+        #expect(plain)
+        #expect(elapsed < .milliseconds(100))
+        let long = Array(repeating: "let x = 1", count: 10_000).joined(separator: "\n")
+        #expect(CodeHighlighter.html(for: long, language: "swift") == nil)
+        #expect(CodeHighlighter.html(for: "let x = 1", language: "swift")?.contains("hljs-keyword") == true)
+    }
+
+    /// A page highlights a bounded amount of code; the blocks after it stay as cmark wrote them.
+    @Test func boundsTheCodeHighlightedPerPage() {
+        let block = "<pre><code class=\"language-swift\">let x = 1\n</code></pre>\n"
+        let html = CodeHighlighter.render(block + block + block, budget: 20)
+        #expect(html.components(separatedBy: "hljs-keyword").count - 1 == 2)
+    }
+
+    /// The editor asks on the main thread: `supports` and `tokens` answer while a page render is busy
+    /// with a slow block, instead of waiting for the engine that render holds.
+    @Test func theEditorDoesNotWaitForThePage() async throws {
+        _ = CodeHighlighter.supports("swift")
+        _ = CodeHighlighter.tokens(in: "let a = 0", language: "swift")
+        _ = CodeHighlighter.html(for: "let a = 0", language: "swift")
+        let slow = Array(repeating: String(repeating: "[", count: 1_000), count: 60).joined(separator: "\n")
+        let busy = Task.detached {
+            ContinuousClock().measure { _ = CodeHighlighter.render("<pre><code class=\"language-markdown\">\(slow)</code></pre>") }
+        }
+        try await Task.sleep(for: .milliseconds(50))
+        let elapsed = ContinuousClock().measure {
+            _ = CodeHighlighter.supports("kotlin")
+            _ = CodeHighlighter.tokens(in: "fun b() = 1 // \(UUID())", language: "kotlin")
+        }
+        let rendering = await busy.value
+        #expect(rendering > .milliseconds(300), "the page render was not slow enough to test this: \(rendering)")
+        #expect(elapsed < .milliseconds(150), "the editor waited \(elapsed)")
+    }
+
     @Test func ignoresUnknownLanguages() {
         for name in ["mermaid", "math", "nope", "", "language-swift"] {
             #expect(!CodeHighlighter.supports(name), "\(name) should stay plain")

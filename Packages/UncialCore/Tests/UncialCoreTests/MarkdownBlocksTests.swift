@@ -38,6 +38,39 @@ import Testing
         #expect(kinds("a <b>c</b>") == [nil])
     }
 
+    /// Link reference definitions where cmark takes them: where a paragraph starts, or right after
+    /// another definition; each with the lines it takes (BUG-28).
+    @Test func linkDefinitionsWhereCmarkTakesThem() {
+        typealias Definition = MarkdownBlocks.LinkDefinition
+        func definitions(_ markdown: String) -> [Definition] {
+            MarkdownBlocks(markdown).linkDefinitions
+        }
+        #expect(definitions("[foo]: /url \"title\"\n\n[foo]") == [Definition(label: "foo", destination: "/url", lines: 0...0)])
+        // A destination or title may go on over the next lines, and another definition may follow.
+        #expect(definitions("[a]:\n/a\n'one\ntwo'\n[b]: <b c>\n\ntext") == [
+            Definition(label: "a", destination: "/a", lines: 0...3), Definition(label: "b", destination: "b c", lines: 4...4),
+        ])
+        // Right after a heading, and at the start of a paragraph that goes on after it.
+        #expect(definitions("# Title\n[x]: /x\nand text") == [Definition(label: "x", destination: "/x", lines: 1...1)])
+        // A title that fails on a line of its own leaves the definition before it.
+        #expect(definitions("[foo]: /url\n\"title\" ok") == [Definition(label: "foo", destination: "/url", lines: 0...0)])
+        // In a list item, from where its paragraph starts.
+        #expect(definitions("- [a]: /a\n  text") == [Definition(label: "a", destination: "/a", lines: 0...0)])
+        // Never inside a paragraph or code, never with more than a title after the destination.
+        #expect(definitions("Foo\n[bar]: /baz").isEmpty)
+        #expect(definitions("```\n[foo]: /url\n```").isEmpty)
+        #expect(definitions("[foo]: <bar>(baz)").isEmpty)
+        #expect(definitions("[foo]: /url 'title\n\nwith blank line'").isEmpty)
+        #expect(definitions("[foo]: /url \"title\" ok").isEmpty)
+        #expect(definitions("[^1]: /url\n\n[^1]").isEmpty)
+    }
+
+    /// The footnotes the page shows: defined and referenced.
+    @Test func footnoteLabels() {
+        #expect(MarkdownBlocks("a [^1] b [^2] c [^Big Note]\n\n[^1]: one\n[^3]: three\n[^big note]: four").footnoteLabels == ["1"])
+        #expect(MarkdownBlocks("a [^x]\n\n[^x]: one").footnoteLabels == ["x"])
+    }
+
     @Test func linesCountWithWindowsBreaksAndMultibyteText() {
         #expect(kinds("é\r\n```\r\nx\r\n```\r\nz".replacingOccurrences(of: "\r\n", with: "\n")) == [nil, .fenceOpening, .fencedCode, .fenceClosing, nil])
         let crlf = MarkdownBlocks("é\r\n```\r\nx\r\n```\r\nz")

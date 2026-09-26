@@ -237,6 +237,28 @@ import Testing
         #expect(MarkdownHighlighter.tokens(in: nested).map(\.kind) == [.link(destination: "c")])
     }
 
+    /// Definitions as CommonMark reads them: none inside code, none interrupting a paragraph, nothing but
+    /// a title after the destination; and a footnote reference needs its definition. Live Preview made
+    /// links of brackets the page shows as text (BUG-28; spec examples 166, 170, 181, 182).
+    @Test func definitionsFollowCommonMark() {
+        func references(_ text: String) -> [MarkdownHighlighter.Token.Kind] {
+            MarkdownHighlighter.tokens(in: text).map(\.kind).filter {
+                if case .link = $0 { return true }
+                return $0 == .footnoteReference
+            }
+        }
+        #expect(references("```\n[foo]: /url\n```\n\n[foo]").isEmpty)
+        #expect(references("Foo\n[bar]: /baz\n\n[bar]").isEmpty)
+        #expect(references("[foo]: <bar>(baz)\n\n[foo]").isEmpty)
+        #expect(references("[foo]: /url 'title\n\nwith blank line'\n\n[foo]").isEmpty)
+        #expect(references("[foo]: /url \"T\"\n\n[foo]") == [.link(destination: "/url")])
+        #expect(references("# Title\n[foo]: /url\n\n[foo]") == [.link(destination: "/url")])
+        #expect(references("see [^1] and [^2]\n\n[^1]: note") == [.footnoteReference])
+        // In a list item the definition follows the marker, and is no link itself.
+        let item = MarkdownHighlighter.tokens(in: "- [foo]: /url\n  text\n\n[foo]")
+        #expect(item.map(\.kind) == [.listItem(bullet: 0, box: nil), .linkDefinition, .link(destination: "/url")])
+    }
+
     @Test func referenceLinksResolveAgainstDefinitions() {
         let text = "[one][Ref] and [two][] and [Three] but [none][x] and ![pic][img]\n\n[ref]: https://a.example\n[two]: /b\n[three]: <c d> 'T'\n[img]: i.png"
         let tokens = MarkdownHighlighter.tokens(in: text)

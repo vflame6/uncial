@@ -104,7 +104,6 @@ nonisolated enum MarkdownHighlighter {
     private static let attribute = regex(#"([A-Za-z_:][-A-Za-z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#)
     /// Tags that never have content: a lone `<br>` needs no `</br>`.
     private static let voidElements: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
-    private static let linkDefinition = regex(#"^\s{0,3}\[([^\]\n]+)\]:\s*(?:<([^>\n]*)>|(\S+))"#)
     private static let referenceLink = regex(#"(!?)\[([^\[\]\n]+)\](?:\[([^\[\]\n]*)\])?"#)
     private static let escape = regex(#"\\[!-/:-@\[-`{-~]"#)
     private static let mathFence = regex(#"^\s{0,3}\$\$\s*$"#)
@@ -123,11 +122,12 @@ nonisolated enum MarkdownHighlighter {
         var inMathBlock = false
         var inFrontMatter = false
         var index = 0
-        let definitions = linkDefinitions(in: lines, source: source)
         // cmark decides which lines are code or HTML (fenced code in a list item, indented code, HTML
-        // blocks: the line regexes knew none of them; REF-3). Its body starts after the front matter.
+        // blocks: the line regexes knew none of them; REF-3) and which are definitions (BUG-28). Its
+        // body starts after the front matter.
         let bodyStart = FrontMatter.bodyLineOffset(of: text)
         let blocks = MarkdownBlocks(bodyStart > 0 ? FrontMatter.split(text).body : text)
+        let definitions = References(blocks, bodyStart: bodyStart)
 
         while index < lines.count {
             let current = index
@@ -222,7 +222,11 @@ nonisolated enum MarkdownHighlighter {
                 let box = match.range(at: 2).location == NSNotFound ? nil : shifted(match.range(at: 2))
                 let markers = box.map { [NSRange(location: $0.location, length: 1), NSRange(location: $0.location + 2, length: 1)] } ?? []
                 tokens.append(Token(range: shifted(match.range), kind: .listItem(bullet: isBullet ? lineStart + marker.location : nil, box: box), markers: markers))
-                tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
+                if definitions.lines.contains(current) {
+                    tokens.append(Token(range: shifted(NSRange(location: match.range.length, length: whole.length - match.range.length)), kind: .linkDefinition, markers: []))
+                } else {
+                    tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
+                }
                 continue
             }
             if line.contains("|"), let table = tableTokens(startingAt: current, lines: lines, source: source, definitions: definitions) {
@@ -235,7 +239,7 @@ nonisolated enum MarkdownHighlighter {
                 tokens += inlineTokens(in: line, offset: lineStart, from: match.range.length, definitions: definitions)
                 continue
             }
-            if linkDefinition.firstMatch(in: line, range: whole) != nil {
+            if definitions.lines.contains(current) {
                 tokens.append(Token(range: contentRange, kind: .linkDefinition, markers: []))
                 continue
             }
@@ -323,25 +327,28 @@ nonisolated enum MarkdownHighlighter {
         return blocks
     }
 
-    /// Reference link definitions anywhere in the document, keyed by their normalized label
-    /// (case-folded, inner whitespace collapsed), which is how `[text][label]` finds its destination.
-    private static func linkDefinitions(in lines: [NSRange], source: NSString) -> [String: String] {
-        var definitions: [String: String] = [:]
-        for range in lines {
-            let line = source.substring(with: range)
-            guard let match = linkDefinition.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) else { continue }
-            let text = line as NSString
-            let destination = match.range(at: 2).location != NSNotFound ? match.range(at: 2) : match.range(at: 3)
-            let label = normalized(label: text.substring(with: match.range(at: 1)))
-            if definitions[label] == nil {
-                definitions[label] = text.substring(with: destination)
+    /// What the document defines, as cmark reads it: link destinations by normalized label (the first
+    /// definition of a label wins), the lines the definitions take, and the footnotes the page shows.
+    /// A line that only looks like a definition (in code, inside a paragraph, with more than a title
+    /// after its destination) defined a link before, and an undefined `[^note]` was a footnote (BUG-28).
+    private struct References {
+        var links: [String: String] = [:]
+        var lines: Set<Int> = []
+        var footnotes: Set<String> = []
+
+        init(_ blocks: MarkdownBlocks, bodyStart: Int) {
+            for definition in blocks.linkDefinitions {
+                let label = MarkdownHighlighter.normalized(label: definition.label)
+                if links[label] == nil { links[label] = definition.destination }
+                lines.formUnion(definition.lines.map { $0 + bodyStart })
             }
+            footnotes = Set(blocks.footnoteLabels.map(MarkdownHighlighter.normalized(label:)))
         }
-        return definitions
     }
 
+    /// A label as cmark matches it: case-folded (`ẞ` is `SS`), inner whitespace collapsed.
     private static func normalized(label: String) -> String {
-        label.lowercased().split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        label.folding(options: .caseInsensitive, locale: nil).split(whereSeparator: \.isWhitespace).joined(separator: " ")
     }
 
     /// Content ranges of every line (without line breaks), in order.
@@ -366,7 +373,7 @@ nonisolated enum MarkdownHighlighter {
 
     /// A header row followed by a delimiter row with the same number of cells, then rows until a
     /// blank line or a line without a pipe. Column widths are the widest visible cell per column.
-    private static func tableTokens(startingAt headerIndex: Int, lines: [NSRange], source: NSString, definitions: [String: String]) -> TableParse? {
+    private static func tableTokens(startingAt headerIndex: Int, lines: [NSRange], source: NSString, definitions: References) -> TableParse? {
         guard headerIndex + 1 < lines.count else { return nil }
         let delimiterRange = lines[headerIndex + 1]
         let delimiter = source.substring(with: delimiterRange)
@@ -468,7 +475,7 @@ nonisolated enum MarkdownHighlighter {
     // MARK: - Inline
 
     /// Inline constructs of `line` from `start` on, in document order, ranges shifted by `offset`.
-    private static func inlineTokens(in line: String, offset: Int, from start: Int, definitions: [String: String]) -> [Token] {
+    private static func inlineTokens(in line: String, offset: Int, from start: Int, definitions: References) -> [Token] {
         let scratch = NSMutableString(string: line)
         let region = NSRange(location: start, length: scratch.length - start)
         var tokens: [Token] = []
@@ -536,6 +543,8 @@ nonisolated enum MarkdownHighlighter {
         }
         if hasAngle { tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask) }
         for match in hasBracket ? footnoteReference.matches(in: scratch as String, range: region) : [] {
+            let label = scratch.substring(with: NSRange(location: match.range.location + 2, length: match.range.length - 3))
+            guard definitions.footnotes.contains(normalized(label: label)) else { continue }
             tokens.append(Token(range: shifted(match.range), kind: .footnoteReference, markers: edges(match.range, open: 2, close: 1)))
             mask(match.range)
         }
@@ -543,7 +552,7 @@ nonisolated enum MarkdownHighlighter {
             let text = match.range(at: 2)
             let explicit = match.range(at: 3)
             let label = explicit.location != NSNotFound && explicit.length > 0 ? explicit : text
-            guard let destination = definitions[normalized(label: scratch.substring(with: label))] else { continue }
+            guard let destination = definitions.links[normalized(label: scratch.substring(with: label))] else { continue }
             let isImage = match.range(at: 1).length == 1
             let open = NSRange(location: offset + match.range.location, length: isImage ? 2 : 1)
             let close = NSRange(location: offset + NSMaxRange(text), length: NSMaxRange(match.range) - NSMaxRange(text))

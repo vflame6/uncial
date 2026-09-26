@@ -217,7 +217,7 @@ struct WebView: NSViewRepresentable {
             if let pendingBody {
                 self.pendingBody = nil
                 replaceBody(pendingBody, in: webView)
-            } else if pendingScrollY == nil {
+            } else {
                 reapplyScrollTarget(in: webView)
             }
         }

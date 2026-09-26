@@ -37,7 +37,7 @@ import Testing
         #expect(controller.editorTarget?.line == 7)
         #expect(controller.lastEditorLine == 7)
         controller.editorDidScroll(toLine: 7.1)
-        #expect(controller.previewTarget == first)
+        #expect(controller.previewTarget == nil)
         clock.advance(0.31)
         controller.editorDidScroll(toLine: 9)
         #expect(controller.previewTarget?.line == 9)
@@ -52,6 +52,23 @@ import Testing
         controller.resyncPreview()
         #expect(controller.previewTarget?.line == 5)
         #expect((controller.previewTarget?.token ?? 0) > token)
+    }
+
+    /// Once the preview drives, or sync is off (Read Only), the preview has no target left: the web
+    /// view re-applies its last target after every body swap and reload, which used to throw the
+    /// reader back to where the editor once was.
+    @Test func forgetsThePreviewTargetWhenThePreviewDrivesOrSyncStops() {
+        let (controller, clock) = make()
+        controller.editorDidScroll(toLine: 5)
+        #expect(controller.previewTarget?.line == 5)
+        clock.advance(0.31)
+        controller.previewDidScroll(toLine: 40)
+        #expect(controller.previewTarget == nil)
+        clock.advance(0.31)
+        controller.editorDidScroll(toLine: 8)
+        #expect(controller.previewTarget?.line == 8)
+        controller.isEnabled = false
+        #expect(controller.previewTarget == nil)
     }
 
     @Test func enablingResyncsFromTheRecordedLine() {

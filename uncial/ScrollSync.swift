@@ -16,8 +16,13 @@ struct ScrollTarget: Equatable {
 final class ScrollSyncController {
     static let suppression: TimeInterval = 0.3
 
+    /// Off (Read Only, Live Preview, sync turned off in Settings), the preview has no target: the web
+    /// view re-applies its last one after every body swap and reload, which would move the reader.
     var isEnabled = false {
-        didSet { if isEnabled, !oldValue { resyncPreview() } }
+        didSet {
+            if isEnabled, !oldValue { resyncPreview() }
+            if !isEnabled { previewTarget = nil }
+        }
     }
 
     private(set) var editorTarget: ScrollTarget?
@@ -46,6 +51,8 @@ final class ScrollSyncController {
         lastEditorLine = line
         token += 1
         editorTarget = ScrollTarget(line: line, token: token)
+        // The preview is where the user put it; nothing to re-apply to it.
+        previewTarget = nil
         suppressEditorUntil = now().addingTimeInterval(Self.suppression)
     }
 

@@ -461,7 +461,8 @@ struct InlineStyle {
                     }
                     let after = padding - before
                     if after > 0, let last = lastVisibleCharacter(in: cell.range, markers: markers) {
-                        storage.addAttribute(.kern, value: after, range: NSRange(location: last, length: 1))
+                        // The whole character: TextKit ignores a kern on an emoji's second UTF-16 unit (BUG-26).
+                        storage.addAttribute(.kern, value: after, range: text.rangeOfComposedCharacterSequence(at: last))
                     }
                     if before > 0, cell.range.length > 0, text.character(at: cell.range.location) == 0x20, !markers.isHidden(cell.range.location) {
                         storage.addAttribute(.kern, value: before, range: NSRange(location: cell.range.location, length: 1))

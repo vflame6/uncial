@@ -278,6 +278,16 @@ import UncialCore
 
     /// A table in a file with Windows line breaks aligns like one with Unix ones: rows were grouped by
     /// `\n` alone, so with `\r\n` every row stood on its own and nothing was padded.
+    /// A cell that ends with an emoji is padded on the emoji itself: the kern used to land on its second
+    /// UTF-16 unit, which TextKit ignores, so that row's pipes stood out of line.
+    @Test func paddingAfterAnEmojiLandsOnIt() {
+        let text = storage("|a😀|b|\n|--|--|\n|cccccc|d|")
+        let emoji = ("|a😀|b|" as NSString).range(of: "😀")
+        let kern = text.attribute(.kern, at: emoji.location, effectiveRange: nil) as? CGFloat
+        #expect((kern ?? 0) > 0)
+        #expect(text.attribute(.kern, at: emoji.location + 1, effectiveRange: nil) as? CGFloat == kern)
+    }
+
     @Test func tablesAlignWithWindowsLineBreaks() {
         let unix = storage("| a | **b** |\n|:--|--:|\n| cc | d |")
         let windows = storage("| a | **b** |\r\n|:--|--:|\r\n| cc | d |")

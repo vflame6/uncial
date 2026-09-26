@@ -13,8 +13,11 @@ SIGN_FLAGS = $(if $(SIGN_IDENTITY),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(
 
 .PHONY: build test core-test install uninstall icon highlight clean bump release publish
 
+# No coverage instrumentation in a build for use: the auto-created scheme gathers coverage when
+# testing and so sets CLANG_COVERAGE_MAPPING for every build of the scheme, which put `__llvm_prf`
+# counters (and a `default.profraw` write on exit) into the released 1.1.2 and 1.1.3.
 build:
-	$(XCODEBUILD) -configuration $(CONFIG) build $(SIGN_FLAGS)
+	$(XCODEBUILD) -configuration $(CONFIG) build CLANG_COVERAGE_MAPPING=NO ENABLE_CODE_COVERAGE=NO $(SIGN_FLAGS)
 
 core-test:
 	cd Packages/UncialCore && swift test

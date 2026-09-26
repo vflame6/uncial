@@ -124,4 +124,49 @@ import Testing
         #expect(html.contains("<p data-line=\"3\" data-sourcepos=\"3:1-3:4\">text</p>"))
         #expect(!renderer.renderBody("# T\n\ntext").contains("data-line"))
     }
+
+    /// The TeX of every formula on the page, as KaTeX received it (its annotation).
+    private func tex(_ markdown: String) -> [String] {
+        let html = renderer.renderBody(markdown) as NSString
+        let annotation = try! NSRegularExpression(pattern: #"<annotation encoding="application/x-tex">([\s\S]*?)</annotation>"#)
+        return annotation.matches(in: html as String, range: NSRange(location: 0, length: html.length)).map {
+            html.substring(with: $0.range(at: 1))
+                .replacingOccurrences(of: "&lt;", with: "<").replacingOccurrences(of: "&gt;", with: ">")
+                .replacingOccurrences(of: "&amp;", with: "&").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    }
+
+    /// Math is taken from the source before cmark reads it: backslash escapes, `*` and `_` inside
+    /// `$…$` and `$$…$$` reach KaTeX as written, as Live Preview already passes them.
+    @Test func mathKeepsItsTeXThroughMarkdown() {
+        #expect(tex("$$\n\\int_0^1 x^2 \\, dx = \\frac{1}{3}\n$$") == ["\\int_0^1 x^2 \\, dx = \\frac{1}{3}"])
+        #expect(tex("$\\{x \\mid x > 0\\}$") == ["\\{x \\mid x > 0\\}"])
+        #expect(tex("$\\|v\\|$") == ["\\|v\\|"])
+        #expect(tex("$50\\% + x$") == ["50\\% + x"])
+        #expect(tex("$$\n\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}\n$$") == ["\\begin{aligned}\na &= b \\\\\nc &= d\n\\end{aligned}"])
+        #expect(tex("$a*b*c$") == ["a*b*c"])
+        #expect(tex("$x^*$ and $y^*$") == ["x^*", "y^*"])
+        #expect(tex("$\\mathbf{x}_{i} + \\mathbf{y}_{j}$") == ["\\mathbf{x}_{i} + \\mathbf{y}_{j}"])
+        #expect(tex("> quoted $a\\,b$") == ["a\\,b"])
+        #expect(tex("> $$\n> a \\\\ b\n> $$") == ["a \\\\ b"])
+        #expect(tex("- item\n\n  $$\n  a \\\\ b\n  $$") == ["a \\\\ b"])
+        #expect(!renderer.renderBody("$x^*$ and $y^*$").contains("<em>"))
+    }
+
+    /// Escaped dollars, code spans, fenced and indented code keep their dollars as text.
+    @Test func mathStaysLiteralWhereMarkdownSaysSo() {
+        let html = renderer.renderBody("Costs \\$5 and \\$6.\n\n`$x$` and\n\n```\n$y$\n```\n\n    $z$")
+        #expect(!html.contains("<math"))
+        #expect(html.contains("Costs $5 and $6."))
+        #expect(html.contains("<code>$x$</code>"))
+        #expect(html.contains("$y$"))
+        #expect(html.contains("$z$"))
+    }
+
+    /// Taking math out first changes neither source lines (scroll sync) nor heading anchors.
+    @Test func mathKeepsLinesAndHeadingAnchors() {
+        let html = renderer.renderBody("# The $x$ value\n\n$$\na \\\\\nb\n$$\n\nafter", sourcePositions: true)
+        #expect(html.contains("id=\"the-x-value\""))
+        #expect(html.contains("<p data-line=\"8\" data-sourcepos=\"8:1-8:5\">after</p>"))
+    }
 }

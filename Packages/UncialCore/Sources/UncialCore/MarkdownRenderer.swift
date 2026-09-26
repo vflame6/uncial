@@ -14,7 +14,10 @@ public struct MarkdownRenderer: Sendable {
     /// for by `attachments`. Blockquotes that start with `[!type]` become callouts (`Callouts`).
     public func renderBody(_ markdown: String, baseURL: URL? = nil, sourcePositions: Bool = false, diagrams: [String: PreRenderedDiagram] = [:], remoteContent: Bool = false, attachments: AttachmentSearch = .direct) -> String {
         let (frontMatter, body) = FrontMatter.split(markdown)
-        var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(body, sourcePositions: sourcePositions))
+        // Formulas skip cmark: its escapes and emphasis would rewrite their TeX.
+        let math = MathSource(body)
+        var html = HTMLFixups.repairFootnoteBackrefs(in: GFMRenderer.render(math.masked, sourcePositions: sourcePositions))
+        html = math.restore(in: html)
         html = Callouts.render(html)
         html = HeadingAnchors.addIDs(to: html)
         html = MathRenderer.render(html)

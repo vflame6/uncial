@@ -53,6 +53,22 @@ import Testing
         #expect(has(tilde, .emphasis, "*em*"))
     }
 
+    /// Code and HTML blocks as cmark reads them: indented code, and a fence indented inside a list item,
+    /// are code with no Markdown in them; an HTML block's Markdown stays as written, only its tags are
+    /// read. Live Preview hid `**` and `__init__` there, which the page shows (BUG-24, BUG-28).
+    @Test func codeAndHTMLBlocksComeFromCmark() {
+        let indented = "text\n\n    **not bold** __init__\n\nafter *em*"
+        #expect(kinds(indented).filter { $0.0 == .codeBlock }.map(\.1) == ["    **not bold** __init__"])
+        #expect(!has(indented, .strong, "**not bold**") && has(indented, .emphasis, "*em*"))
+        let listed = "- item\n\n    ```py\n    x = *y*\n    ```"
+        #expect(kinds(listed).filter { $0.0 == .codeBlock }.map(\.1) == ["    ```py", "    x = *y*", "    ```"])
+        let html = "<p align=\"center\">\n  **Title**\n</p>\n\n**bold**"
+        let tokens = MarkdownHighlighter.tokens(in: html)
+        #expect(!tokens.contains { $0.kind == .strong && $0.range.location < 30 })
+        #expect(has(html, .strong, "**bold**"))
+        #expect(tokens.contains { if case .html = $0.kind { return true }; return false })
+    }
+
     @Test func tildeFencesAndLongerClosersWork() {
         let text = "~~~\n```\nstill code\n~~~~\ndone"
         #expect(kinds(text).filter { $0.0 == .codeBlock }.count == 4)

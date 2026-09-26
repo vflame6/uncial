@@ -82,7 +82,7 @@ nonisolated enum MarkdownHighlighter {
         try! NSRegularExpression(pattern: pattern)
     }
 
-    private static let fence = regex(#"^\s{0,3}(`{3,}|~{3,})"#)
+    private static let fenceRun = regex(#"`{3,}|~{3,}"#)
     private static let rule = regex(#"^\s{0,3}([-*_])(\s*\1){2,}\s*$"#)
     private static let heading = regex(#"^\s{0,3}(#{1,6})(?:[ \t]+|$)"#)
     private static let setextUnderline = regex(#"^\s{0,3}(=+|-+)\s*$"#)
@@ -120,11 +120,14 @@ nonisolated enum MarkdownHighlighter {
         let source = text as NSString
         let lines = lineRanges(of: source)
         var tokens: [Token] = []
-        var fenceMarker: String?
         var inMathBlock = false
         var inFrontMatter = false
         var index = 0
         let definitions = linkDefinitions(in: lines, source: source)
+        // cmark decides which lines are code or HTML (fenced code in a list item, indented code, HTML
+        // blocks: the line regexes knew none of them; REF-3). Its body starts after the front matter.
+        let bodyStart = FrontMatter.bodyLineOffset(of: text)
+        let blocks = MarkdownBlocks(bodyStart > 0 ? FrontMatter.split(text).body : text)
 
         while index < lines.count {
             let current = index
@@ -147,27 +150,23 @@ nonisolated enum MarkdownHighlighter {
                 if frontMatterClose.firstMatch(in: line, range: whole) != nil { inFrontMatter = false }
                 continue
             }
-            // CommonMark: a backtick fence's info string has no backticks (```npm install``` is inline
-            // code), and a closing fence has no info string (```js in an open block is content).
-            if let match = fence.firstMatch(in: line, range: whole),
-               fenceMarker != nil || !isInlineCodeLine(line, marker: match.range(at: 1)) {
-                let marker = (line as NSString).substring(with: match.range(at: 1))
-                if let open = fenceMarker {
-                    let rest = (line as NSString).substring(from: NSMaxRange(match.range(at: 1)))
-                    guard marker.first == open.first, marker.count >= open.count,
-                          rest.allSatisfy({ $0 == " " || $0 == "\t" }) else {
-                        tokens.append(Token(range: contentRange, kind: .code, markers: []))
-                        continue
+            // Code and HTML as cmark reads them (CommonMark's fence rules included: ```npm install``` is
+            // inline code, ```js inside a block is content). Blocks inside a quote are left to the quote
+            // path, which draws the bars and callouts.
+            if current >= bodyStart, let block = blocks.kind(ofLine: current - bodyStart) {
+                switch block {
+                case .fenceOpening, .fenceClosing:
+                    let marker = fenceRun.firstMatch(in: line, range: whole).map { [shifted($0.range)] } ?? []
+                    tokens.append(Token(range: contentRange, kind: .fence, markers: marker))
+                case .fencedCode, .indentedCode:
+                    tokens.append(Token(range: contentRange, kind: .code, markers: []))
+                case .html:
+                    // The page shows an HTML block's text as written: only its tags are read.
+                    let scratch = NSMutableString(string: line)
+                    tokens += htmlTokens(in: scratch, region: whole, offset: lineStart) { range in
+                        scratch.replaceCharacters(in: range, with: String(repeating: " ", count: range.length))
                     }
-                    fenceMarker = nil
-                } else {
-                    fenceMarker = marker
                 }
-                tokens.append(Token(range: contentRange, kind: .fence, markers: [shifted(match.range(at: 1))]))
-                continue
-            }
-            if fenceMarker != nil {
-                tokens.append(Token(range: contentRange, kind: .code, markers: []))
                 continue
             }
             if mathFence.firstMatch(in: line, range: whole) != nil {
@@ -285,13 +284,6 @@ nonisolated enum MarkdownHighlighter {
             }
         }
         return blocks
-    }
-
-    /// Whether a line that starts with a backtick fence marker has a backtick after it, which makes it
-    /// a line of inline code rather than an opening fence.
-    private static func isInlineCodeLine(_ line: String, marker: NSRange) -> Bool {
-        let text = line as NSString
-        return text.substring(with: marker).first == "`" && text.substring(from: NSMaxRange(marker)).contains("`")
     }
 
     /// The quote depth of the line before `index` (0 for the first line and for lines without a `>` prefix).

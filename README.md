@@ -122,19 +122,19 @@ toolbar, the View menu, or the keyboard:
 Settings ▸ Editor (Split View by default).
 
 Edits stay in the window until you save with ⌘S: a window with unsaved changes
-shows the dot in its close button, and closing it, quitting or reloading asks
-whether to save. Turn on *Save changes automatically* in Settings ▸ Editor to
-have Uncial write the file half a second after you stop typing instead, without
-asking. If another program changes the file while you have no unsaved edits, the
-window picks up the new contents. With unsaved edits, Uncial asks whether to keep
-them or reload the file (Settings ▸ Editor can make it keep or reload without
-asking), and before every save it re-reads the file, so a change made by Git, a
-sync service or another editor in the meantime is never overwritten blindly.
-When saving automatically fails (a locked file, a folder you cannot write to, a
-full disk), closing and quitting ask as they do for manual saving. A file
-renamed or moved while it is open is saved where it is now. Files in an older
-text encoding (Latin-1, Windows-1252, Shift-JIS, …) are saved back in it; UTF-8
-and UTF-16 files are saved as UTF-8.
+shows *Edited* under its title and the dot in its close button, and closing it,
+quitting or reloading asks whether to save. Turn on *Save changes automatically*
+in Settings ▸ Editor to have Uncial write the file half a second after you stop
+typing instead, without asking. If another program changes the file while you
+have no unsaved edits, the window picks up the new contents. With unsaved edits,
+Uncial asks whether to keep them or reload the file (Settings ▸ Editor can make
+it keep or reload without asking), and before every save it re-reads the file,
+so a change made by Git, a sync service or another editor in the meantime is
+never overwritten blindly. When saving automatically fails (a locked file, a
+folder you cannot write to, a full disk), closing and quitting ask as they do
+for manual saving. A file renamed or moved while it is open is saved where it is
+now. Files in an older text encoding (Latin-1, Windows-1252, Shift-JIS, …) are
+saved back in it; UTF-8 and UTF-16 files are saved as UTF-8.
 
 Live Preview renders Markdown where it stands, in the theme's page fonts and
 sizes: headings, emphasis, code, links, lists, task boxes, quotes, tables,

@@ -53,6 +53,9 @@ struct DocumentView: View {
                 .help("Editor mode: \(EditorMode.allCases.map { "\($0.title) \($0.shortcut.display)" }.joined(separator: ", "))")
             }
         }
+        // Unsaved edits nothing will write on its own: "Edited" under the file name, muted, next to
+        // the dot in the close button that `DocumentWindowGuard` sets.
+        .navigationSubtitle(model.needsSavePrompt ? "Edited" : "")
         .focusedSceneValue(\.reloadDocument, ReloadAction { reload() })
         .focusedSceneValue(\.saveDocument, SaveAction { model.saveNow() })
         .focusedSceneValue(\.editorMode, $mode)

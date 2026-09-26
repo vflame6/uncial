@@ -34,6 +34,25 @@ import Testing
         #expect(blocks == ["---\ntags:\n  - a\n---", "```yaml\n  - \n```", "$$\nx^2\n$$", "~~~\nopen"])
     }
 
+    /// CommonMark's fence rules: a backtick fence's info string has no backticks, so a line of inline
+    /// code that starts with three of them opens nothing; a closing fence has no info string, so ```js
+    /// inside an open block is content (spec examples 115 and 117). The rest of the document used to
+    /// become one code block.
+    @Test func fencesFollowTheInfoStringRules() {
+        let inline = "```npm install```\nNext paragraph with **bold**"
+        #expect(kinds(inline).filter { $0.0 == .codeBlock }.isEmpty)
+        #expect(has(inline, .strong, "**bold**"))
+        let span = "```` ```mermaid ````\n- item"
+        #expect(kinds(span).filter { $0.0 == .codeBlock }.isEmpty)
+        #expect(has(span, .listMarker, "- "))
+        let nested = "```md\n```js\nstill code\n```\nafter *em*"
+        #expect(kinds(nested).filter { $0.0 == .codeBlock }.map(\.1) == ["```md", "```js", "still code", "```"])
+        #expect(has(nested, .emphasis, "*em*"))
+        let tilde = "~~~ aa ``` ~~~\nfoo\n~~~  \nbar *em*"
+        #expect(kinds(tilde).filter { $0.0 == .codeBlock }.map(\.1) == ["~~~ aa ``` ~~~", "foo", "~~~  "])
+        #expect(has(tilde, .emphasis, "*em*"))
+    }
+
     @Test func tildeFencesAndLongerClosersWork() {
         let text = "~~~\n```\nstill code\n~~~~\ndone"
         #expect(kinds(text).filter { $0.0 == .codeBlock }.count == 4)

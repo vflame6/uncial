@@ -149,10 +149,15 @@ nonisolated enum MarkdownHighlighter {
                 if frontMatterClose.firstMatch(in: line, range: whole) != nil { inFrontMatter = false }
                 continue
             }
-            if let match = fence.firstMatch(in: line, range: whole) {
+            // CommonMark: a backtick fence's info string has no backticks (```npm install``` is inline
+            // code), and a closing fence has no info string (```js in an open block is content).
+            if let match = fence.firstMatch(in: line, range: whole),
+               fenceMarker != nil || !isInlineCodeLine(line, marker: match.range(at: 1)) {
                 let marker = (line as NSString).substring(with: match.range(at: 1))
                 if let open = fenceMarker {
-                    guard marker.first == open.first, marker.count >= open.count else {
+                    let rest = (line as NSString).substring(from: NSMaxRange(match.range(at: 1)))
+                    guard marker.first == open.first, marker.count >= open.count,
+                          rest.allSatisfy({ $0 == " " || $0 == "\t" }) else {
                         tokens.append(Token(range: contentRange, kind: .code, markers: []))
                         continue
                     }
@@ -282,6 +287,13 @@ nonisolated enum MarkdownHighlighter {
             }
         }
         return blocks
+    }
+
+    /// Whether a line that starts with a backtick fence marker has a backtick after it, which makes it
+    /// a line of inline code rather than an opening fence.
+    private static func isInlineCodeLine(_ line: String, marker: NSRange) -> Bool {
+        let text = line as NSString
+        return text.substring(with: marker).first == "`" && text.substring(from: NSMaxRange(marker)).contains("`")
     }
 
     /// The quote depth of the line before `index` (0 for the first line and for lines without a `>` prefix).

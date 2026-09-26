@@ -389,6 +389,37 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(storage.attribute(.inlineImage, at: 34, effectiveRange: nil) != nil)
     }
 
+    /// Turning the readable column on or off re-fits pictures to the new text width at once: a wide
+    /// picture used to keep the old width until the next edit.
+    @Test func readableWidthRefitsPictures() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-refit-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2000, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4,
+                                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("wide.png"))
+        let view = ThemedTextView.standalone()
+        view.frame = NSRect(x: 0, y: 0, width: 1400, height: 400)
+        view.baseURL = directory
+        view.readableWidth = false
+        view.presentation = .inline
+        view.replaceText(with: "intro\n\n![w](wide.png)\n\nafter")
+        view.setSelectedRange(NSRange(location: 0, length: 0))
+        func fittedWidth() -> CGFloat? {
+            var width: CGFloat?
+            let storage = view.textStorage!
+            storage.enumerateAttribute(.inlineImage, in: NSRange(location: 0, length: storage.length)) { value, _, _ in
+                if let image = value as? InlineImage { width = image.size.width }
+            }
+            return width
+        }
+        let wide = try #require(fittedWidth())
+        view.readableWidth = true
+        let narrow = try #require(fittedWidth())
+        #expect(narrow < wide - 100, "fitted \(wide) before, \(narrow) in the readable column")
+        #expect(narrow <= 720)
+    }
+
     @Test func drawsMathUnlessTheCaretIsOnItsLine() async throws {
         let image = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
             NSColor.blue.setFill()

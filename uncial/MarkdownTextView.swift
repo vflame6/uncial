@@ -320,7 +320,12 @@ final class ThemedTextView: NSTextView {
     }
     /// In the inline presentation, center a column of at most `InlineLayout.readableWidth`.
     var readableWidth = true {
-        didSet { if readableWidth != oldValue { updateInsets() } }
+        didSet {
+            guard readableWidth != oldValue else { return }
+            updateInsets()
+            // The text width changed: pictures are fitted again, as after a resize (BUG-22).
+            refitPictures()
+        }
     }
     /// The document's directory; relative link and image destinations resolve against it.
     var baseURL: URL? {
@@ -541,6 +546,11 @@ final class ThemedTextView: NSTextView {
         guard newSize.width != layoutWidth else { return }
         layoutWidth = newSize.width
         updateInsets()
+        refitPictures()
+    }
+
+    /// Fits Live Preview's pictures (images, diagrams, formulas) to the text width again.
+    private func refitPictures() {
         if presentation == .inline, !resolvedImages.isEmpty || !resolvedDiagrams.isEmpty || !resolvedMath.isEmpty {
             rehighlight()
         }

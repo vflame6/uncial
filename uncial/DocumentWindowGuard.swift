@@ -38,17 +38,23 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
         objc_getAssociatedObject(window, associationKey) as? DocumentWindowGuard
     }
 
-    /// Guards of the windows on screen whose document has unsaved edits nothing will write on its
-    /// own, front to back. Closed document windows stay alive (SwiftUI keeps them) and would come
-    /// back with `makeKeyAndOrderFront`, hence the visibility check.
+    /// Guards of the open document windows (on screen, minimized, or hidden with the app) whose
+    /// document has unsaved edits nothing will write on its own, front to back. Closed document
+    /// windows stay alive (SwiftUI keeps them) and would come back with `makeKeyAndOrderFront`, but
+    /// their window controller no longer has a document, so they are left out.
     static var needingReview: [DocumentWindowGuard] {
-        NSApp.orderedWindows.filter(\.isVisible).compactMap(installed(on:)).filter { $0.model?.needsSavePrompt == true }
+        NSApp.orderedWindows.filter { $0.windowController?.document != nil }
+            .compactMap { installed(on: $0) }
+            .filter { $0.model?.needsSavePrompt == true }
     }
 
-    /// Asks about every window in turn, front to back, before the app quits. False as soon as one
-    /// answer is Cancel (or a save fails); true when every document was saved or given up.
+    /// Asks about every window in turn, front to back, before the app quits, bringing a hidden app
+    /// and a minimized window back on screen first. False as soon as one answer is Cancel (or a
+    /// save fails); true when every document was saved or given up.
     static func review(_ guards: [DocumentWindowGuard]) async -> Bool {
         for guardian in guards {
+            if NSApp.isHidden { NSApp.unhide(nil) }
+            if guardian.window?.isMiniaturized == true { guardian.window?.deminiaturize(nil) }
             guardian.window?.makeKeyAndOrderFront(nil)
             guard await guardian.resolveUnsavedChanges() else { return false }
         }

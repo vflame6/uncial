@@ -257,6 +257,52 @@ import Testing
         #expect(window2.isVisible == false)
     }
 
+    /// A minimized window and the windows of a hidden app are not visible but still hold unsaved
+    /// edits: quitting asks about them, back on screen.
+    @Test func quitReviewIncludesMinimizedWindowsAndAHiddenApp() async throws {
+        let file = try temporaryFile("one")
+        let (window, guardian) = try await open(file)
+        let model = try #require(guardian.model)
+        model.autosaves = false
+        model.updateText("two")
+        try await settle()
+        window.miniaturize(nil)
+        for _ in 0..<40 where !window.isMiniaturized {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(window.isMiniaturized)
+        #expect(DocumentWindowGuard.needingReview.contains { $0 === guardian })
+        #expect(NSApp.delegate?.applicationShouldTerminate?(NSApp) == .terminateLater)
+        try await settle()
+        #expect(window.isMiniaturized == false)
+        #expect(window.attachedSheet != nil)
+        try click("Cancel", onSheetOf: window)
+        try await waitForSheetToGo(on: window)
+
+        NSApp.hide(nil)
+        for _ in 0..<40 where !NSApp.isHidden {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(DocumentWindowGuard.needingReview.contains { $0 === guardian })
+        let review = Task { await DocumentWindowGuard.review(DocumentWindowGuard.needingReview) }
+        try await settle()
+        #expect(NSApp.isHidden == false)
+        #expect(window.attachedSheet != nil)
+        try click("Don't Save", onSheetOf: window)
+        #expect(await review.value == true)
+        #expect(try contents(of: file) == "one")
+
+        // Leave nothing open, hidden or minimized.
+        if NSApp.isHidden { NSApp.unhide(nil) }
+        if window.isMiniaturized { window.deminiaturize(nil) }
+        try await waitForSheetToGo(on: window)
+        window.performClose(nil)
+        try await settle()
+        if window.attachedSheet != nil { try click("Don't Save", onSheetOf: window) }
+        try await settle()
+        #expect(window.isVisible == false)
+    }
+
     @Test func quitAsksThroughTheAppDelegate() async throws {
         let file = try temporaryFile("one")
         let (window, guardian) = try await open(file)

@@ -137,6 +137,9 @@ import Testing
         #expect(AttachmentImporter.markdown(for: sub.appendingPathComponent("[draft].md"), relativeTo: sub) == "[\\[draft\\].md](%5Bdraft%5D.md)")
         #expect(AttachmentImporter.markdown(for: sub.appendingPathComponent("attachments/README"), relativeTo: sub) == "[README](attachments/README)")
         #expect(AttachmentImporter.linkDestination(for: sub.appendingPathComponent("100%.txt"), relativeTo: sub) == "100%25.txt")
+        // A Finder name with "/" is stored with ":", which in a first component would read as a URL scheme.
+        #expect(AttachmentImporter.linkDestination(for: sub.appendingPathComponent("TCP:IP notes.md"), relativeTo: sub) == "TCP%3AIP%20notes.md")
+        #expect(URL(string: AttachmentImporter.linkDestination(for: sub.appendingPathComponent("a:b.png"), relativeTo: sub))?.scheme == nil)
     }
 
     @Test func pastedImageNameCarriesTheTime() throws {

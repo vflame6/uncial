@@ -133,9 +133,11 @@ public struct AttachmentImporter: Sendable {
         return candidate
     }
 
+    /// `:` too: Finder stores a name's `/` as `:`, and `TCP:IP notes.md` as the first component would
+    /// read as a URL with the scheme `TCP` (BUG-19).
     private static let destinationAllowed: CharacterSet = {
         var allowed = CharacterSet.urlPathAllowed
-        allowed.remove(charactersIn: "()<>%")
+        allowed.remove(charactersIn: "()<>%:")
         return allowed
     }()
 

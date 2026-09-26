@@ -115,6 +115,19 @@ import Testing
         #expect(html.contains("data-blocked-src=\"https://example.com/a.png\""))
     }
 
+    /// A pasted file whose name holds ":" (a "/" in Finder) is linked with it encoded, and the page finds it.
+    @Test func inlinesImagesWhoseNamesHoldAColon() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("uncial-colon-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let image = directory.appendingPathComponent("a:b.gif")
+        try Data([0x47, 0x49, 0x46]).write(to: image)
+        let markdown = AttachmentImporter.markdown(for: image, relativeTo: directory)
+        #expect(markdown == "![a:b](a%3Ab.gif)")
+        #expect(renderer.renderBody(markdown, baseURL: directory.appendingPathComponent("doc.md")).contains("src=\"data:image/gif;base64,R0lG\""))
+    }
+
     @Test func bodyAndDocumentFindImagesThroughTheAttachmentSearch() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("uncial-attach-\(UUID().uuidString)", isDirectory: true)

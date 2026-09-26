@@ -61,13 +61,16 @@ nonisolated enum PreviewScripts {
         """#
     }
 
-    /// Number of case-insensitive occurrences of `query` in the page's visible text (the find bar's count).
+    /// Number of occurrences of `query` in the page's visible text (the find bar's count), folded the way
+    /// `WKWebView.find` matches: case, diacritics and ß ignored, so the count and the matches it selects
+    /// agree (BUG-29: "resume" counted 1 of the 4 it selected, "strasse" found no "Straße").
     static func countMatches(_ query: String) -> String {
         """
         (function() {
-          var q = \(JavaScriptLiteral.string(query)).toLowerCase();
+          function fold(s) { return s.normalize("NFD").replace(/\\p{M}/gu, "").toLowerCase().replace(/ß/g, "ss"); }
+          var q = fold(\(JavaScriptLiteral.string(query)));
           if (!q) { return 0; }
-          var t = document.body.innerText.toLowerCase();
+          var t = fold(document.body.innerText);
           var n = 0, i = 0;
           while ((i = t.indexOf(q, i)) !== -1) { n += 1; i += q.length; }
           return n;

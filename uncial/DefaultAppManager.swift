@@ -42,6 +42,10 @@ final class DefaultAppManager {
     private(set) var currentDefaultName: String?
     private(set) var isBusy = false
     private(set) var errorMessage: String?
+    /// What the action that failed wanted: Uncial the default (Make Default) or not (the restore). Its
+    /// error goes once a refresh finds that reached, fixed elsewhere or by a retry that took, instead of
+    /// staying next to a healthy status for the session (BUG-34).
+    private var failedGoal: Bool?
 
     private let workspace: DefaultAppWorkspace
     private let ownURL: URL
@@ -58,10 +62,14 @@ final class DefaultAppManager {
         isDefault = handlers.allSatisfy { $0.map(isOwnApp) ?? false }
         let named: URL? = handlers.compactMap { $0 }.first { !isOwnApp($0) } ?? handlers[0]
         currentDefaultName = named?.deletingPathExtension().lastPathComponent
+        if let failedGoal, isDefault == failedGoal {
+            errorMessage = nil
+            self.failedGoal = nil
+        }
     }
 
     func makeDefault() async {
-        await perform {
+        await perform(goal: true) {
             for type in Self.types {
                 if let current = self.workspace.defaultApplicationURL(for: type), !self.isOwnApp(current) {
                     self.defaults.set(current.path, forKey: Self.previousDefaultKey(for: type))
@@ -72,7 +80,7 @@ final class DefaultAppManager {
     }
 
     func removeDefault() async {
-        await perform {
+        await perform(goal: false) {
             for type in Self.types {
                 try await self.workspace.setDefaultApplication(at: self.restoreTarget(for: type), for: type)
             }
@@ -105,15 +113,17 @@ final class DefaultAppManager {
         return url.standardizedFileURL.path == ownURL.standardizedFileURL.path
     }
 
-    private func perform(_ work: @MainActor @escaping () async throws -> Void) async {
+    private func perform(goal: Bool, _ work: @MainActor @escaping () async throws -> Void) async {
         guard !isBusy else { return }
         isBusy = true
         errorMessage = nil
+        failedGoal = nil
         defer { isBusy = false }
         do {
             try await work()
         } catch {
             errorMessage = error.localizedDescription
+            failedGoal = goal
         }
         await refresh()
     }

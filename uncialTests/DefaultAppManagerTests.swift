@@ -41,6 +41,21 @@ final class FakeWorkspace: DefaultAppWorkspace {
 
     private func freshDefaults() -> UserDefaults { suites.make() }
 
+    /// A failed Make Default's error goes once a refresh finds Uncial the default after all (set
+    /// elsewhere, a retry that took), instead of staying next to a healthy status for the session.
+    @Test func errorGoesOnceTheGoalIsReached() async {
+        let workspace = FakeWorkspace(current: xcode)
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        workspace.failNext = true
+        await manager.makeDefault()
+        #expect(manager.errorMessage != nil && manager.isDefault == false)
+        await manager.refresh()
+        #expect(manager.errorMessage != nil)
+        workspace.setAll(uncial)
+        await manager.refresh()
+        #expect(manager.isDefault == true && manager.errorMessage == nil)
+    }
+
     @Test func detectsWhetherUncialIsDefault() async {
         let workspace = FakeWorkspace(current: xcode)
         let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())

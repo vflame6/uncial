@@ -34,8 +34,14 @@ public enum FrontMatter {
         return "<pre class=\"front-matter\">\(HTMLEscaping.escape(trimmed))</pre>\n"
     }
 
+    /// `---` (or `...` to close) in the line's first column, trailing whitespace allowed: an indented
+    /// `---` is YAML content, a block scalar's text for one (BUG-17).
     private static func isDelimiter(_ line: Substring, allowDots: Bool) -> Bool {
-        let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
-        return trimmed == "---" || (allowDots && trimmed == "...")
+        var end = line.endIndex
+        while end > line.startIndex, line[line.index(before: end)].isWhitespace {
+            end = line.index(before: end)
+        }
+        let content = line[..<end]
+        return content == "---" || (allowDots && content == "...")
     }
 }

@@ -25,6 +25,18 @@ import Testing
         #expect(body == "Body")
     }
 
+    /// A delimiter starts in the line's first column: an indented `---` is YAML (a block scalar's text,
+    /// say) and does not end the block, which used to leave the rest of the YAML in the body.
+    @Test func delimitersStartInTheFirstColumn() {
+        let markdown = "---\nnote: |\n  ---\n  more\n---\nbody"
+        let (frontMatter, body) = FrontMatter.split(markdown)
+        #expect(frontMatter == "note: |\n  ---\n  more")
+        #expect(body == "body")
+        #expect(FrontMatter.bodyLineOffset(of: markdown) == 5)
+        #expect(FrontMatter.split(" ---\nx: 1\n---\nbody").frontMatter == nil)
+        #expect(FrontMatter.split("---  \nx: 1\n...\t\nbody").frontMatter == "x: 1")
+    }
+
     @Test func stripsBOM() {
         #expect(FrontMatter.split("\u{FEFF}---\na: 1\n---\n").frontMatter == "a: 1")
     }

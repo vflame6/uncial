@@ -73,6 +73,19 @@ import Testing
         #expect(elapsed < .milliseconds(150), "the editor waited \(elapsed)")
     }
 
+    /// A document's blocks stay cached: with a 64-entry FIFO, a document of more than 64 blocks missed on
+    /// every pass (50–90 ms of JavaScript per keystroke), and the page's copy of a block (cmark's ends
+    /// with a newline) never answered for the editor's.
+    @Test func cachesADocumentsBlocksForThePageAndTheEditor() {
+        let run = UUID().uuidString.prefix(8)
+        let blocks = (0..<150).map { "let value\($0) = \"\(run)\"" }
+        for block in blocks { _ = CodeHighlighter.tokens(in: block, language: "swift") }
+        #expect(blocks.filter { CodeHighlighter.isCached($0, language: "swift") }.count == 150)
+        #expect(blocks.filter { CodeHighlighter.isCached($0 + "\n", language: "Swift") }.count == 150)
+        #expect(CodeHighlighter.html(for: blocks[0] + "\n", language: "swift")?.hasSuffix("\n") == true)
+        #expect(CodeHighlighter.html(for: blocks[0], language: "swift")?.hasSuffix("\n") == false)
+    }
+
     @Test func ignoresUnknownLanguages() {
         for name in ["mermaid", "math", "nope", "", "language-swift"] {
             #expect(!CodeHighlighter.supports(name), "\(name) should stay plain")

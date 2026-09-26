@@ -72,27 +72,49 @@ public enum CodeHighlighter {
 
     /// The answer per language and source (misses too), so re-rendering while typing does not
     /// re-highlight every block in the document, and the editor's coloring shares the page's work.
+    /// Least recently used out, beyond `capacity` entries or `byteLimit` bytes of keys and answers
+    /// (PERF-4, 2026-09-26: a 64-entry FIFO missed on every pass once a document had more blocks,
+    /// 50–90 ms of JavaScript per keystroke).
     private final class Cache: @unchecked Sendable {
         private let lock = NSLock()
-        private var entries: [String: String?] = [:]
-        private var order: [String] = []
-        private let capacity = 64
+        private var entries: [String: (value: String?, used: Int)] = [:]
+        private var clock = 0
+        private var bytes = 0
+        private let capacity = 1024
+        private let byteLimit = 16 << 20
+
+        func contains(_ key: String) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return entries[key] != nil
+        }
 
         func value(for key: String) -> String?? {
             lock.lock()
             defer { lock.unlock() }
-            return entries[key]
+            guard let entry = entries[key] else { return nil }
+            clock += 1
+            entries[key]?.used = clock
+            return .some(entry.value)
         }
 
         func set(_ value: String?, for key: String) {
             lock.lock()
             defer { lock.unlock() }
-            if entries.updateValue(value, forKey: key) == nil {
-                order.append(key)
-                if order.count > capacity {
-                    entries.removeValue(forKey: order.removeFirst())
-                }
+            clock += 1
+            if let old = entries.updateValue((value, clock), forKey: key) {
+                bytes -= Self.size(key, old.value)
             }
+            bytes += Self.size(key, value)
+            while entries.count > capacity || (bytes > byteLimit && entries.count > 1) {
+                guard let oldest = entries.min(by: { $0.value.used < $1.value.used }) else { break }
+                entries.removeValue(forKey: oldest.key)
+                bytes -= Self.size(oldest.key, oldest.value.value)
+            }
+        }
+
+        private static func size(_ key: String, _ value: String?) -> Int {
+            key.utf8.count + (value?.utf8.count ?? 0)
         }
     }
 
@@ -110,6 +132,12 @@ public enum CodeHighlighter {
     static let maxCodeLength = 64 * 1024
     /// The code a page highlights in all; the blocks after it stay as cmark wrote them.
     static let pageBudget = 512 * 1024
+
+    /// Whether highlighting `code` in `language` would come from the cache. For tests.
+    static func isCached(_ code: String, language: String) -> Bool {
+        cache.contains(key(for: code, language: normalized(language)))
+    }
+
 
     private static let fence = try! NSRegularExpression(pattern: #"<pre(?:\s+data-sourcepos="[^"]*")?[^>]*><code class="language-([^"\s]+)">([\s\S]*?)</code></pre>"#)
     private static let emptySpan = try! NSRegularExpression(pattern: #"<span[^>]*></span>"#)
@@ -172,14 +200,24 @@ public enum CodeHighlighter {
         html(for: code, language: language, engine: pageEngine)
     }
 
+    /// cmark's code ends with a newline and the editor's does not: one entry answers both.
+    private static func key(for code: String, language name: String) -> String {
+        name + "\u{0}" + (code.hasSuffix("\n") ? String(code.dropLast()) : code)
+    }
+
     private static func html(for code: String, language: String, engine: Engine?) -> String? {
         let name = normalized(language)
         guard let engine, !name.isEmpty, isWithinLimits(code), engine.supports(name) else { return nil }
-        let key = name + "\u{0}" + code
-        if let cached = cache.value(for: key) { return cached }
-        let highlighted = engine.highlight(code, language: name).map(balanced)
-        cache.set(highlighted, for: key)
-        return highlighted
+        let newline = code.hasSuffix("\n")
+        let key = key(for: code, language: name)
+        let highlighted: String?
+        if let cached = cache.value(for: key) {
+            highlighted = cached
+        } else {
+            highlighted = engine.highlight(newline ? String(code.dropLast()) : code, language: name).map(balanced)
+            cache.set(highlighted, for: key)
+        }
+        return newline ? highlighted.map { $0 + "\n" } : highlighted
     }
 
     /// The highlighted runs of `code` with their palette roles, in order, for an editor that colors

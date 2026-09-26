@@ -15,7 +15,7 @@ import UncialCore
 
     /// Examples where Live Preview still hides text the page shows (2026-09-26; the audit found 71).
     static let knownDifferences: Set<Int> = [
-        63, 140, 141, 145, 147, 316, 354, 356, 532, 540, 611, 614, 638, 639, 641, 643, 645, 651, 652
+        63, 147, 316, 354, 356, 532, 540, 611, 651
     ]
 
     struct Example {

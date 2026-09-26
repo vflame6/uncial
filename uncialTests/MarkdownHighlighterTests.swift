@@ -311,6 +311,28 @@ import Testing
         #expect(has(text, .heading, "# H"))
     }
 
+    /// Raw HTML as cmark reads it: a bad attribute name, an unclosed quote, attributes without space
+    /// between them or on a closing tag make text; `<!-->` is a whole comment; processing instructions,
+    /// declarations and CDATA are HTML; GFM's tag filter shows `<title>`, `<style>`, `<script>` and the
+    /// like as text.
+    @Test func rawHTMLFollowsCommonMark() {
+        func hidden(_ text: String) -> [String] {
+            MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
+        }
+        #expect(hidden("<a h*#ref=\"hi\">").isEmpty)
+        #expect(hidden("<a href=\"hi'> <a href=hi'>").isEmpty)
+        #expect(hidden("<a href='bar'title=title>").isEmpty)
+        #expect(hidden("</a href=\"foo\">").isEmpty)
+        #expect(hidden("foo <!--> foo -->") == ["<!-->"])
+        #expect(hidden("foo <!---> foo -->") == ["<!--->"])
+        #expect(hidden("<strong> <title> <style> <em>") == ["<strong>", "<em>"])
+        #expect(hidden("<script>alert(1)</script> <IFRAME src=x></iframe>").isEmpty)
+        #expect(hidden("<a href='x' title=\"y\" data-z=1 disabled>t</a>") == ["<a href='x' title=\"y\" data-z=1 disabled>", "</a>"])
+        #expect(hidden("a <?php echo 1; ?> <!DOCTYPE html> <![CDATA[x]]> b") == ["<?php echo 1; ?>", "<!DOCTYPE html>", "<![CDATA[x]]>"])
+        // A closing tag passed over leaves a tag inside its quotes to be read.
+        #expect(hidden("</a title=\"<b>\">") == ["<b>"])
+    }
+
     /// Front matter as the page reads it: only when it closes (an unclosed `---` is a rule and the
     /// text below it Markdown), and behind a byte order mark too.
     @Test func frontMatterOnlyWhenItCloses() {

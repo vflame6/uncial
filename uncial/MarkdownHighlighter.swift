@@ -98,7 +98,15 @@ nonisolated enum MarkdownHighlighter {
     private static let strikethrough = regex(#"~~[^~\n]+~~"#)
     private static let autolink = regex(#"<(?:https?|mailto):[^>\s]+>"#)
     private static let footnoteReference = regex(#"\[\^[^\]\s]+\](?!:)"#)
-    private static let html = regex(#"<!--.*?-->|<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s[^<>\n]*)?)(/?)>"#)
+    // cmark's raw HTML (scanners.re): a comment (`<!-->` and `<!--->` whole ones), a processing
+    // instruction, a declaration, CDATA, or a tag whose attributes each follow whitespace and have a
+    // valid name and value; a closing tag takes no attributes (checked where it is read).
+    private static let html = regex(
+        #"<!--(?:-?>|(?:[^\x00-]|-[^\x00-]|--[^\x00>])*-->)|<\?[\s\S]*?\?>|<![A-Z]+\s+[^>\x00]*>|<!\[CDATA\[[\s\S]*?\]\]>"#
+            + #"|<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s+[A-Za-z_:][A-Za-z0-9_.:-]*(?:\s*=\s*(?:[^\s"'=<>`\x00]+|'[^'\x00]*'|"[^"\x00]*"))?)*)\s*(/?)>"#
+    )
+    /// Tags GFM's tag filter shows as text (`&lt;script>`).
+    private static let filteredTags: Set<String> = ["title", "textarea", "style", "xmp", "iframe", "noembed", "noframes", "script", "plaintext"]
     private static let attribute = regex(#"([A-Za-z_:][-A-Za-z0-9_:.]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+)))?"#)
     /// Tags that never have content: a lone `<br>` needs no `</br>`.
     private static let voidElements: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
@@ -776,16 +784,25 @@ nonisolated enum MarkdownHighlighter {
         func lone(_ name: String?, _ attributes: [String: String], _ range: NSRange) -> Token {
             Token(range: NSRange(location: offset + range.location, length: range.length), kind: .html(element: name, attributes: attributes), markers: [NSRange(location: offset + range.location, length: range.length)])
         }
-        for match in html.matches(in: scratch as String, range: region) {
+        var location = region.location
+        while location < NSMaxRange(region),
+              let match = html.firstMatch(in: scratch as String, range: NSRange(location: location, length: NSMaxRange(region) - location)) {
             let range = match.range
-            defer { mask(range) }
+            location = NSMaxRange(range)
             guard match.range(at: 2).location != NSNotFound else {
                 tokens.append(lone(nil, [:], range))
+                mask(range)
                 continue
             }
             let name = scratch.substring(with: match.range(at: 2)).lowercased()
-            let attributes = self.attributes(in: scratch.substring(with: match.range(at: 3)))
             let isClosing = match.range(at: 1).length == 1
+            // Text on the page: a closing tag with attributes, a filtered tag. A tag may start inside it.
+            guard !(isClosing && (match.range(at: 3).length > 0 || match.range(at: 4).length > 0)), !filteredTags.contains(name) else {
+                location = range.location + 1
+                continue
+            }
+            defer { mask(range) }
+            let attributes = self.attributes(in: scratch.substring(with: match.range(at: 3)))
             if isClosing {
                 if let index = open.lastIndex(where: { $0.name == name }) {
                     let opener = open.remove(at: index)

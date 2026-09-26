@@ -356,12 +356,10 @@ final class ThemedTextView: NSTextView {
     private(set) var resolvedImages: Set<Int> = []
     private var imageCache: [String: NSImage?] = [:]
     private var pendingImages: Set<String> = []
-    /// Fetches a remote image and calls back on the main thread; tests inject their own.
+    /// Fetches a remote image, within `RemoteImageLoader`'s bounds, and calls back on the main thread;
+    /// tests inject their own.
     var remoteImageLoader: (URL, @escaping (NSImage?) -> Void) -> Void = { url, completion in
-        URLSession.shared.dataTask(with: url) { data, _, _ in
-            let image = data.flatMap { NSImage(data: $0) }
-            DispatchQueue.main.async { completion(image) }
-        }.resume()
+        RemoteImageLoader.shared.load(url, completion: completion)
     }
     /// The document theme: the colors of highlighted code and of the diagrams mermaid.js draws (part
     /// of their cache key).

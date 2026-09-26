@@ -28,7 +28,8 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   browser or, for local Markdown files, in a new window. A link to any other
   file or kind of address asks first, naming the app that would open it, and a
   link to a program, script or installer never opens it (Uncial offers to show
-  it in Finder instead). Images and other files from the web load by default;
+  it in Finder instead). Images and other files from the web load by default
+  (in Live Preview, pictures only, up to 20 MB and 30 seconds each);
   turn off *Load images and other files from the web* in Settings ▸ General and
   they stay unloaded in the window, in Live Preview, in the diagrams and in
   Quick Look, so opening a file tells no server about it.

@@ -214,6 +214,26 @@ import UncialCore
         #expect(model.hasUnsavedChanges == true)
     }
 
+    /// A document renamed or moved while open is saved, and watched, where it is now; the old path
+    /// is not brought back.
+    @Test func followsTheFileWhenItMoves() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))
+        let renamed = file.deletingLastPathComponent().appendingPathComponent("renamed.md")
+        try FileManager.default.moveItem(at: file, to: renamed)
+        model.relocate(to: renamed)
+        #expect(model.fileURL == renamed)
+        #expect(model.title == "renamed.md")
+        model.updateText("two")
+        #expect(model.saveNow() == .written)
+        #expect(try contents(of: renamed) == "two")
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        try await Task.sleep(for: .milliseconds(300))
+        try Data("three".utf8).write(to: renamed)
+        try await Task.sleep(for: .milliseconds(600))
+        #expect(model.text == "three")
+    }
+
     /// A legacy-encoded file is written back in its own encoding, so only the edited characters
     /// change; a character that encoding cannot hold makes the file UTF-8, every character kept.
     @Test func savesInTheFilesOwnEncoding() throws {

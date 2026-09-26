@@ -9,8 +9,12 @@ struct DocumentView: View {
     @State private var windowHandle = DocumentWindowHandle()
     @State private var previewFind = PreviewFindController()
     private let settings: AppSettings
+    /// Where the document is now: SwiftUI builds the view again with the new URL when the file is
+    /// renamed or moved while open, and the model (kept by `@State`) follows.
+    private let fileURL: URL?
 
     init(document: MarkdownDocument, fileURL: URL?, settings: AppSettings = .shared) {
+        self.fileURL = fileURL
         let model = DocumentViewModel(fileURL: fileURL, initialText: document.text, encoding: document.encoding,
                                       isLossy: document.isLossy, theme: settings.theme)
         model.autosaves = settings.autosave
@@ -72,6 +76,7 @@ struct DocumentView: View {
         .onChange(of: settings.externalChangePolicy) { model.externalChangePolicy = settings.externalChangePolicy }
         .onChange(of: settings.loadRemoteContent) { model.remoteContent = settings.loadRemoteContent }
         .onChange(of: settings.attachmentSearch) { model.attachmentSearch = settings.attachmentSearch }
+        .onChange(of: fileURL) { model.relocate(to: fileURL) }
         .onAppear { updateSync() }
         .onDisappear { model.saveIfAutomatic() }
     }

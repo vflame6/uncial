@@ -200,6 +200,28 @@ import Testing
         #expect(try contents(of: file) == "two")
     }
 
+    /// Renaming or moving the open file (as Finder, `mv` or a sync client does): the window's model
+    /// follows it, so ⌘S writes the renamed file and does not bring back the old one.
+    @Test func savesWhereTheFileWasMoved() async throws {
+        let file = try temporaryFile("one")
+        let (window, guardian) = try await open(file)
+        let model = try #require(guardian.model)
+        model.autosaves = false
+        model.updateText("edited after rename")
+        let renamed = file.deletingLastPathComponent().appendingPathComponent("renamed.md")
+        try FileManager.default.moveItem(at: file, to: renamed)
+        for _ in 0..<60 where model.fileURL?.lastPathComponent != "renamed.md" {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        #expect(model.fileURL?.lastPathComponent == "renamed.md")
+        #expect(model.saveNow() == .written)
+        #expect(try contents(of: renamed) == "edited after rename")
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        window.performClose(nil)
+        try await settle()
+        #expect(window.isVisible == false)
+    }
+
     @Test func cancelKeepsTheWindowAndTheEdits() async throws {
         let file = try temporaryFile("one")
         let (window, guardian) = try await open(file)

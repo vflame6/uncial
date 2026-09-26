@@ -11,7 +11,7 @@ import UncialCore
 /// edits pending, `externalChangePolicy` decides (ask on a sheet, keep the edits, reload).
 @Observable
 final class DocumentViewModel {
-    let fileURL: URL?
+    private(set) var fileURL: URL?
     private(set) var text: String
     private(set) var body = ""
     private(set) var statistics: DocumentStatistics
@@ -185,6 +185,17 @@ final class DocumentViewModel {
             saveError = error.localizedDescription
             return .failed
         }
+    }
+
+    /// The document was renamed or moved while open (Finder, `mv`, a sync client): saving,
+    /// watching, the title and relative images follow it to `url`.
+    func relocate(to url: URL?) {
+        guard url != fileURL else { return }
+        watcher?.stop()
+        watcher = nil
+        fileURL = url
+        watch()
+        render()
     }
 
     /// Re-reads the file and adopts its contents, discarding unsaved edits.

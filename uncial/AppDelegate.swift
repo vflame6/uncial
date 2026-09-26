@@ -12,10 +12,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         openPanels.start()
+        AppSettings.shared.applyAppearance()
+        // The unit tests run inside this app, under its bundle id: publishing from there would hand the
+        // user's Quick Look extension the test build's settings and test diagrams.
+        guard !Self.isTestHost(ProcessInfo.processInfo.environment) else { return }
         // Diagrams mermaid.js draws here are shared with Quick Look, which cannot run WebKit.
         DiagramWebRenderer.shared.store = DiagramStore.shared
-        AppSettings.shared.applyAppearance()
         AppSettings.shared.publishShared()
+    }
+
+    /// `xcodebuild test` launches the app to host the unit tests, with the test bundle in its environment.
+    nonisolated static func isTestHost(_ environment: [String: String]) -> Bool {
+        environment["XCTestBundlePath"] != nil || environment["XCTestSessionIdentifier"] != nil
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

@@ -21,6 +21,7 @@ import Testing
 
     /// Opens `file` through the document controller and waits for the guard to attach.
     private func open(_ file: URL) async throws -> (NSWindow, DocumentWindowGuard) {
+        RecentDocuments.suppress()
         let (document, _) = try await NSDocumentController.shared.openDocument(withContentsOf: file, display: true)
         for _ in 0..<60 {
             if let window = document.windowControllers.first?.window,
@@ -71,6 +72,18 @@ import Testing
         let change = UnsavedChangesAlert.makeExternalChangeAlert(documentName: "notes.md")
         #expect(change.buttons.map(\.title) == ["Keep My Edits", "Reload"])
         #expect(change.messageText.contains("notes.md"))
+    }
+
+    /// The test host is the app itself: a document it opens must not land in the user's File ▸ Open
+    /// Recent list.
+    @Test func openingLeavesOpenRecentAlone() async throws {
+        let before = NSDocumentController.shared.recentDocumentURLs
+        let (window, _) = try await open(try temporaryFile("# Recent"))
+        try await settle()
+        #expect(NSDocumentController.shared.recentDocumentURLs == before)
+        window.performClose(nil)
+        try await settle()
+        #expect(window.isVisible == false)
     }
 
     @Test func asksWhenTheFileChangesUnderUnsavedEdits() async throws {

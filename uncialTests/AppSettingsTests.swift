@@ -4,13 +4,12 @@ import UncialCore
 @testable import Uncial
 
 @MainActor
-@Suite struct AppSettingsTests {
-    private func freshDefaults() -> UserDefaults {
-        let name = "uncial-tests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return defaults
-    }
+@Suite final class AppSettingsTests {
+    /// Every test's suites go with it, files included.
+    private let suites = PreferenceSuites()
+    deinit { suites.removeAll() }
+
+    private func freshDefaults() -> UserDefaults { suites.make() }
 
     @Test func defaults() {
         let settings = AppSettings(defaults: freshDefaults(), applyAppearance: false)

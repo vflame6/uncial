@@ -30,17 +30,16 @@ final class FakeWorkspace: DefaultAppWorkspace {
 }
 
 @MainActor
-@Suite struct DefaultAppManagerTests {
+@Suite final class DefaultAppManagerTests {
     let uncial = URL(fileURLWithPath: "/Applications/Uncial.app")
     let xcode = URL(fileURLWithPath: "/Applications/Xcode.app")
     let textEdit = URL(fileURLWithPath: "/System/Applications/TextEdit.app")
 
-    private func freshDefaults() -> UserDefaults {
-        let name = "uncial-tests-\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: name)!
-        defaults.removePersistentDomain(forName: name)
-        return defaults
-    }
+    /// Every test's suites go with it, files included.
+    private let suites = PreferenceSuites()
+    deinit { suites.removeAll() }
+
+    private func freshDefaults() -> UserDefaults { suites.make() }
 
     @Test func detectsWhetherUncialIsDefault() async {
         let workspace = FakeWorkspace(current: xcode)

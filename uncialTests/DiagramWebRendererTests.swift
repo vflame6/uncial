@@ -62,7 +62,7 @@ final class LoopbackListener: @unchecked Sendable {
     }
 }
 
-/// Real WebKit: the hidden mermaid.js stage the app and the Quick Look extension share.
+/// Real WebKit: the app's hidden mermaid.js stage, whose drawings reach Quick Look through `DiagramStore`.
 @MainActor
 @Suite(.serialized) struct DiagramWebRendererTests {
     /// `body`'s value, or nil after `seconds`: a test fails instead of hanging on a stage that does.

@@ -138,15 +138,16 @@ struct GeneralSettingsView: View {
         case (nil, false):
             "A missing image or linked file is not looked for elsewhere."
         }
-        let pasted = switch (name, destination) {
+        // `AttachmentImporter` links a file the document reaches where it is and copies only the others.
+        let others = switch (name, destination) {
         case (let name?, .nearestAttachmentsFolder) where search.searchesParents:
-            "Pasted or dropped files and pictures go to the first \(name) folder found above the document, or to one created next to it, and are inserted as links or images."
+            "other files and pictures go to the first \(name) folder found above the document, or to one created next to it."
         case (let name?, .attachmentsFolder), (let name?, .nearestAttachmentsFolder):
-            "Pasted or dropped files and pictures go to the \(name) folder next to the document, created as needed, and are inserted as links or images."
+            "other files and pictures go to the \(name) folder next to the document, created as needed."
         case (nil, _), (_, .documentFolder):
-            "Pasted or dropped files and pictures go next to the document and are inserted as links or images."
+            "other files and pictures go next to the document."
         }
-        return lookup + " " + pasted
+        return lookup + " Pasted or dropped files the document already reaches, such as those in its folder and other notes, are linked where they are; " + others
     }
 }
 

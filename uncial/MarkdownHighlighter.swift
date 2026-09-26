@@ -93,7 +93,6 @@ nonisolated enum MarkdownHighlighter {
     private static let footnoteDefinition = regex(#"^\[\^[^\]\s]+\]:"#)
     private static let tableDelimiter = regex(#"^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$"#)
     private static let pipe = regex(#"(?<!\\)\|"#)
-    private static let inlineCode = regex(#"(`+)[^`\n]+(`+)"#)
     // Emphasis needs text right inside its markers (`* 3 *` is arithmetic) and no backslash before them.
     private static let boldItalic = regex(#"(?<![\w*\\])\*\*\*(?!\s)[^*\n]+(?<![\s\\])\*\*\*(?![\w*])"#)
     private static let strong = regex(#"(?<!\\)\*\*(?!\s)[^*\n]+(?<![\s\\])\*\*|(?<!\\)__(?!\s)[^_\n]+(?<![\s\\])__"#)
@@ -493,9 +492,9 @@ nonisolated enum MarkdownHighlighter {
              NSRange(location: offset + NSMaxRange(range) - close, length: close)]
         }
 
-        for match in inlineCode.matches(in: line, range: region) {
-            tokens.append(Token(range: shifted(match.range), kind: .inlineCode, markers: edges(match.range, open: match.range(at: 1).length, close: match.range(at: 2).length)))
-            mask(match.range)
+        for span in codeSpans(in: line as NSString, region: region) {
+            tokens.append(Token(range: shifted(span.range), kind: .inlineCode, markers: edges(span.range, open: span.run, close: span.run)))
+            mask(span.range)
         }
         for match in escape.matches(in: scratch as String, range: region) {
             tokens.append(Token(range: shifted(match.range), kind: .escape, markers: [NSRange(location: offset + match.range.location, length: 1)]))
@@ -570,6 +569,49 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: .strikethrough, markers: edges(match.range, open: 2, close: 2)))
         }
         return tokens.sorted { $0.range.location < $1.range.location }
+    }
+
+    /// Code spans as CommonMark reads them: a run of backticks closes at the next run of the same length,
+    /// and shorter or longer runs between are code; a run without its match is literal, and so is a
+    /// backtick after a backslash (BUG-23: runs of different lengths paired, so `` `ls` `` showed " ls ").
+    private static func codeSpans(in line: NSString, region: NSRange) -> [(range: NSRange, run: Int)] {
+        var spans: [(range: NSRange, run: Int)] = []
+        let end = NSMaxRange(region)
+        func run(at index: Int) -> Int {
+            var length = 0
+            while index + length < end, line.character(at: index + length) == 0x60 { length += 1 }
+            return length
+        }
+        var index = region.location
+        while index < end {
+            guard line.character(at: index) == 0x60 else {
+                // An escaped backtick is literal.
+                index += line.character(at: index) == 0x5C && index + 1 < end ? 2 : 1
+                continue
+            }
+            let length = run(at: index)
+            var search = index + length
+            var close: Int?
+            while search < end {
+                guard line.character(at: search) == 0x60 else {
+                    search += 1
+                    continue
+                }
+                let candidate = run(at: search)
+                if candidate == length {
+                    close = search
+                    break
+                }
+                search += candidate
+            }
+            if let close {
+                spans.append((NSRange(location: index, length: close + length - index), length))
+                index = close + length
+            } else {
+                index += length
+            }
+        }
+        return spans
     }
 
     /// The inline link or image whose text opens at `start` (its `[`, after any `!`), read as CommonMark

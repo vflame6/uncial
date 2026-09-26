@@ -66,6 +66,20 @@ import Testing
         #expect(!has(text, .emphasis, "*b*"))
     }
 
+    /// Code spans as CommonMark reads them: a run of backticks closes at the next run of the same
+    /// length, and shorter or longer runs between are code (spec examples 339, 349, 350, 357 and 359).
+    /// Runs of different lengths used to pair, so `` `ls` `` showed as " ls ".
+    @Test func codeSpansCloseWithAnEqualRun() {
+        let text = "Use `` `ls` `` to list"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.inlineCode])
+        #expect(tokens.map { (text as NSString).substring(with: $0.range) } == ["`` `ls` ``"])
+        #expect(tokens.first.map { markers($0, in: text) } == ["``", "``"])
+        #expect(MarkdownHighlighter.tokens(in: "`a``b`").map { ("`a``b`" as NSString).substring(with: $0.range) } == ["`a``b`"])
+        #expect(MarkdownHighlighter.tokens(in: "``unclosed`").isEmpty)
+        #expect(MarkdownHighlighter.tokens(in: "\\`not code`").map(\.kind) == [.escape])
+    }
+
     @Test func strongAndEmphasis() {
         let text = "**bold** and _it_ and *em*"
         #expect(has(text, .strong, "**bold**"))

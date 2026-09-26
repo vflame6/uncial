@@ -276,6 +276,18 @@ import UncialCore
         #expect(!isRed(20, top - 4) && !isRed(20, top + 24) && !isRed(60, top + 10))
     }
 
+    /// A table in a file with Windows line breaks aligns like one with Unix ones: rows were grouped by
+    /// `\n` alone, so with `\r\n` every row stood on its own and nothing was padded.
+    @Test func tablesAlignWithWindowsLineBreaks() {
+        let unix = storage("| a | **b** |\n|:--|--:|\n| cc | d |")
+        let windows = storage("| a | **b** |\r\n|:--|--:|\r\n| cc | d |")
+        func padding(_ text: NSTextStorage) -> [CGFloat] {
+            (0..<text.length).compactMap { text.attribute(.kern, at: $0, effectiveRange: nil) as? CGFloat }
+        }
+        #expect(!padding(unix).isEmpty)
+        #expect(padding(windows) == padding(unix))
+    }
+
     @Test func tablesAlignByKerningAndStyleTheHeader() {
         // Lines: "| a | **b** |" 0–12, "|:--|--:|" 14–22, "| cc | d |" 24–33, "| e | ffff |" 35–46.
         let text = storage("| a | **b** |\n|:--|--:|\n| cc | d |\n| e | ffff |")

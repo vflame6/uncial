@@ -444,7 +444,7 @@ struct InlineStyle {
     private func alignTables(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, revealed: NSRange) {
         let markers = MarkerIndex(tokens: tokens)
         let text = storage.string as NSString
-        for table in Self.tables(in: tokens) {
+        for table in Self.tables(in: tokens, text: text) {
             let widths = table.map { row in row.cells.map { renderedWidth(of: $0, header: row.isHeader, in: row.range, tokens: tokens, markers: markers, text: text) } }
             let columns = widths.map(\.count).max() ?? 0
             let columnWidths = (0..<columns).map { column in widths.compactMap { $0.indices.contains(column) ? $0[column] : nil }.max() ?? 0 }
@@ -477,15 +477,16 @@ struct InlineStyle {
         let isHeader: Bool
     }
 
-    /// Rows on consecutive lines (with the delimiter between them) form one table.
-    private static func tables(in tokens: [MarkdownHighlighter.Token]) -> [[TableRow]] {
+    /// Rows on consecutive lines (with the delimiter between them) form one table, whatever the line
+    /// breaks: with `\r\n` a row starts two characters after the line before (BUG-25).
+    private static func tables(in tokens: [MarkdownHighlighter.Token], text: NSString) -> [[TableRow]] {
         var tables: [[TableRow]] = []
         var current: [TableRow] = []
         var lastEnd = Int.min
         for token in tokens {
             switch token.kind {
             case .tableRow(let cells, let isHeader, _):
-                if token.range.location != lastEnd + 1, !current.isEmpty {
+                if !current.isEmpty, !isLineBreak(from: lastEnd, to: token.range.location, in: text) {
                     tables.append(current)
                     current = []
                 }
@@ -499,6 +500,13 @@ struct InlineStyle {
         }
         if !current.isEmpty { tables.append(current) }
         return tables
+    }
+
+    /// Whether one line break (`\n`, `\r\n` or `\r`) is all that lies between `end` and `start`.
+    private static func isLineBreak(from end: Int, to start: Int, in text: NSString) -> Bool {
+        guard end >= 0, start > end, start - end <= 2, start <= text.length else { return false }
+        let gap = text.substring(with: NSRange(location: end, length: start - end))
+        return gap == "\n" || gap == "\r\n" || gap == "\r"
     }
 
     /// The width a cell takes once rendered: its visible characters in the body font, bold in the

@@ -311,6 +311,13 @@ import Testing
         #expect(has(text, .heading, "# H"))
     }
 
+    /// Front matter as the page reads it: only when it closes (an unclosed `---` is a rule and the
+    /// text below it Markdown), and behind a byte order mark too.
+    @Test func frontMatterOnlyWhenItCloses() {
+        #expect(MarkdownHighlighter.tokens(in: "---\n# Title\ntext *e*").map(\.kind) == [.rule, .heading(level: 1), .emphasis])
+        #expect(MarkdownHighlighter.tokens(in: "\u{FEFF}---\ntitle: x\n---\n# H").map(\.kind) == [.frontMatter, .frontMatter, .frontMatter, .heading(level: 1)])
+    }
+
     private func token(_ text: String, _ index: Int = 0) -> MarkdownHighlighter.Token {
         MarkdownHighlighter.tokens(in: text)[index]
     }

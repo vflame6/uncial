@@ -88,8 +88,6 @@ nonisolated enum MarkdownHighlighter {
     private static let setextUnderline = regex(#"^\s{0,3}(=+|-+)\s*$"#)
     private static let quote = regex(#"^(?:[ \t]{0,3}>[ \t]?)+"#)
     private static let listMarker = regex(#"^\s*([-+*]|\d{1,9}[.)])\s+(?:(\[[ xX]\])\s+)?"#)
-    private static let frontMatterOpen = regex(#"^---\s*$"#)
-    private static let frontMatterClose = regex(#"^(---|\.\.\.)\s*$"#)
     private static let footnoteDefinition = regex(#"^\[\^[^\]\s]+\]:"#)
     private static let tableDelimiter = regex(#"^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$"#)
     private static let pipe = regex(#"(?<!\\)\|"#)
@@ -120,7 +118,6 @@ nonisolated enum MarkdownHighlighter {
         let lines = lineRanges(of: source)
         var tokens: [Token] = []
         var inMathBlock = false
-        var inFrontMatter = false
         var index = 0
         // cmark decides which lines are code or HTML (fenced code in a list item, indented code, HTML
         // blocks: the line regexes knew none of them; REF-3) and which are definitions (BUG-28). Its
@@ -142,14 +139,10 @@ nonisolated enum MarkdownHighlighter {
                 NSRange(location: lineStart + range.location, length: range.length)
             }
 
-            if current == 0, frontMatterOpen.firstMatch(in: line, range: whole) != nil {
-                inFrontMatter = true
+            // Front matter as the page takes it off: only when it closes, behind a byte order mark too
+            // (an unclosed `---` made the whole note front matter, BUG-28).
+            if cmarkLine < bodyStart {
                 tokens.append(Token(range: contentRange, kind: .frontMatter, markers: []))
-                continue
-            }
-            if inFrontMatter {
-                tokens.append(Token(range: contentRange, kind: .frontMatter, markers: []))
-                if frontMatterClose.firstMatch(in: line, range: whole) != nil { inFrontMatter = false }
                 continue
             }
             // Code and HTML as cmark reads them (CommonMark's fence rules included: ```npm install``` is

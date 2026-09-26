@@ -640,9 +640,14 @@ final class ThemedTextView: NSTextView {
         return importAttachments(from: pasteboard)
     }
 
+    /// Shows an attachment that could not be stored; nil means `presentError`. Tests replace it, since
+    /// an error presented without a window is an app-modal alert.
+    var presentImportError: ((Error) -> Void)?
+
     /// Copies the pasteboard's files (or writes its picture) where new attachments go and inserts
-    /// the Markdown for them at the selection, undoably. False when it holds neither, or on an
-    /// error, which is shown.
+    /// the Markdown for them at the selection, undoably. False when it holds neither. An error is
+    /// shown and counts as handled: NSTextView would otherwise paste the pasteboard's text, the file's
+    /// path, in its place.
     @discardableResult
     func importAttachments(from pasteboard: NSPasteboard) -> Bool {
         guard let baseURL else { return false }
@@ -660,8 +665,8 @@ final class ThemedTextView: NSTextView {
             insertText(markdown, replacementRange: selectedRange())
             return true
         } catch {
-            _ = presentError(error)
-            return false
+            if let presentImportError { presentImportError(error) } else { _ = presentError(error) }
+            return true
         }
     }
 

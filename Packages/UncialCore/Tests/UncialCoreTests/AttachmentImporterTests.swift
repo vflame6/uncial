@@ -83,6 +83,40 @@ import Testing
         #expect(fixture.relative(try blank.store(fileAt: covered, for: fixture.sub)) == "notes/sub/y.png")
     }
 
+    /// A folder that holds the note (its own folder, an ancestor, a link to one) or the folder new
+    /// attachments go to is linked where it is: copying it there copied it into itself, over and over,
+    /// until paths reached 1024 bytes.
+    @Test func linksFoldersThatHoldTheNoteOrTheTarget() throws {
+        let fixture = try Fixture()
+        _ = try fixture.file("notes/sub/note.md", "# note")
+        let notes = fixture.root.appendingPathComponent("notes", isDirectory: true)
+        for destination in AttachmentImporter.Destination.allCases {
+            let importer = AttachmentImporter(search: everywhere, destination: destination)
+            for folder in [fixture.sub, notes, fixture.root] {
+                #expect(fixture.path(try importer.store(fileAt: folder, for: fixture.sub)) == fixture.path(folder), "\(destination) \(fixture.relative(folder))")
+            }
+        }
+        let attachments = fixture.root.appendingPathComponent("attachments", isDirectory: true)
+        let nearest = AttachmentImporter(search: everywhere, destination: .nearestAttachmentsFolder)
+        #expect(fixture.path(try nearest.store(fileAt: attachments, for: fixture.sub)) == fixture.path(attachments))
+        let link = fixture.elsewhere.appendingPathComponent("vault")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: notes)
+        #expect(fixture.path(try AttachmentImporter(search: everywhere).store(fileAt: link, for: fixture.sub)) == fixture.path(link))
+        #expect(!FileManager.default.fileExists(atPath: fixture.sub.appendingPathComponent("attachments").path))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: attachments.path).isEmpty)
+        #expect(AttachmentImporter.markdown(for: fixture.sub, relativeTo: fixture.sub) == "[sub](.)")
+        #expect(AttachmentImporter.markdown(for: notes, relativeTo: fixture.sub) == "[notes](..)")
+    }
+
+    /// Any other folder is copied like a file.
+    @Test func copiesOtherFolders() throws {
+        let fixture = try Fixture()
+        _ = try fixture.file("elsewhere/pack/a.txt", "a")
+        let stored = try AttachmentImporter(search: everywhere).store(fileAt: fixture.elsewhere.appendingPathComponent("pack"), for: fixture.sub)
+        #expect(fixture.relative(stored) == "notes/sub/attachments/pack")
+        #expect(FileManager.default.fileExists(atPath: stored.appendingPathComponent("a.txt").path))
+    }
+
     @Test func storesPictureData() throws {
         let fixture = try Fixture()
         let importer = AttachmentImporter(search: everywhere, destination: .documentFolder)

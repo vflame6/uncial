@@ -60,6 +60,23 @@ import UncialCore
         #expect(try Data(contentsOf: directory.appendingPathComponent(name)) == Self.pngPixel)
     }
 
+    /// A file that cannot be stored is reported, and nothing else is pasted in its place: the text view
+    /// used to fall back to the pasteboard's text, the file's path.
+    @Test func aFailedImportPastesNothingElse() throws {
+        let (directory, sources, editor) = try fixture()
+        let source = sources.appendingPathComponent("pic.png")
+        try Self.pngPixel.write(to: source)
+        // The attachments folder cannot be created: a file has its name.
+        try Data().write(to: directory.appendingPathComponent("attachments"))
+        var reported: [Error] = []
+        editor.presentImportError = { reported.append($0) }
+        let board = pasteboard()
+        #expect(board.writeObjects([source as NSURL, source.path as NSString]))
+        _ = editor.readSelection(from: board)
+        #expect(reported.count == 1)
+        #expect(editor.string == "one\ntwo")
+    }
+
     @Test func textStillPastesAsText() throws {
         let (directory, _, editor) = try fixture()
         let board = pasteboard()

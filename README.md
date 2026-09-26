@@ -37,9 +37,12 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   folder by folder, above the document. Settings ▸ General sets the folder
   name, whether the folders above are searched, and whether the search stops at
   your home folder or at the root of the disk.
-- Paste or drop files and pictures into the editor: the file is copied where
-  new attachments go (Settings ▸ General chooses the folder, created as needed)
-  and the Markdown for it, an image or a link, is inserted at the cursor.
+- Paste or drop files and pictures into the editor: the Markdown for them, an
+  image or a link, is inserted at the cursor. A file the document already
+  reaches (in its folder, in an attachments folder, or another note) is linked
+  where it is, and so is a folder that holds the document; anything else is
+  copied where new attachments go (Settings ▸ General chooses the folder,
+  created as needed).
 - Obsidian-style callouts: a quote that starts with `[!note]`, `[!tip]`,
   `[!warning]` or any other of Obsidian's default types (aliases included)
   becomes a tinted box with the type's icon and a title, in the page, in

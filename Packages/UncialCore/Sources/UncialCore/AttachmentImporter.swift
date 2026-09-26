@@ -3,8 +3,9 @@ import UniformTypeIdentifiers
 
 /// Puts a file pasted or dropped into a document where new attachments go and writes the Markdown
 /// that references it. A file the document already reaches (inside its folder, in an attachments
-/// folder the search covers, or any Markdown file) is linked where it is; every other file is copied
-/// into the target folder under a free name (`name 2.ext`), unless an identical file is there already.
+/// folder the search covers, or any Markdown file) is linked where it is, and so is a folder that holds
+/// the document or the target folder; every other file is copied into the target folder under a free
+/// name (`name 2.ext`), unless an identical file is there already.
 public struct AttachmentImporter: Sendable {
     /// Where a new attachment is put.
     public enum Destination: String, CaseIterable, Sendable {
@@ -61,7 +62,7 @@ public struct AttachmentImporter: Sendable {
     /// target folder.
     public func store(fileAt fileURL: URL, for directory: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) throws -> URL {
         let source = URL(fileURLWithPath: fileURL.path).standardizedFileURL
-        if reaches(source, from: directory, home: home) { return source }
+        if reaches(source, from: directory, home: home) || holds(source, documentIn: directory, home: home) { return source }
         let target = try createdTargetDirectory(for: directory, home: home)
         let destination = Self.freeURL(for: source.lastPathComponent, in: target) { existing in
             FileManager.default.contentsEqual(atPath: existing.path, andPath: source.path)
@@ -100,7 +101,10 @@ public struct AttachmentImporter: Sendable {
     /// The path from the document's folder to `fileURL` (`..` when it lies above), each component
     /// percent-encoded so spaces, parentheses, `#`, `%` and `<>` survive as a link destination.
     public static func linkDestination(for fileURL: URL, relativeTo directory: URL) -> String {
-        AttachmentSearch.relativePath(of: fileURL, from: directory)
+        let path = AttachmentSearch.relativePath(of: fileURL, from: directory)
+        // The document's own folder.
+        guard !path.isEmpty else { return "." }
+        return path
             .split(separator: "/", omittingEmptySubsequences: false)
             .map { String($0).addingPercentEncoding(withAllowedCharacters: destinationAllowed) ?? String($0) }
             .joined(separator: "/")
@@ -143,6 +147,19 @@ public struct AttachmentImporter: Sendable {
 
     private static func attachmentsFolder(in base: URL, named name: String) -> URL {
         AttachmentSearch.directoryURL(URL(fileURLWithPath: name, relativeTo: AttachmentSearch.directoryURL(base)))
+    }
+
+    /// Whether `source` is a folder that holds the document's folder or the target folder (symbolic
+    /// links resolved): copying it to the target would copy it into itself, over and over, until the
+    /// paths reach 1024 bytes (BUG-13).
+    private func holds(_ source: URL, documentIn directory: URL, home: URL) -> Bool {
+        let folder = AttachmentSearch.directoryURL(directory)
+        // The target folder may not exist yet; its parent does, and resolving that keeps the prefix
+        // (`/private`) the same as for the existing paths.
+        let target = targetDirectory(for: directory, home: home)
+        let resolvedTarget = target.deletingLastPathComponent().resolvingSymlinksInPath().appendingPathComponent(target.lastPathComponent)
+        let resolved = source.resolvingSymlinksInPath().pathComponents
+        return [folder.resolvingSymlinksInPath(), resolvedTarget].contains { $0.pathComponents.starts(with: resolved) }
     }
 
     private static func isInside(_ file: URL, _ folder: URL) -> Bool {

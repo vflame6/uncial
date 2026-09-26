@@ -9,6 +9,21 @@ import Testing
 
     private func paths(_ urls: [URL]) -> [String] { urls.map(\.path) }
 
+    /// A document under /private (in /tmp, say) is searched like any other. `standardizedFileURL` drops
+    /// /private only from a path that exists, so the document's folder lost it while the missing target
+    /// kept it, the two looked unrelated, and the search never ran.
+    @Test func searchesForDocumentsUnderPrivate() throws {
+        let real = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-private-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: real) }
+        let path = real.standardizedFileURL.path
+        try #require(path.hasPrefix("/var/"))
+        let folder = URL(fileURLWithPath: "/private" + path, isDirectory: true)
+        let candidates = AttachmentSearch(boundary: .root).candidates(for: folder.appendingPathComponent("a.gif"), from: folder)
+        #expect(candidates.count > 2)
+        #expect(candidates.contains { $0.path == path + "/attachments/a.gif" })
+    }
+
     @Test func walksUpToTheHomeFolder() {
         #expect(paths(AttachmentSearch().directories(from: work, home: home)) == [
             "/Users/someone/Notes/Work", "/Users/someone/Notes", "/Users/someone",

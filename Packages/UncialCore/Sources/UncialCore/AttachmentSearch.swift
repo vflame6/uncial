@@ -55,7 +55,7 @@ public struct AttachmentSearch: Equatable, Sendable {
     /// of `directories(from:home:)` and its attachments folder.
     public func candidates(for fileURL: URL, from directory: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) -> [URL] {
         let folder = Self.directoryURL(directory)
-        let target = URL(fileURLWithPath: fileURL.path).standardizedFileURL
+        let target = Self.standardized(URL(fileURLWithPath: fileURL.path))
         let relative = Self.relativePath(of: target, from: folder)
         guard !relative.isEmpty, relative != "..", !relative.hasPrefix("../") else { return [target] }
         var seen: Set<String> = []
@@ -87,7 +87,7 @@ public struct AttachmentSearch: Equatable, Sendable {
     /// `target`'s path relative to `directory`, climbing with `..` when it lies outside; empty for the
     /// directory itself.
     static func relativePath(of target: URL, from directory: URL) -> String {
-        let targetComponents = target.standardizedFileURL.pathComponents
+        let targetComponents = standardized(target).pathComponents
         let directoryComponents = directoryURL(directory).pathComponents
         let common = zip(targetComponents, directoryComponents).prefix { $0 == $1 }.count
         let ups = Array(repeating: "..", count: directoryComponents.count - common)
@@ -96,6 +96,18 @@ public struct AttachmentSearch: Equatable, Sendable {
 
     /// `url` as a standardized directory URL, so relative paths resolve inside it and not beside it.
     static func directoryURL(_ url: URL) -> URL {
-        URL(fileURLWithPath: url.standardizedFileURL.path, isDirectory: true)
+        URL(fileURLWithPath: standardized(url).path, isDirectory: true)
+    }
+
+    /// `url` standardized, with the `/private` in front of the system's symlinked folders (`/tmp`,
+    /// `/var`, `/etc`) dropped whether the path exists or not: `standardizedFileURL` drops it only from
+    /// a path that exists, so a document's folder and a missing attachment in it disagreed and the
+    /// search never ran for documents in /tmp (BUG-18).
+    static func standardized(_ url: URL) -> URL {
+        let path = url.standardizedFileURL.path
+        for folder in ["/private/tmp", "/private/var", "/private/etc"] where path == folder || path.hasPrefix(folder + "/") {
+            return URL(fileURLWithPath: String(path.dropFirst("/private".count)))
+        }
+        return url.standardizedFileURL
     }
 }

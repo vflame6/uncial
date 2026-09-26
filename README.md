@@ -79,6 +79,13 @@ launches it once so macOS registers the Quick Look extensions, and clears the
 Quick Look cache. You can also open `uncial.xcodeproj` in Xcode, pick the
 `uncial` scheme, and run.
 
+The project signs with the maintainer's development team, whose certificate
+only the maintainer has. Without it, sign the build ad hoc:
+
+```sh
+make install SIGN_IDENTITY=-
+```
+
 ## Enabling the Quick Look extensions
 
 1. Select any `.md` file in Finder and press Space. You should see the rendered

@@ -11,8 +11,9 @@ ifneq ($(filter release bump,$(firstword $(MAKECMDGOALS))),)
   GOAL_VERSION := $(or $(word 2,$(MAKECMDGOALS)),$(if $(filter command line,$(origin VERSION)),$(VERSION)))
   $(if $(word 2,$(MAKECMDGOALS)),$(eval $(word 2,$(MAKECMDGOALS)):;@:))
 endif
-# Set SIGN_IDENTITY to a "Developer ID Application: …" identity for a build other Macs can open
-# without a Gatekeeper override; NOTARY_PROFILE (a `notarytool store-credentials` profile) notarizes it.
+# SIGN_IDENTITY=- signs ad hoc, for a build from source without the project team's certificate. Set it
+# to a "Developer ID Application: …" identity for a build other Macs can open without a Gatekeeper
+# override; NOTARY_PROFILE (a `notarytool store-credentials` profile) notarizes it.
 SIGN_FLAGS = $(if $(SIGN_IDENTITY),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" OTHER_CODE_SIGN_FLAGS=--timestamp,)
 
 .PHONY: build test core-test install uninstall icon highlight clean bump release

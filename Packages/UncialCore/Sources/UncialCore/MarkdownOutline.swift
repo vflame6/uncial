@@ -118,10 +118,13 @@ public enum MarkdownOutline {
             case CMARK_NODE_ITEM:
                 pendingMarker = marker(for: node)
             case CMARK_NODE_HEADING:
+                flushMarker()
                 begin(.heading(level: Int(cmark_node_get_heading_level(node))))
             case CMARK_NODE_PARAGRAPH:
                 begin(pendingMarker.map { .listItem(marker: $0) } ?? .paragraph)
-                if kind == .paragraph, quoteDepth > 0, cell == nil, let marker = Callouts.marker(in: leadingText(of: node)) {
+                // As on the page, only a blockquote's first paragraph opens a callout.
+                if kind == .paragraph, cell == nil, let quote = cmark_node_parent(node), cmark_node_get_type(quote) == CMARK_NODE_BLOCK_QUOTE,
+                   cmark_node_first_child(quote) == node, let marker = Callouts.marker(in: leadingText(of: node)) {
                     inCalloutTitle = true
                     calloutMarkerRemaining = marker.length
                     if marker.title.isEmpty {
@@ -129,10 +132,10 @@ public enum MarkdownOutline {
                     }
                 }
             case CMARK_NODE_CODE_BLOCK:
-                pendingMarker = nil
+                flushMarker()
                 emit(.code, runs: [Run(literal(of: node), isCode: true)])
             case CMARK_NODE_THEMATIC_BREAK:
-                pendingMarker = nil
+                flushMarker()
                 emit(.rule, runs: [])
             case CMARK_NODE_TEXT:
                 var text = literal(of: node)
@@ -173,6 +176,8 @@ public enum MarkdownOutline {
                 switch String(cString: cmark_node_get_type_string(node)) {
                 case "strikethrough":
                     strikethrough += 1
+                case "table":
+                    flushMarker()
                 case "table_header", "table_row":
                     rowIsHeader = String(cString: cmark_node_get_type_string(node)) == "table_header"
                     cells = []
@@ -244,6 +249,14 @@ public enum MarkdownOutline {
 
         private func literal(of node: UnsafeMutablePointer<cmark_node>) -> String {
             cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
+        }
+
+        /// The bullet of an item whose first block is not a paragraph (code, a rule, a heading, a table),
+        /// on a line of its own before that block (BUG-21: code dropped it, a heading got it after).
+        private func flushMarker() {
+            if let marker = pendingMarker {
+                emit(.listItem(marker: marker), runs: [])
+            }
         }
 
         private func begin(_ kind: Kind) {

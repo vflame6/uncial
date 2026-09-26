@@ -45,6 +45,23 @@ import Testing
         #expect(blocks[3].text == "only")
     }
 
+    /// As on the page (`Callouts`): only a blockquote's first paragraph can open a callout.
+    @Test func calloutsOpenOnlyWhereTheirQuoteBegins() {
+        let blocks = MarkdownOutline.blocks(in: "> text\n>\n> [!note] not a title\n")
+        #expect(blocks.map(\.text) == ["text", "[!note] not a title"])
+        #expect(blocks[1].runs.allSatisfy { !$0.isStrong })
+    }
+
+    /// An item's bullet comes before a code block, rule or heading that starts it, once (BUG-21: the
+    /// code block dropped it, the heading got a second, empty one after it).
+    @Test func itemsStartingWithABlockKeepOneBullet() {
+        #expect(MarkdownOutline.blocks(in: "- ```\n  code\n  ```\n").map(\.kind) == [.listItem(marker: "•"), .code])
+        #expect(MarkdownOutline.blocks(in: "- # Heading\n").map(\.kind) == [.listItem(marker: "•"), .heading(level: 1)])
+        #expect(MarkdownOutline.blocks(in: "1. ***\n2. b\n").map(\.kind) == [.listItem(marker: "1."), .rule, .listItem(marker: "2.")])
+        let table = MarkdownOutline.blocks(in: "- | a |\n  |---|\n  | 1 |\n")
+        #expect(table.map(\.kind).first == .listItem(marker: "•") && table.count == 3)
+    }
+
     @Test func tablesBecomeRows() {
         let blocks = MarkdownOutline.blocks(in: "| a | b |\n|---|---|\n| 1 | **2** |\n")
         #expect(blocks.count == 2)

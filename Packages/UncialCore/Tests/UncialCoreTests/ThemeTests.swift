@@ -23,6 +23,27 @@ import Testing
         }
     }
 
+    /// Quick Look's window, not the app, answers `prefers-color-scheme`, so a sheet for the app's Light
+    /// or Dark setting names that one scheme and has its dark rules applied or dropped; System keeps both.
+    @Test func sheetsFixedToLightOrDark() throws {
+        for theme in Theme.allCases {
+            #expect(Stylesheet.css(for: theme, appearance: .system) == Stylesheet.css(for: theme))
+            let dark = Stylesheet.css(for: theme, appearance: .dark)
+            let light = Stylesheet.css(for: theme, appearance: .light)
+            for css in [dark, light] {
+                #expect(!css.contains("prefers-color-scheme") && !css.contains("color-scheme: light dark"), "\(theme)")
+                #expect(css.contains(".markdown-body {") && css.contains("--bg:"), "\(theme)")
+            }
+            #expect(dark.contains("color-scheme: dark;") && light.contains("color-scheme: light;"), "\(theme)")
+            // A diagram shows its dark drawing on the dark page only.
+            #expect(dark.contains("figure.mermaid .light { display: none; }") && !light.contains("figure.mermaid .light { display: none; }"), "\(theme)")
+        }
+        // The dark values come after the light ones, so they win; the light sheet has none of them.
+        let dark = Stylesheet.css(for: .solarized, appearance: .dark)
+        #expect(try #require(dark.range(of: "--bg: #002b36")).lowerBound > (try #require(dark.range(of: "--bg: #fdf6e3"))).lowerBound)
+        #expect(!Stylesheet.css(for: .solarized, appearance: .light).contains("#002b36"))
+    }
+
     @Test func themeSignatures() {
         #expect(Stylesheet.css(for: .macOS).contains("-apple-system-label"))
         #expect(Stylesheet.css(for: .macOS).contains("-apple-system-text-background"))

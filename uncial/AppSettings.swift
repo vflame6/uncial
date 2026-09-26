@@ -35,6 +35,7 @@ final class AppSettings {
         didSet {
             defaults.set(appearance.rawValue, forKey: Key.appearance)
             applyAppearance()
+            publishShared()
         }
     }
 
@@ -196,11 +197,11 @@ final class AppSettings {
         defaults.set(true, forKey: Key.hasCompletedFirstRun)
     }
 
-    /// Hands the theme and the remote-content choice to the Quick Look extension through the App
-    /// Group container. Best effort; only the real app instance does it (tests pass `applyAppearance: false`).
+    /// Hands the theme, the remote-content choice and the appearance to the Quick Look extension through
+    /// the App Group container. Best effort; only the real app instance does it (tests pass `applyAppearance: false`).
     func publishShared() {
         guard appliesAppearance, let directory = SharedSettings.containerURL() else { return }
-        try? SharedSettings.write(theme: theme, remoteContent: loadRemoteContent, to: directory)
+        try? SharedSettings.write(theme: theme, remoteContent: loadRemoteContent, appearance: appearance.pageAppearance, to: directory)
     }
 
     /// Re-themes every window. WKWebView follows its effective appearance, so rendered

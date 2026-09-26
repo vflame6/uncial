@@ -6,18 +6,20 @@ public enum HTMLDocument {
 
     /// A complete page: the theme's CSS inlined, the rendered fragment inside `article.markdown-body`.
     /// `lineNumbers` turns on the source-line gutter (needs `data-line` labels from `SourcePositions.annotate`).
-    /// `contentSecurityPolicy` goes first in the head, ahead of anything it governs.
-    public static func wrap(body: String, title: String, theme: Theme = .default, lineNumbers: Bool = false, contentSecurityPolicy: String? = nil) -> String {
+    /// `contentSecurityPolicy` goes first in the head, ahead of anything it governs. `appearance` fixes
+    /// the page to light or dark (`Stylesheet.css(for:appearance:)`); by default it follows its view.
+    public static func wrap(body: String, title: String, theme: Theme = .default, lineNumbers: Bool = false, contentSecurityPolicy: String? = nil,
+                            appearance: PageAppearance = .system) -> String {
         """
         <!DOCTYPE html>
         <html data-theme="\(theme.rawValue)"\(lineNumbers ? " class=\"line-numbers\"" : "")>
         <head>
         \(contentSecurityPolicy.map { "<meta http-equiv=\"Content-Security-Policy\" content=\"\($0)\">\n" } ?? "")<meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
-        <meta name="color-scheme" content="light dark">
+        <meta name="color-scheme" content="\(appearance == .system ? "light dark" : appearance.rawValue)">
         <title>\(HTMLEscaping.escape(title))</title>
         <style>
-        \(Stylesheet.css(for: theme))
+        \(Stylesheet.css(for: theme, appearance: appearance))
         </style>
         </head>
         <body>

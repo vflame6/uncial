@@ -1,6 +1,8 @@
 import AppKit
+import UncialCore
 
 /// System / Light / Dark. Drives `NSApp.appearance`; rendered pages follow through `prefers-color-scheme`.
+/// Quick Look gets it as `pageAppearance` and fixes its pages to it.
 enum Appearance: String, CaseIterable, Identifiable {
     case system, light, dark
 
@@ -11,6 +13,14 @@ enum Appearance: String, CaseIterable, Identifiable {
         case .system: "System"
         case .light: "Light"
         case .dark: "Dark"
+        }
+    }
+
+    var pageAppearance: PageAppearance {
+        switch self {
+        case .system: .system
+        case .light: .light
+        case .dark: .dark
         }
     }
 

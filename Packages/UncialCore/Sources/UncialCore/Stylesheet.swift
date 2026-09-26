@@ -1,12 +1,49 @@
+import Foundation
+
 /// Shared layout and element rules. Every color, font and size comes from a custom property
 /// that each theme sets (light values on `:root`, dark ones under `prefers-color-scheme: dark`).
 /// The `.hljs-…` rules color highlighted code through the `--code-…` variables, one per
 /// `CodeHighlighter.Scope`, which every theme sets to its `SyntaxPalette` values; the `.callout` rules
 /// take their colors from `--callout-<role>` variables, one per `Callouts.Role`, set to `CalloutPalette`.
 public enum Stylesheet {
-    /// The base sheet followed by the theme's variables and overrides.
-    public static func css(for theme: Theme) -> String {
-        base + "\n" + themeBlock(for: theme)
+    /// The base sheet followed by the theme's variables and overrides. Fixed to light or dark (the
+    /// app's Appearance setting, for Quick Look, whose window the extension cannot set), the sheet names
+    /// that one `color-scheme`, so WebKit resolves the system colors and paints the canvas in it, and
+    /// every `prefers-color-scheme` block is applied or dropped: that query answers for the window the
+    /// page is shown in, and no CSS changes it.
+    public static func css(for theme: Theme, appearance: PageAppearance = .system) -> String {
+        let css = base + "\n" + themeBlock(for: theme)
+        switch appearance {
+        case .system: return css
+        case .light: return fixed(css, to: "light")
+        case .dark: return fixed(css, to: "dark")
+        }
+    }
+
+    private static let colorSchemeQuery = try! NSRegularExpression(pattern: #"@media \(prefers-color-scheme: (light|dark)\) \{"#)
+
+    /// `css` with `color-scheme: light dark` narrowed to `scheme` and each `@media (prefers-color-scheme: …)`
+    /// block replaced by its rules when it names `scheme`, removed otherwise.
+    static func fixed(_ css: String, to scheme: String) -> String {
+        var result = css.replacingOccurrences(of: "color-scheme: light dark;", with: "color-scheme: \(scheme);")
+        while let match = colorSchemeQuery.firstMatch(in: result, range: NSRange(location: 0, length: (result as NSString).length)) {
+            let text = result as NSString
+            let rulesStart = NSMaxRange(match.range)
+            var depth = 1
+            var index = rulesStart
+            while index < text.length, depth > 0 {
+                switch text.character(at: index) {
+                case 0x7B: depth += 1 // "{"
+                case 0x7D: depth -= 1 // "}"
+                default: break
+                }
+                index += 1
+            }
+            let rules = text.substring(with: NSRange(location: rulesStart, length: max(0, index - 1 - rulesStart)))
+            let kept = text.substring(with: match.range(at: 1)) == scheme ? rules : ""
+            result = text.replacingCharacters(in: NSRange(location: match.range.location, length: index - match.range.location), with: kept)
+        }
+        return result
     }
 
     static func themeBlock(for theme: Theme) -> String {

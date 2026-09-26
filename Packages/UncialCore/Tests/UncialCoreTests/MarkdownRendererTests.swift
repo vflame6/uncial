@@ -72,6 +72,15 @@ import Testing
         #expect(html.contains("<article class=\"markdown-body\">\n<h1 id=\"t\">T</h1>"))
     }
 
+    /// A page for Quick Look fixed to the app's Light or Dark setting says so in its color-scheme meta too.
+    @Test func documentTakesAFixedAppearance() {
+        let dark = renderer.renderDocument("# T", title: "t", appearance: .dark)
+        #expect(dark.contains("<meta name=\"color-scheme\" content=\"dark\">") && !dark.contains("prefers-color-scheme"))
+        let light = renderer.renderDocument("# T", title: "t", appearance: .light)
+        #expect(light.contains("<meta name=\"color-scheme\" content=\"light\">") && !light.contains("prefers-color-scheme"))
+        #expect(renderer.renderDocument("# T", title: "t", appearance: .system) == renderer.renderDocument("# T", title: "t"))
+    }
+
     @Test func documentInlinesImagesRelativeToBaseURL() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("uncial-doc-\(UUID().uuidString)", isDirectory: true)

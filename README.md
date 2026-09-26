@@ -48,7 +48,9 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   `[!warning]` or any other of Obsidian's default types (aliases included)
   becomes a tinted box with the type's icon and a title, in the page, in
   Quick Look and in Live Preview; `[!type]-` and `[!type]+` fold in the page.
-- Quick Look preview and thumbnails for Markdown files.
+- Quick Look preview and thumbnails for Markdown files. The preview takes the
+  app's theme and its Appearance setting: set to Light or Dark, previews stay
+  light or dark whatever the system uses; System follows the system.
 - Optional status bar with line, word and character counts. Pinch to zoom.
 
 ## Requirements
@@ -191,7 +193,7 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 |---|---|
 | `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, math (KaTeX), diagrams (beautiful-mermaid) and code highlighting (highlight.js) done through JavaScriptCore at render time, image inlining, and the three themes as CSS. Also the file watcher and the block outline the thumbnails draw. |
 | `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model keeps the editor's text, writes it to the file on ⌘S (or as you type, when automatic saving is on) and reconciles changes that arrive from other programs. A hidden web view runs mermaid.js for the diagram types beautiful-mermaid lacks and draws every diagram to a bitmap for Live Preview. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
-| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme, and the diagrams mermaid.js drew in the app, from the App Group container the app writes to (WebKit cannot run inside the extension). |
+| `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme, the appearance, and the diagrams mermaid.js drew in the app, from the App Group container the app writes to (WebKit cannot run inside the extension). |
 | `UncialThumbnail` | Quick Look Thumbnail Extension. Draws the document's outline (headings, text, lists, quotes, code, rules, tables) as a small page with AppKit for Finder icons, Open panels and Get Info, in the theme's light colors. |
 
 ## Contributing

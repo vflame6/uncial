@@ -178,5 +178,7 @@ import UncialCore
         #expect(Appearance.system.appearance == nil)
         #expect(Appearance.light.appearance?.name == .aqua)
         #expect(Appearance.dark.appearance?.name == .darkAqua)
+        // What Quick Look gets through the App Group.
+        #expect(Appearance.allCases.map(\.pageAppearance) == [.system, .light, .dark])
     }
 }

@@ -45,8 +45,9 @@ public struct MarkdownRenderer: Sendable {
 
     /// Standalone HTML page with the theme's CSS inlined (Quick Look's). With `remoteContent` off it
     /// also carries `HTMLDocument.offlinePolicy`, since nothing else guards that page.
-    public func renderDocument(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default, diagrams: [String: PreRenderedDiagram] = [:], remoteContent: Bool = false, attachments: AttachmentSearch = .direct) -> String {
+    public func renderDocument(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default, diagrams: [String: PreRenderedDiagram] = [:],
+                               remoteContent: Bool = false, attachments: AttachmentSearch = .direct, appearance: PageAppearance = .system) -> String {
         HTMLDocument.wrap(body: renderBody(markdown, baseURL: baseURL, diagrams: diagrams, remoteContent: remoteContent, attachments: attachments),
-                          title: title, theme: theme, contentSecurityPolicy: remoteContent ? nil : HTMLDocument.offlinePolicy)
+                          title: title, theme: theme, contentSecurityPolicy: remoteContent ? nil : HTMLDocument.offlinePolicy, appearance: appearance)
     }
 }

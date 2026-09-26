@@ -248,7 +248,7 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         configuration.snapshotWidth = NSNumber(value: Double(rect.width * pixelsPerPoint))
         guard let snapshot = try? await withTimeout({ try await webView.takeSnapshot(configuration: configuration) }) else { return nil }
         snapshot.size = pointSize
-        _ = try? await webView.callAsyncJavaScript("document.getElementById('stage').innerHTML = '';", arguments: [:], in: nil, contentWorld: .page)
+        _ = try? await withTimeout { try await webView.callAsyncJavaScript("document.getElementById('stage').innerHTML = '';", arguments: [:], in: nil, contentWorld: .page) }
         return snapshot
     }
 
@@ -297,12 +297,19 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             pageLoaded = nil
             guard loaded == true else { return nil }
             stageTheme = theme
-            await evaluate(library, in: webView)
+            guard (try? await withTimeout({ () -> Bool in
+                await self.evaluate(library, in: webView)
+                return true
+            })) == true else { return nil }
             libraryLoaded = true
         }
         if stageTheme != theme {
             // The theme's stylesheet swaps in place; the library stays loaded.
-            _ = try? await webView.callAsyncJavaScript("document.getElementById('theme').textContent = css;", arguments: ["css": Stylesheet.css(for: theme)], in: nil, contentWorld: .page)
+            // `try?` flattens the script's own nil result: say `true` for a call that finished.
+            guard (try? await withTimeout({ () -> Bool in
+                _ = try await webView.callAsyncJavaScript("document.getElementById('theme').textContent = css;", arguments: ["css": Stylesheet.css(for: theme)], in: nil, contentWorld: .page)
+                return true
+            })) == true else { return nil }
             stageTheme = theme
         }
         return webView
@@ -341,11 +348,28 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         pageLoaded = nil
     }
 
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        pageLoaded?.resume()
+        pageLoaded = nil
+    }
+
     /// A process that cannot launch (the Quick Look sandbox) or dies ends the wait too.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
         pageLoaded?.resume()
         pageLoaded = nil
         libraryLoaded = false
+    }
+
+    /// Whether `script` runs to its end on the stage the way a render's calls do: one at a time, and
+    /// given up after `timeout`. For tests.
+    func finishesOnStage(_ script: String) async -> Bool {
+        await serialized {
+            guard let webView = await self.prepare(theme: .default) else { return false }
+            return (try? await self.withTimeout { () -> Bool in
+                _ = try await webView.callAsyncJavaScript(script, arguments: [:], in: nil, contentWorld: .page)
+                return true
+            }) == true
+        }
     }
 
     /// One diagram at a time on the stage.
@@ -359,17 +383,68 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         return await task.value
     }
 
+    /// `body`'s result, or `TimedOut` once `timeout` has passed, whichever comes first. WebKit's calls
+    /// ignore cancellation, so the body is left to finish on its own, and a timeout takes the stage down
+    /// with it (STAB-3, 2026-09-26: a task group waited for the very call it was meant to abandon, so one
+    /// hung render stopped every later diagram and formula).
     private func withTimeout<T>(_ body: @escaping @MainActor () async throws -> T) async throws -> T {
         let limit = timeout
-        return try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { @MainActor in try await body() }
-            group.addTask {
-                try await Task.sleep(for: limit)
-                throw TimedOut()
+        let result = await withCheckedContinuation { (continuation: CheckedContinuation<Result<T, Error>, Never>) in
+            let outcome = FirstOutcome(continuation)
+            let timer = Task { @MainActor in
+                do {
+                    try await Task.sleep(for: limit)
+                    outcome.settle(.failure(TimedOut()))
+                } catch {}
             }
-            let first = try await group.next()!
-            group.cancelAll()
-            return first
+            Task { @MainActor in
+                do {
+                    outcome.settle(.success(try await body()))
+                } catch {
+                    outcome.settle(.failure(error))
+                }
+                timer.cancel()
+            }
         }
+        if case .failure(let error) = result, error is TimedOut {
+            resetStage()
+        }
+        return try result.get()
+    }
+
+    /// After a timeout the page may still be busy with the call that ran out of time (a promise that
+    /// never settles, a loop that never ends; JavaScript cannot be interrupted): the stage goes, its
+    /// process killed, and the next request builds a new one. Without the process identifier (private,
+    /// so checked first) the page is replaced, which ends a wait but not a loop.
+    private func resetStage() {
+        pageLoaded?.resume()
+        pageLoaded = nil
+        libraryLoaded = false
+        stageTheme = nil
+        guard let webView else { return }
+        webView.navigationDelegate = nil
+        let identifier = NSSelectorFromString("_webProcessIdentifier")
+        if webView.responds(to: identifier), let process = webView.value(forKey: "_webProcessIdentifier") as? Int32, process > 0 {
+            kill(process, SIGKILL)
+        } else {
+            webView.loadHTMLString("", baseURL: nil)
+        }
+        window?.contentView = nil
+        window = nil
+        self.webView = nil
+    }
+}
+
+/// The first outcome of a race between a stage call and its timer; the later one is dropped.
+@MainActor private final class FirstOutcome<T> {
+    private var continuation: CheckedContinuation<Result<T, Error>, Never>?
+
+    init(_ continuation: CheckedContinuation<Result<T, Error>, Never>) {
+        self.continuation = continuation
+    }
+
+    func settle(_ result: Result<T, Error>) {
+        continuation?.resume(returning: result)
+        continuation = nil
     }
 }

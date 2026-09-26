@@ -48,9 +48,53 @@ final class LoopbackListener: @unchecked Sendable {
     }
 }
 
+/// The first answer a waiting test gets: the value, or nil from the deadline.
+@MainActor private final class FirstAnswer<T> {
+    private var continuation: CheckedContinuation<T?, Never>?
+
+    init(_ continuation: CheckedContinuation<T?, Never>) {
+        self.continuation = continuation
+    }
+
+    func give(_ value: T?) {
+        continuation?.resume(returning: value)
+        continuation = nil
+    }
+}
+
 /// Real WebKit: the hidden mermaid.js stage the app and the Quick Look extension share.
 @MainActor
 @Suite(.serialized) struct DiagramWebRendererTests {
+    /// `body`'s value, or nil after `seconds`: a test fails instead of hanging on a stage that does.
+    private func within<T>(_ seconds: Double, _ body: @escaping @MainActor () async -> T) async -> T? {
+        await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
+            let answer = FirstAnswer(continuation)
+            Task { @MainActor in answer.give(await body()) }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(seconds))
+                answer.give(nil)
+            }
+        }
+    }
+
+    /// A call on the stage that never ends (a promise that never settles and is kept, so it is not
+    /// collected; a loop that never stops) is
+    /// given up after `timeout`, and the stage draws the next formula: the timeout used to wait for the
+    /// very call it was meant to abandon, so one hung render stopped every later diagram and formula.
+    @Test func aHungCallTimesOutAndTheStageRecovers() async throws {
+        let renderer = DiagramWebRenderer()
+        renderer.timeout = .milliseconds(800)
+        let warm = MathRequest(tex: "x^2", display: false, theme: .macOS, dark: false, fontSize: 13)
+        #expect(await within(15) { await renderer.picture(for: warm) != nil } == true)
+        for (index, script) in ["await new Promise(resolve => { window.stageHold = resolve })", "while (true) {}"].enumerated() {
+            let start = ContinuousClock.now
+            #expect(await within(5) { await renderer.finishesOnStage(script) } == false, "\(script)")
+            #expect(ContinuousClock.now - start < .seconds(3), "\(script)")
+            let next = MathRequest(tex: "y^\(index + 2)", display: false, theme: .macOS, dark: false, fontSize: 13)
+            #expect(await within(15) { await renderer.picture(for: next) != nil } == true, "after \(script)")
+        }
+    }
+
     /// The stage needs no network: a diagram naming a web image (mermaid's image shape; front
     /// matter sends any flowchart to mermaid.js) must not reach the server, whatever the setting.
     @Test func stageLoadsNothingFromTheWeb() async throws {

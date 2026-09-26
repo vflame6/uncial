@@ -91,6 +91,30 @@ import Testing
         #expect(renderer.renderBody("![a](a.gif)").contains("<img src=\"a.gif\""))
     }
 
+    /// Blocking web references costs nothing extra for local images: it runs before they become
+    /// megabytes of base64, which it used to scan on every render (0.4 s for five photos).
+    @Test func blockingTheWebSkipsInlinedImages() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("uncial-inline-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        var generator = SystemRandomNumberGenerator()
+        try Data((0..<(6 << 20)).map { _ in UInt8.random(in: 0...255, using: &generator) }).write(to: directory.appendingPathComponent("big.png"))
+        let document = directory.appendingPathComponent("doc.md")
+        let markdown = "![big](big.png)\n\n![web](https://example.com/a.png)\n"
+        let clock = ContinuousClock()
+        func fastest(remoteContent: Bool) -> Duration {
+            (0..<3).map { _ in clock.measure { _ = renderer.renderBody(markdown, baseURL: document, remoteContent: remoteContent) } }.min()!
+        }
+        _ = fastest(remoteContent: true)
+        let open = fastest(remoteContent: true)
+        let blocked = fastest(remoteContent: false)
+        #expect(blocked < open * 2 + .milliseconds(20), "blocked \(blocked), open \(open)")
+        let html = renderer.renderBody(markdown, baseURL: document, remoteContent: false)
+        #expect(html.contains("<img src=\"data:image/png;base64,"))
+        #expect(html.contains("data-blocked-src=\"https://example.com/a.png\""))
+    }
+
     @Test func bodyAndDocumentFindImagesThroughTheAttachmentSearch() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("uncial-attach-\(UUID().uuidString)", isDirectory: true)

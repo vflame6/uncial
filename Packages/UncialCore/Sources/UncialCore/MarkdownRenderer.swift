@@ -32,11 +32,13 @@ public struct MarkdownRenderer: Sendable {
         if let frontMatter {
             html = FrontMatter.renderBlock(frontMatter) + html
         }
-        if let baseURL {
-            html = ImageInliner(baseURL: baseURL, attachments: attachments).inline(html)
-        }
+        // Before the inliner: it only writes `data:` URIs, and the sanitizer's regexes would otherwise
+        // scan every image's base64 on every render (PERF-6, 0.4 s for five photos).
         if !remoteContent {
             html = RemoteContent.block(in: html)
+        }
+        if let baseURL {
+            html = ImageInliner(baseURL: baseURL, attachments: attachments).inline(html)
         }
         return html
     }

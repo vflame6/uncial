@@ -113,6 +113,20 @@ import UncialCore
         #expect(model.body.contains("two"))
     }
 
+    /// A file that is away for seconds (a branch switch, a sync client re-downloading it) is followed
+    /// again when it comes back.
+    @Test func followsTheFileBackAfterALongAbsence() async throws {
+        let file = try temporaryFile("one")
+        let model = DocumentViewModel(fileURL: file, initialText: "one")
+        try await Task.sleep(for: .milliseconds(150))
+        try FileManager.default.removeItem(at: file)
+        try await Task.sleep(for: .milliseconds(1500))
+        try Data("two".utf8).write(to: file)
+        try await Task.sleep(for: .milliseconds(2800))
+        #expect(model.text == "two")
+        #expect(model.hasUnsavedChanges == false)
+    }
+
     @Test func localEditsSurviveAConcurrentExternalChange() async throws {
         let file = try temporaryFile("one")
         let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .milliseconds(900))

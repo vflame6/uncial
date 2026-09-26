@@ -13,8 +13,11 @@ public final class FileWatcher: @unchecked Sendable {
     private var reopenAttempts = 0
     private var isRunning = false
 
-    private static let maxReopenAttempts = 20
-    private static let reopenInterval: TimeInterval = 0.05
+    /// Looking for the file again after it went away: after 50 ms, doubling up to every 2 s, for as long
+    /// as the watcher runs. A branch switch, a sync client or a slow generator can keep it away for
+    /// seconds; the watcher used to give up after one second and never saw the file again.
+    private static let firstReopenDelay: TimeInterval = 0.05
+    private static let maxReopenDelay: TimeInterval = 2
 
     public init(url: URL, debounce: TimeInterval = 0.1, onChange: @escaping ChangeHandler) {
         self.url = url
@@ -83,9 +86,10 @@ public final class FileWatcher: @unchecked Sendable {
     }
 
     private func scheduleReopen() {
-        guard isRunning, reopenAttempts < Self.maxReopenAttempts else { return }
+        guard isRunning else { return }
+        let delay = min(Self.firstReopenDelay * Double(1 << min(reopenAttempts, 10)), Self.maxReopenDelay)
         reopenAttempts += 1
-        queue.asyncAfter(deadline: .now() + Self.reopenInterval) { [weak self] in
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self, self.isRunning else { return }
             if self.arm() {
                 self.reopenAttempts = 0

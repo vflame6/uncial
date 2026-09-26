@@ -554,7 +554,7 @@ final class ThemedTextView: NSTextView {
         let destination = (link as? String) ?? (link as? URL)?.absoluteString ?? ""
         if NSApp.currentEvent?.modifierFlags.contains(.command) == true, !destination.hasPrefix("#"),
            let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL {
-            LinkOpener.open(url, from: baseURL, attachments: attachmentSearch)
+            LinkOpener.open(url, from: baseURL, attachments: attachmentSearch, in: window)
         } else {
             setSelectedRange(NSRange(location: charIndex, length: 0))
         }

@@ -25,10 +25,13 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
 - Save with ⌘S, or let Uncial save as you type.
 - Re-rendering when the file changes on disk, scroll position kept.
 - Local images, heading anchors, YAML front matter, and links that open in the
-  browser or, for local Markdown files, in a new window. Nothing is loaded from
-  the web unless you allow it in Settings ▸ General: remote images and other
-  references stay unloaded in the window, in Live Preview, in the diagrams and in
-  Quick Look, so opening a file tells no server about it.
+  browser or, for local Markdown files, in a new window. A link to any other
+  file or kind of address asks first, naming the app that would open it, and a
+  link to a program, script or installer never opens it (Uncial offers to show
+  it in Finder instead). Nothing is loaded from the web unless you allow it in
+  Settings ▸ General: remote images and other references stay unloaded in the
+  window, in Live Preview, in the diagrams and in Quick Look, so opening a file
+  tells no server about it.
 - Attachments found where you keep them: an image or linked file that is not
   next to the document is looked for in its `attachments` folder and then,
   folder by folder, above the document. Settings ▸ General sets the folder

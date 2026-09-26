@@ -244,7 +244,7 @@ struct WebView: NSViewRepresentable {
                     decisionHandler(.allow)
                 } else {
                     decisionHandler(.cancel)
-                    LinkOpener.open(url, from: page?.baseURL, attachments: attachments)
+                    LinkOpener.open(url, from: page?.baseURL, attachments: attachments, in: webView.window)
                 }
                 return
             }
@@ -261,7 +261,7 @@ struct WebView: NSViewRepresentable {
             windowFeatures: WKWindowFeatures
         ) -> WKWebView? {
             if let url = navigationAction.request.url {
-                LinkOpener.open(url, from: page?.baseURL, attachments: attachments)
+                LinkOpener.open(url, from: page?.baseURL, attachments: attachments, in: webView.window)
             }
             return nil
         }

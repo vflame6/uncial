@@ -866,7 +866,7 @@ extension ThemedTextView: NSLayoutManagerDelegate {
         let count = glyphRange.length
         let first = characterIndexes[0]
         let span = NSRange(location: first, length: characterIndexes[count - 1] - first + 1)
-        let wantsBullet = markers.bullets.contains { NSLocationInRange($0, span) }
+        let wantsBullet = markers.hasBullet(in: span)
         let wantsAnchor = markers.hasAnchor(in: span)
         guard markers.hasHidden(in: span) || wantsBullet || wantsAnchor else { return 0 }
         let bullet = wantsBullet ? bulletGlyph(for: font) : nil

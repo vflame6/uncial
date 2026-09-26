@@ -7,6 +7,31 @@ import Testing
         MarkerIndex(tokens: MarkdownHighlighter.tokens(in: text))
     }
 
+    /// The glyph delegate asks `hasHidden(in:)` and `hasBullet(in:)` for every glyph run: they answer by
+    /// binary search, exactly as a scan would (a scan over thousands of markers cost 50–90 ms per keystroke).
+    @Test func rangeQueriesAreExactAndFast() {
+        let text = String(repeating: "- a *b* c\n", count: 5000)
+        let markers = MarkerIndex(tokens: MarkdownHighlighter.tokens(in: text))
+        var mismatches: [NSRange] = []
+        for location in 0..<200 {
+            for length in [0, 1, 3, 10] {
+                let range = NSRange(location: location, length: length)
+                let hidden = markers.hidden.contains { NSIntersectionRange($0, range).length > 0 }
+                let bullet = markers.bullets.contains { NSLocationInRange($0, range) }
+                if markers.hasHidden(in: range) != hidden || markers.hasBullet(in: range) != bullet { mismatches.append(range) }
+            }
+        }
+        #expect(mismatches.isEmpty)
+        let length = (text as NSString).length
+        let elapsed = ContinuousClock().measure {
+            for location in stride(from: 0, to: length, by: 4) {
+                _ = markers.hasHidden(in: NSRange(location: location, length: 4))
+                _ = markers.hasBullet(in: NSRange(location: location, length: 4))
+            }
+        }
+        #expect(elapsed < .milliseconds(100), "took \(elapsed)")
+    }
+
     @Test func hidesMarkersButNotImages() {
         let text = "## H **b**\n![a](i.png)"
         let markers = index(text)

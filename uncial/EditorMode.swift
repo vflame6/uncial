@@ -1,6 +1,6 @@
 /// How the source editor shows Markdown: as plain source, or rendered in place with the syntax
-/// of the caret's line revealed.
-enum EditorPresentation: Equatable {
+/// of the caret's line revealed. A plain value, so nonisolated: its `==` works off the main actor too.
+nonisolated enum EditorPresentation: Equatable {
     case source, inline
 }
 

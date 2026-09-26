@@ -10,7 +10,7 @@ import UncialCore
 /// left out. `knownDifferences` may only shrink.
 @MainActor
 @Suite struct SpecDifferentialTests {
-    static let spec = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    nonisolated static let spec = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("build/SourcePackages/checkouts/swift-cmark/test/spec.txt")
 
     /// Examples where Live Preview still hides text the page shows: none since 2026-09-26 (the audit

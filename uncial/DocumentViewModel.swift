@@ -175,7 +175,7 @@ final class DocumentViewModel {
         // The file's own encoding when every character fits (a legacy file keeps its bytes), UTF-8 otherwise.
         let legacy = encoding == .utf8 ? nil : textToSave.data(using: encoding, allowLossyConversion: false)
         do {
-            try (legacy ?? Data(textToSave.utf8)).write(to: fileURL, options: .atomic)
+            try Self.write(legacy ?? Data(textToSave.utf8), to: fileURL)
             diskText = textToSave
             if legacy == nil { encoding = .utf8 }
             saveError = nil
@@ -206,6 +206,23 @@ final class DocumentViewModel {
         } catch {
             loadError = error.localizedDescription
         }
+    }
+
+    /// Safe save the way NSDocument does it: the bytes go into a file in the item-replacement directory
+    /// on the document's volume, which FileManager then swaps in. The swap keeps the original's Finder
+    /// tags, other extended attributes, permissions and creation date, which an atomic write (a new file
+    /// renamed over the old one) dropped. A volume without that directory gets the atomic write.
+    private static func write(_ data: Data, to fileURL: URL) throws {
+        let fileManager = FileManager.default
+        guard let directory = try? fileManager.url(for: .itemReplacementDirectory, in: .userDomainMask,
+                                                   appropriateFor: fileURL, create: true) else {
+            try data.write(to: fileURL, options: .atomic)
+            return
+        }
+        defer { try? fileManager.removeItem(at: directory) }
+        let replacement = directory.appendingPathComponent(fileURL.lastPathComponent)
+        try data.write(to: replacement)
+        _ = try fileManager.replaceItemAt(fileURL, withItemAt: replacement)
     }
 
     /// The file's text, read the way it was read before when its bytes are not UTF-8.

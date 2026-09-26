@@ -65,6 +65,34 @@ import UncialCore
         #expect(model.saveError == nil)
     }
 
+    /// A save changes the text, not the file around it: Finder tags, other extended attributes, the
+    /// permissions and the creation date stay (an atomic write renamed a new file over the old one).
+    @Test func saveKeepsTheFilesMetadata() throws {
+        let file = try temporaryFile("old")
+        let created = Date(timeIntervalSince1970: 1_577_836_800)
+        var values = URLResourceValues()
+        values.creationDate = created
+        var url = file
+        try url.setResourceValues(values)
+        try (file as NSURL).setResourceValue(["Red", "Work"], forKey: .tagNamesKey)
+        let marker = Array("kept".utf8)
+        #expect(setxattr(file.path, "com.example.uncial", marker, marker.count, 0, 0) == 0)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+
+        let model = DocumentViewModel(fileURL: file, initialText: "old", saveDelay: .seconds(5))
+        model.updateText("new")
+        #expect(model.saveNow() == .written)
+
+        #expect(try contents(of: file) == "new")
+        let after = try URL(fileURLWithPath: file.path).resourceValues(forKeys: [.tagNamesKey, .creationDateKey])
+        #expect(after.tagNames == ["Red", "Work"])
+        #expect(after.creationDate == created)
+        var buffer = [UInt8](repeating: 0, count: 16)
+        let size = getxattr(file.path, "com.example.uncial", &buffer, buffer.count, 0, 0)
+        #expect(size == marker.count && Array(buffer.prefix(max(size, 0))) == marker)
+        #expect(try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int == 0o600)
+    }
+
     @Test func saveNowWritesImmediately() throws {
         let file = try temporaryFile("a")
         let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .seconds(5))

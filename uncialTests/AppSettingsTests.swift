@@ -25,7 +25,7 @@ import UncialCore
         #expect(settings.readableLineWidth == true)
         #expect(settings.autosave == false)
         #expect(settings.externalChangePolicy == .ask)
-        #expect(settings.loadRemoteContent == false)
+        #expect(settings.loadRemoteContent == true)
         #expect(settings.attachmentsDirectory == "attachments")
         #expect(settings.searchesParentsForAttachments == true)
         #expect(settings.attachmentSearchBoundary == .home)
@@ -39,10 +39,10 @@ import UncialCore
     @Test func persistsRemoteContentAndExternalChangePolicy() {
         let defaults = freshDefaults()
         let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.loadRemoteContent = true
+        settings.loadRemoteContent = false
         settings.externalChangePolicy = .reload
         let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
-        #expect(reloaded.loadRemoteContent == true)
+        #expect(reloaded.loadRemoteContent == false)
         #expect(reloaded.externalChangePolicy == .reload)
         defaults.set("bogus", forKey: AppSettings.Key.externalChangePolicy)
         #expect(AppSettings(defaults: defaults, applyAppearance: false).externalChangePolicy == .ask)

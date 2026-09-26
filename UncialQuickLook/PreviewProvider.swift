@@ -14,7 +14,8 @@ final class PreviewProvider: QLPreviewProvider, QLPreviewingController {
         let fileURL = request.fileURL
         let container = SharedSettings.containerURL()
         let theme = container.flatMap(SharedSettings.readTheme(from:)) ?? .default
-        let remoteContent = container.flatMap(SharedSettings.readRemoteContent(from:)) ?? false
+        // Loading from the web is the app's default too, for a container the app has not written yet.
+        let remoteContent = container.flatMap(SharedSettings.readRemoteContent(from:)) ?? true
         Self.logger.info("Rendering preview for \(fileURL.lastPathComponent, privacy: .public) with theme \(theme.rawValue, privacy: .public)")
         let data = try Data(contentsOf: fileURL)
         let markdown = MarkdownText.decode(data)

@@ -84,7 +84,7 @@ final class AppSettings {
         didSet { defaults.set(externalChangePolicy.rawValue, forKey: Key.externalChangePolicy) }
     }
 
-    /// Let documents load images and other files from the web. Off (the default), nothing is fetched
+    /// Let documents load images and other files from the web (the default). Off, nothing is fetched
     /// on a document's behalf, in the window, in Live Preview or in Quick Look; links still open on a
     /// click. Shared with the Quick Look extension.
     var loadRemoteContent: Bool {
@@ -180,7 +180,7 @@ final class AppSettings {
         readableLineWidth = defaults.object(forKey: Key.readableLineWidth) == nil ? true : defaults.bool(forKey: Key.readableLineWidth)
         autosave = defaults.bool(forKey: Key.autosave)
         externalChangePolicy = ExternalChangePolicy(rawValue: defaults.string(forKey: Key.externalChangePolicy) ?? "") ?? .ask
-        loadRemoteContent = defaults.bool(forKey: Key.loadRemoteContent)
+        loadRemoteContent = defaults.object(forKey: Key.loadRemoteContent) == nil ? true : defaults.bool(forKey: Key.loadRemoteContent)
         attachmentsDirectory = defaults.string(forKey: Key.attachmentsDirectory) ?? AttachmentSearch.defaultDirectoryName
         searchesParentsForAttachments = defaults.object(forKey: Key.searchesParentsForAttachments) == nil ? true : defaults.bool(forKey: Key.searchesParentsForAttachments)
         attachmentSearchBoundary = AttachmentSearch.Boundary(rawValue: defaults.string(forKey: Key.attachmentSearchBoundary) ?? "") ?? .home

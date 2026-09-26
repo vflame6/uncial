@@ -202,8 +202,12 @@ struct WebView: NSViewRepresentable {
             }
         }
 
+        /// Swaps the page's whole body, the article included, so the document's own HTML parses as it did
+        /// in the first load: a raw `</article>` there closes the article early, and replacing the article's
+        /// content alone left a second copy of everything after it (BUG-30).
         private func replaceBody(_ body: String, in webView: WKWebView) {
-            let script = "document.querySelector('article.markdown-body').innerHTML = \(JavaScriptLiteral.string(body));"
+            let article = "<article class=\"markdown-body\">\n\(body)\n</article>"
+            let script = "document.body.innerHTML = \(JavaScriptLiteral.string(article));"
             webView.evaluateJavaScript(script) { [weak self] _, _ in
                 self?.reapplyScrollTarget(in: webView)
             }

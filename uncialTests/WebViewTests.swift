@@ -32,6 +32,26 @@ import WebKit
         #expect(try await text(in: webView) == "two")
     }
 
+    /// A raw `</article>` in the document closes the page's article early; a body swap parses like the
+    /// first load did instead of adding a second copy of everything after it.
+    @Test func swapsParseLikeTheFirstLoad() async throws {
+        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
+        let coordinator = WebView.Coordinator()
+        coordinator.webView = webView
+        webView.navigationDelegate = coordinator
+        coordinator.show(body: "<p id=\"p\">one</p>\n</article>\n<p>tail</p>", title: "t", theme: .macOS, baseURL: nil, remoteContent: true)
+        #expect(try await text(in: webView) == "one")
+        coordinator.show(body: "<p id=\"p\">two</p>\n</article>\n<p>tail</p>", title: "t", theme: .macOS, baseURL: nil, remoteContent: true)
+        var swapped = ""
+        for _ in 0..<40 where swapped != "two" {
+            try await Task.sleep(for: .milliseconds(100))
+            swapped = (try? await webView.evaluateJavaScript("document.getElementById('p').innerText") as? String) ?? ""
+        }
+        #expect(swapped == "two")
+        let tails = try await webView.evaluateJavaScript("document.body.innerText.split('tail').length - 1") as? Int
+        #expect(tails == 1)
+    }
+
     @Test func blockerCompilesOnce() async {
         let first = await RemoteContentBlocker.shared.ruleList()
         let second = await RemoteContentBlocker.shared.ruleList()

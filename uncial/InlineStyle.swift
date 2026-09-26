@@ -95,13 +95,11 @@ struct InlineStyle {
 
     /// What `apply` drew as pictures: the image tokens' locations, the opening fences of diagrams,
     /// and for formulas the token or block start → the character that stands for the picture (the
-    /// opening dollar, or a block's closing fence start); plus every fenced block that can be a
-    /// picture, drawn or not.
+    /// opening dollar, or a block's closing fence start).
     struct Resolved: Equatable {
         var images: Set<Int> = []
         var diagrams: Set<Int> = []
         var math: [Int: Int] = [:]
-        var pictureBlocks: [NSRange] = []
     }
 
     /// A fenced block: ``` or ~~~ with its info string, or a `$$` math block (info `math`). `range`
@@ -118,16 +116,7 @@ struct InlineStyle {
         private var firstWord: Substring? { info.split(whereSeparator: { $0 == " " || $0 == "\t" }).first }
     }
 
-    /// A mermaid fence: `range` spans both fence lines (an unclosed one ends at its last code
-    /// line), `source` is the diagram text as `MermaidRenderer.key(for:)` normalizes it.
-    struct DiagramBlock: Equatable {
-        let range: NSRange
-        let source: String
-    }
-
     let style: EditorStyle
-    /// The advance of one character of the mono font.
-    let characterWidth: CGFloat
 
     var codeBackground: NSColor { style.foreground.withAlphaComponent(0.06) }
     /// The band behind the caret's lines: the accent, faint, so it reads apart from code's gray.
@@ -135,7 +124,6 @@ struct InlineStyle {
 
     init(style: EditorStyle) {
         self.style = style
-        characterWidth = Self.advance(of: "0", in: style.regular)
     }
 
     /// Widths measured in this pass: list prefixes and table cells repeat, and each measurement lays out
@@ -176,17 +164,6 @@ struct InlineStyle {
         if convertedFonts.count > 512 { convertedFonts.removeAll() }
         convertedFonts[key] = converted
         return converted
-    }
-
-    /// The advance of one character in a font, straight from CoreText.
-    static func advance(of character: Character, in font: NSFont) -> CGFloat {
-        var characters = Array(String(character).utf16)
-        var glyphs = [CGGlyph](repeating: 0, count: characters.count)
-        guard CTFontGetGlyphsForCharacters(font as CTFont, &characters, &glyphs, characters.count) else {
-            return font.maximumAdvancement.width
-        }
-        var advances = [CGSize](repeating: .zero, count: glyphs.count)
-        return CTFontGetAdvancesForGlyphs(font as CTFont, .horizontal, &glyphs, &advances, glyphs.count)
     }
 
     /// The width `text` takes laid out in `font`: what indents and table padding are measured in.
@@ -350,8 +327,7 @@ struct InlineStyle {
         let blocks = Self.fencedBlocks(in: tokens, text: text)
         return Resolved(images: reserveImages(tokens, in: storage, images: images, revealed: revealed, textWidth: textWidth),
                         diagrams: reserveDiagrams(blocks, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth),
-                        math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth),
-                        pictureBlocks: blocks.filter { $0.isDiagram || $0.isMath }.map(\.range))
+                        math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth))
     }
 
     /// The revealed lines take the page's rhythm in the source font (`EditorStyle.revealedParagraphStyle`).
@@ -741,12 +717,6 @@ struct InlineStyle {
             blocks.append(FencedBlock(range: NSRange(location: current.start, length: max(end, current.start) - current.start), info: current.info, lines: lines, closing: nil))
         }
         return blocks
-    }
-
-    /// The fenced blocks whose info string starts with `mermaid`.
-    static func diagramBlocks(in tokens: [MarkdownHighlighter.Token], text: NSString) -> [DiagramBlock] {
-        fencedBlocks(in: tokens, text: text).filter(\.isDiagram)
-            .map { DiagramBlock(range: $0.range, source: MermaidRenderer.key(for: $0.lines.joined(separator: "\n"))) }
     }
 
     private func addTrait(_ trait: NSFontTraitMask, to storage: NSTextStorage, in range: NSRange) {

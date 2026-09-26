@@ -12,15 +12,15 @@ import Testing
 
     @Test func roundTripsTheme() throws {
         let dir = try directory()
-        try SharedSettings.write(theme: .solarized, to: dir)
+        try SharedSettings.write(theme: .solarized, remoteContent: true, to: dir)
         #expect(SharedSettings.readTheme(from: dir) == .solarized)
-        try SharedSettings.write(theme: .github, to: dir)
+        try SharedSettings.write(theme: .github, remoteContent: true, to: dir)
         #expect(SharedSettings.readTheme(from: dir) == .github)
     }
 
     @Test func createsMissingDirectory() throws {
         let dir = try directory().appendingPathComponent("nested/deeper", isDirectory: true)
-        try SharedSettings.write(theme: .macOS, to: dir)
+        try SharedSettings.write(theme: .macOS, remoteContent: true, to: dir)
         #expect(SharedSettings.readTheme(from: dir) == .macOS)
     }
 
@@ -37,8 +37,6 @@ import Testing
         try SharedSettings.write(theme: .github, remoteContent: true, to: dir)
         #expect(SharedSettings.readRemoteContent(from: dir) == true)
         #expect(SharedSettings.readTheme(from: dir) == .github)
-        try SharedSettings.write(theme: .solarized, to: dir)
-        #expect(SharedSettings.readRemoteContent(from: dir) == true, "writing the theme alone keeps the choice")
         try SharedSettings.write(theme: .solarized, remoteContent: false, to: dir)
         #expect(SharedSettings.readRemoteContent(from: dir) == false)
     }

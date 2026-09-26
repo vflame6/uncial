@@ -1,11 +1,11 @@
 import Foundation
 import UncialCore
 
-/// Finds the Markdown constructs the editor styles. Line-based with one line of lookahead
-/// (tables, setext headings) and just enough state for fenced code and a leading front-matter
-/// block; inline code is masked before the other inline constructs are matched so `*` inside
-/// backticks stays code. `tokens(in:)` is the full picture (each construct with its delimiter
-/// ranges); `spans(in:)` is the flat coloring view of it.
+/// Finds the Markdown constructs the editor styles. Line-based, with what cmark decides about blocks
+/// (`MarkdownBlocks`: code, HTML, link definitions, setext underlines) and one line of lookahead for
+/// tables; inline constructs take cmark's precedence (math, then escapes, code spans, autolinks and
+/// tags, then links and emphasis). `tokens(in:)` is the full picture (each construct with its
+/// delimiter ranges); `spans(from:)` is the flat coloring view of it.
 nonisolated enum MarkdownHighlighter {
     enum Kind: Equatable {
         case heading, strong, emphasis, strikethrough, inlineCode, codeBlock, link, url, listMarker, quote, rule, frontMatter, table, html, math, callout
@@ -24,8 +24,6 @@ nonisolated enum MarkdownHighlighter {
     /// characters show in the inline presentation, the width its column needs, the alignment.
     struct TableCell: Equatable {
         let range: NSRange
-        let visibleWidth: Int
-        let columnWidth: Int
         let alignment: TableAlignment
     }
 
@@ -122,10 +120,6 @@ nonisolated enum MarkdownHighlighter {
     private static let voidElements: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
     private static let referenceLink = regex(#"(!?)\[([^\[\]\n]+)\](?:\[([^\[\]\n]*)\])?"#)
     private static let mathFence = regex(#"^\s{0,3}\$\$\s*$"#)
-
-    static func spans(in text: String) -> [Span] {
-        spans(from: tokens(in: text))
-    }
 
     static func tokens(in text: String) -> [Token] {
         let source = text as NSString
@@ -396,7 +390,7 @@ nonisolated enum MarkdownHighlighter {
     }
 
     /// A header row followed by a delimiter row with the same number of cells, then rows until a
-    /// blank line or a line without a pipe. Column widths are the widest visible cell per column.
+    /// blank line or a line without a pipe.
     private static func tableTokens(startingAt headerIndex: Int, lines: [NSRange], source: NSString, definitions: References) -> TableParse? {
         guard headerIndex + 1 < lines.count else { return nil }
         let delimiterRange = lines[headerIndex + 1]
@@ -423,26 +417,16 @@ nonisolated enum MarkdownHighlighter {
             next += 1
         }
 
-        struct Row {
-            let range: NSRange
-            let cells: [NSRange]
-            let pipes: [Int]
-            let inline: [Token]
-            let visible: [Int]
-            let markers: [NSRange]
-        }
         let columnCount = headerCells.count
-        var widths = [Int](repeating: 0, count: columnCount)
-        var rows: [Row] = []
-        for rowIndex in rowIndexes {
+        var tokens: [Token] = []
+        for (position, rowIndex) in rowIndexes.enumerated() {
             let range = lines[rowIndex]
             let line = source.substring(with: range)
-            let local = NSRange(location: 0, length: (line as NSString).length)
-            let cells = cellRanges(in: line).map { NSRange(location: range.location + $0.location, length: $0.length) }
-            let pipes = pipe.matches(in: line, range: local).map { range.location + $0.range.location }
-            let inline = inlineTokens(in: line, offset: range.location, from: 0, definitions: definitions)
-            let hiddenRanges = inline.flatMap(\.markers)
-            let visible = cells.map { cell in cell.length - hiddenRanges.reduce(0) { $0 + NSIntersectionRange($1, cell).length } }
+            let cells = cellRanges(in: line).prefix(columnCount).enumerated().map { column, cell in
+                TableCell(range: NSRange(location: range.location + cell.location, length: cell.length), alignment: alignments[column])
+            }
+            let pipes = pipe.matches(in: line, range: NSRange(location: 0, length: (line as NSString).length)).map { range.location + $0.range.location }
+            // The outer pipes are markers.
             var markers: [NSRange] = []
             let text = line as NSString
             let leading = line.prefix(while: { $0 == " " || $0 == "\t" }).count
@@ -454,19 +438,8 @@ nonisolated enum MarkdownHighlighter {
             if last > leading, text.character(at: last) == 0x7C {
                 markers.append(NSRange(location: range.location + last, length: 1))
             }
-            for (column, width) in visible.prefix(columnCount).enumerated() {
-                widths[column] = max(widths[column], width)
-            }
-            rows.append(Row(range: range, cells: cells, pipes: pipes, inline: inline, visible: visible, markers: markers))
-        }
-
-        var tokens: [Token] = []
-        for (position, row) in rows.enumerated() {
-            let cells = row.cells.prefix(columnCount).enumerated().map { column, cell in
-                TableCell(range: cell, visibleWidth: row.visible[column], columnWidth: widths[column], alignment: alignments[column])
-            }
-            tokens.append(Token(range: row.range, kind: .tableRow(cells: cells, isHeader: position == 0, pipes: row.pipes), markers: row.markers))
-            tokens += row.inline
+            tokens.append(Token(range: range, kind: .tableRow(cells: cells, isHeader: position == 0, pipes: pipes), markers: markers))
+            tokens += inlineTokens(in: line, offset: range.location, from: 0, definitions: definitions)
             if position == 0 {
                 tokens.append(Token(range: delimiterRange, kind: .tableDelimiter, markers: [delimiterRange]))
             }

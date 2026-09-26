@@ -31,11 +31,6 @@ public enum SharedSettings {
         try data.write(to: directory.appendingPathComponent(fileName), options: .atomic)
     }
 
-    /// Writes the theme, keeping the remote-content choice already on file (off when none).
-    public static func write(theme: Theme, to directory: URL) throws {
-        try write(theme: theme, remoteContent: readRemoteContent(from: directory) ?? false, to: directory)
-    }
-
     private static func read(from directory: URL) -> [String: Any] {
         guard let data = try? Data(contentsOf: directory.appendingPathComponent(fileName)),
               let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any] else { return [:] }

@@ -285,8 +285,8 @@ final class ThemedTextView: NSTextView {
                 resolvedImages = resolved.images
                 resolvedDiagrams = resolved.diagrams
                 resolvedMath = resolved.math
-                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, pictureBlocks: resolved.pictureBlocks,
-                                      resolvedDiagrams: resolvedDiagrams, resolvedMath: resolvedMath, calloutBlocks: callouts)
+                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, resolvedDiagrams: resolvedDiagrams,
+                                      resolvedMath: resolvedMath, calloutBlocks: callouts)
                 revealed = markers.revealedRange(for: selectedRange(), in: text as NSString)
             }
             CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)

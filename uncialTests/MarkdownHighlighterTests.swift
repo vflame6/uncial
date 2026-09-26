@@ -4,7 +4,7 @@ import Testing
 
 @Suite struct MarkdownHighlighterTests {
     private func kinds(_ text: String) -> [(MarkdownHighlighter.Kind, String)] {
-        MarkdownHighlighter.spans(in: text).map { ($0.kind, (text as NSString).substring(with: $0.range)) }
+        MarkdownHighlighter.spans(from: MarkdownHighlighter.tokens(in: text)).map { ($0.kind, (text as NSString).substring(with: $0.range)) }
     }
 
     private func has(_ text: String, _ kind: MarkdownHighlighter.Kind, _ fragment: String) -> Bool {
@@ -14,7 +14,7 @@ import Testing
     @Test func headingsCoverTheWholeLine() {
         let text = "# Title\ntext"
         #expect(has(text, .heading, "# Title"))
-        #expect(MarkdownHighlighter.spans(in: text).count == 1)
+        #expect(MarkdownHighlighter.spans(from: MarkdownHighlighter.tokens(in: text)).count == 1)
     }
 
     @Test func fencedCodeTracksState() {
@@ -169,7 +169,6 @@ import Testing
         }
         #expect(isHeader && pipes == [0, 4, 12])
         #expect(cells.map { (text as NSString).substring(with: $0.range) } == [" a ", " **b** "])
-        #expect(cells.map(\.visibleWidth) == [3, 3] && cells.map(\.columnWidth) == [4, 3])
         #expect(cells.map(\.alignment) == [.left, .right])
         #expect(markers(tokens[0], in: text) == ["|", "|"])
         #expect(tokens[1].kind == .strong)
@@ -178,7 +177,7 @@ import Testing
             Issue.record("no body row")
             return
         }
-        #expect(!bodyHeader && body.map(\.visibleWidth) == [4, 3] && body.map(\.columnWidth) == [4, 3])
+        #expect(!bodyHeader && body.map { (text as NSString).substring(with: $0.range) } == [" cc ", " d "])
         #expect(tokens.count == 4)
         #expect(has(text, .table, "|") && has(text, .table, "|:--|--:|"))
     }
@@ -484,7 +483,7 @@ import Testing
     }
 
     @Test func plainTextHasNoSpans() {
-        #expect(MarkdownHighlighter.spans(in: "just words here\nand more").isEmpty)
-        #expect(MarkdownHighlighter.spans(in: "").isEmpty)
+        #expect(MarkdownHighlighter.spans(from: MarkdownHighlighter.tokens(in: "just words here\nand more")).isEmpty)
+        #expect(MarkdownHighlighter.spans(from: MarkdownHighlighter.tokens(in: "")).isEmpty)
     }
 }

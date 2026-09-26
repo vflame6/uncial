@@ -3,8 +3,7 @@ import Foundation
 /// What the inline presentation hides and reveals: the delimiter ranges of every construct, the
 /// bullets it re-draws, and the fenced blocks (``` and `$$`) that reveal as a whole when the caret
 /// is inside. Image markers hide only for the images that loaded (`resolvedImages`: token
-/// locations). `pictureBlocks` are the fences that can be pictures (`InlineStyle.Resolved.pictureBlocks`):
-/// a diagram whose picture is drawn (`resolvedDiagrams`: opening fence locations) hides entirely
+/// locations). A diagram whose picture is drawn (`resolvedDiagrams`: opening fence locations) hides entirely
 /// except for its last newline, which keeps one line for the picture to hang under; a formula whose
 /// picture is drawn (`resolvedMath`: token or block start → anchor) hides everything but its anchor,
 /// the one character laid out as a box of the picture's size.
@@ -20,18 +19,14 @@ nonisolated struct MarkerIndex: Equatable {
     /// Fenced code and math blocks including both fence lines (an unclosed one runs to its last line),
     /// and callouts: what reveals as a whole.
     let blocks: [NSRange]
-    /// Every range that can turn into a picture, drawn or not: a reveal change touching one
-    /// re-applies attributes.
-    let pictureRanges: [NSRange]
     /// Sorted character indexes that stand for a formula's picture.
     let anchors: [Int]
 
     /// `calloutBlocks` (`MarkdownHighlighter.calloutBlocks`) reveal as a whole too.
-    init(tokens: [MarkdownHighlighter.Token], resolvedImages: Set<Int> = [], pictureBlocks: [NSRange] = [], resolvedDiagrams: Set<Int> = [], resolvedMath: [Int: Int] = [:], calloutBlocks: [NSRange] = []) {
+    init(tokens: [MarkdownHighlighter.Token], resolvedImages: Set<Int> = [], resolvedDiagrams: Set<Int> = [], resolvedMath: [Int: Int] = [:], calloutBlocks: [NSRange] = []) {
         var hidden: [NSRange] = []
         var bullets: Set<Int> = []
         var blocks: [NSRange] = []
-        var mathTokens: [NSRange] = []
         var blockStart: Int?
         var blockEnd = 0
         /// Closes the block; true when it hides as a formula, whose closing fence keeps the anchor visible.
@@ -69,7 +64,6 @@ nonisolated struct MarkerIndex: Equatable {
                 if blockStart != nil {
                     blockEnd = NSMaxRange(token.range)
                 } else if !token.markers.isEmpty {
-                    mathTokens.append(token.range)
                     if let anchor = resolvedMath[token.range.location] {
                         hidden += Self.excluding(anchor, from: token.range)
                         continue
@@ -87,7 +81,6 @@ nonisolated struct MarkerIndex: Equatable {
         self.bullets = bullets
         self.sortedBullets = bullets.sorted()
         self.blocks = blocks + calloutBlocks
-        self.pictureRanges = pictureBlocks + mathTokens
         self.anchors = resolvedMath.values.sorted()
     }
 
@@ -205,10 +198,5 @@ nonisolated struct MarkerIndex: Equatable {
             range = NSUnionRange(range, text.lineRange(for: block))
         }
         return range
-    }
-
-    /// Whether a range that can be a picture touches `range` (so a reveal change must re-apply attributes).
-    func hasPicture(touching range: NSRange) -> Bool {
-        pictureRanges.contains { NSIntersectionRange($0, range).length > 0 || NSLocationInRange(range.location, $0) }
     }
 }

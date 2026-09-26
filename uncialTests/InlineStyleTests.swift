@@ -43,7 +43,6 @@ import UncialCore
             InlineStyle.FencedBlock(range: NSRange(location: 22, length: 19), info: "mermaid", lines: ["graph TD"], closing: nil),
         ])
         #expect(blocks.map(\.isMath) == [true, true, false] && blocks.map(\.isDiagram) == [false, false, true])
-        #expect(InlineStyle.diagramBlocks(in: MarkdownHighlighter.tokens(in: text), text: text as NSString) == [InlineStyle.DiagramBlock(range: NSRange(location: 22, length: 19), source: "graph TD")])
     }
 
     @Test func drawsMathInPlaceOfItsTeX() {
@@ -57,7 +56,7 @@ import UncialCore
             return tex == "z" ? nil : picture
         }, revealed: NSRange(location: 0, length: 0), textWidth: 200)
         #expect(asked == ["x:false", "z:true", "y:true"])
-        #expect(resolved.math == [2: 2, 14: 24] && resolved.pictureBlocks == [NSRange(location: 14, length: 13)])
+        #expect(resolved.math == [2: 2, 14: 24])
         // Fitted to the text width, baseline scaled along.
         let inline = storage.attribute(.mathPicture, at: 2, effectiveRange: nil) as? MathPicture
         #expect(inline?.size == NSSize(width: 200, height: 40) && inline?.baseline == 27)

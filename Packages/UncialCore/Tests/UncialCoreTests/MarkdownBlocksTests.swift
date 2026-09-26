@@ -38,6 +38,16 @@ import Testing
         #expect(kinds("a <b>c</b>") == [nil])
     }
 
+    /// cmark's range for an HTML block closed by its end condition (`</script>`, `-->`, `</pre>`) stops a
+    /// line short; its literal has every line.
+    @Test func htmlBlocksKeepTheirClosingLine() {
+        #expect(kinds("<script>\nfoo\n</script>1. *bar*\n\nafter") == [.html, .html, .html, nil, nil])
+        #expect(kinds("<!--\nc\n-->\nafter") == [.html, .html, .html, nil])
+        #expect(kinds("- <!--\n  c\n  -->\n- b") == [.html, .html, .html, nil])
+        let crlf = MarkdownBlocks("<pre>\r\nx\r\n</pre>\r\nafter")
+        #expect((0..<4).map { crlf.kind(ofLine: $0) } == [.html, .html, .html, nil])
+    }
+
     /// Link reference definitions where cmark takes them: where a paragraph starts, or right after
     /// another definition; each with the lines it takes (BUG-28).
     @Test func linkDefinitionsWhereCmarkTakesThem() {

@@ -94,7 +94,10 @@ public struct MarkdownBlocks: Sendable, Equatable {
                     // A setext heading was a paragraph until its underline.
                     paragraphs.append((first...(last - 1), Int(cmark_node_get_start_column(node)) - 1))
                 case CMARK_NODE_HTML_BLOCK:
-                    for line in first...last { kinds[line] = .html }
+                    // cmark's range stops a line short for a block its end condition closed (`</script>`,
+                    // `-->`); the literal has every line.
+                    let literal = cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
+                    for line in first...max(last, first + Self.lineCount(of: literal) - 1) { kinds[line] = .html }
                 case CMARK_NODE_CODE_BLOCK:
                     var length: Int32 = 0, offset: Int32 = 0
                     var character: CChar = 0
@@ -110,8 +113,7 @@ public struct MarkdownBlocks: Sendable, Equatable {
                         for line in (first + 1)...last { kinds[line] = .fencedCode }
                         // cmark keeps no "closed" flag: a closed block's content is one line short of its span.
                         let literal = cmark_node_get_literal(node).map { String(cString: $0) } ?? ""
-                        let contentLines = literal.reduce(0) { $1 == "\n" ? $0 + 1 : $0 }
-                        if last - first - 1 == contentLines { kinds[last] = .fenceClosing }
+                        if last - first - 1 == Self.lineCount(of: literal) { kinds[last] = .fenceClosing }
                     }
                 default:
                     break
@@ -170,6 +172,16 @@ public struct MarkdownBlocks: Sendable, Equatable {
 
     public func kind(ofLine line: Int) -> Kind? {
         kinds[line]
+    }
+
+    /// How many lines `text` holds, each ended by `\n`, `\r\n` or `\r` (a last one without a break counts).
+    static func lineCount(of text: String) -> Int {
+        var count = 0, previous: UInt8 = 0
+        for byte in text.utf8 {
+            if byte == 0x0A && previous != 0x0D || byte == 0x0D { count += 1 }
+            previous = byte
+        }
+        return count + (previous == 0x0A || previous == 0x0D || text.isEmpty ? 0 : 1)
     }
 
     /// The lines as cmark counts them: broken at `\n`, `\r\n` (one Character) and `\r` only, not at a

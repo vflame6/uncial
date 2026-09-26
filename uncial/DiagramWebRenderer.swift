@@ -36,6 +36,11 @@ nonisolated struct MathRequest: Hashable {
 @MainActor
 final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
     static let shared = DiagramWebRenderer()
+    /// The official mermaid.js build, a resource of the app: WebKit cannot run in the extensions, so it
+    /// stays out of UncialCore's bundle, which they embed (PERF-11).
+    static var libraryURL: URL? {
+        Bundle.main.url(forResource: "mermaid.min", withExtension: "js")
+    }
 
     private var webView: WKWebView?
     private var window: NSWindow?
@@ -337,7 +342,7 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             webView = view
         }
         if !libraryLoaded {
-            guard let url = MermaidRenderer.webLibraryURL, let library = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+            guard let url = Self.libraryURL, let library = try? String(contentsOf: url, encoding: .utf8) else { return nil }
             let loaded = try? await withTimeout { () -> Bool in
                 await withCheckedContinuation { continuation in
                     self.pageLoaded = continuation

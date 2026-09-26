@@ -2,8 +2,8 @@ import Foundation
 import JavaScriptCore
 import cmark_gfm
 
-/// A diagram drawn ahead of time by the official mermaid.js (in the app's or the extension's hidden
-/// web view): the SVG in the theme's light colors and again in its dark ones.
+/// A diagram drawn ahead of time by the official mermaid.js (in the app's hidden web view): the SVG in
+/// the theme's light colors and again in its dark ones.
 public struct PreRenderedDiagram: Equatable, Sendable {
     public let light: String
     public let dark: String
@@ -101,11 +101,6 @@ public enum MermaidRenderer {
     private static let fence = try! NSRegularExpression(pattern: #"<pre(?:\s+(data-sourcepos="[^"]*"))?[^>]*><code class="language-mermaid">([\s\S]*?)</code></pre>"#)
     private static let fontImport = try! NSRegularExpression(pattern: #"\s*@import url\('https://fonts\.googleapis\.com[^)]*\);"#)
     private static let fontRule = try! NSRegularExpression(pattern: #"text \{ font-family: [^}]*\}"#)
-
-    /// The official mermaid.js build, for the hidden web view of the app and the extension.
-    public static var webLibraryURL: URL? {
-        Bundle.module.url(forResource: "mermaid.min", withExtension: "js")
-    }
 
     /// Replaces every mermaid fence: beautiful-mermaid's SVG when it can draw the diagram, otherwise
     /// the pre-rendered light and dark SVGs found in `diagrams` under the fence's `key`, otherwise

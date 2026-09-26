@@ -63,7 +63,6 @@ import Testing
         """
         #expect(MermaidRenderer.unsupportedFences(in: markdown) == ["pie title Pets\n  \"Dogs\" : 386", "gantt\n  title A"])
         #expect(MermaidRenderer.unsupportedFences(in: "no fences").isEmpty)
-        #expect(MermaidRenderer.webLibraryURL != nil)
     }
 
     @Test func themesHaveConcreteDiagramColors() {

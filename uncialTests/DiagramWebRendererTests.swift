@@ -97,6 +97,15 @@ final class LoopbackListener: @unchecked Sendable {
 
     /// The stage needs no network: a diagram naming a web image (mermaid's image shape; front
     /// matter sends any flowchart to mermaid.js) must not reach the server, whatever the setting.
+    /// mermaid.js ships with the app, the only place WebKit can run it, and not in UncialCore's resource
+    /// bundle, which both extensions embed (PERF-11: 5.6 MB in each).
+    @Test func mermaidShipsOnlyWithTheApp() throws {
+        #expect(DiagramWebRenderer.libraryURL != nil)
+        let coreBundle = try #require(Bundle.main.url(forResource: "UncialCore_UncialCore", withExtension: "bundle").flatMap(Bundle.init(url:)))
+        #expect(coreBundle.url(forResource: "mermaid.min", withExtension: "js") == nil)
+        #expect(coreBundle.url(forResource: "katex.min", withExtension: "js") != nil)
+    }
+
     @Test func stageLoadsNothingFromTheWeb() async throws {
         let listener = try LoopbackListener()
         await listener.start()

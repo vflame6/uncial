@@ -575,16 +575,31 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: .footnoteReference, markers: edges(match.range, open: 2, close: 1)))
             mask(match.range)
         }
-        for match in hasBracket ? referenceLink.matches(in: scratch as String, range: region) : [] {
+        // Reference links, left to right: brackets that make no link (an undefined label, or a link's text
+        // holding a link, `[a [b](c)][ref]`) leave the brackets after them to be read (BUG-28). Only the
+        // markers are masked, so the text still parses.
+        var search = region.location
+        while hasBracket, search < NSMaxRange(region),
+              let match = referenceLink.firstMatch(in: scratch as String, range: NSRange(location: search, length: NSMaxRange(region) - search)) {
             let text = match.range(at: 2)
             let explicit = match.range(at: 3)
             let label = explicit.location != NSNotFound && explicit.length > 0 ? explicit : text
-            guard let destination = definitions.links[normalized(label: scratch.substring(with: label))] else { continue }
             let isImage = match.range(at: 1).length == 1
-            let open = NSRange(location: offset + match.range.location, length: isImage ? 2 : 1)
-            let close = NSRange(location: offset + NSMaxRange(text), length: NSMaxRange(match.range) - NSMaxRange(text))
-            tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination), markers: [open, close]))
-            mask(match.range)
+            let holdsLink = !isImage && tokens.contains { token in
+                guard case .link = token.kind else { return false }
+                return NSLocationInRange(token.range.location, shifted(text))
+            }
+            guard !holdsLink, let destination = definitions.links[normalized(label: scratch.substring(with: label))] else {
+                search = match.range.location + 1
+                continue
+            }
+            let open = NSRange(location: match.range.location, length: isImage ? 2 : 1)
+            let close = NSRange(location: NSMaxRange(text), length: NSMaxRange(match.range) - NSMaxRange(text))
+            tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination),
+                                markers: [shifted(open), shifted(close)]))
+            mask(open)
+            mask(close)
+            search = NSMaxRange(match.range)
         }
         // The regexes propose; CommonMark decides: each run must be able to open or close (flanking, and
         // `_` never inside a word), and no pair may join a delimiter outside a link's text to one inside.

@@ -347,6 +347,23 @@ import Testing
         #expect(hidden == ["<div>", "<a h*#ref=\"hi\">", "</a>", "</p class=\"y\">", "</div>"])
     }
 
+    /// No link inside a link: `[foo [bar](/uri)][ref]` links `bar` and `ref`, the outer brackets stay;
+    /// and brackets that make no link leave the next ones to be read (`[foo][bar][baz]` with `bar`
+    /// undefined links `bar` through `baz`).
+    @Test func referenceLinksHoldNoLinks() {
+        func links(_ text: String) -> [String] {
+            MarkdownHighlighter.tokens(in: text).filter {
+                if case .link = $0.kind { return true }
+                return false
+            }.map { (text as NSString).substring(with: $0.range) }
+        }
+        #expect(links("[foo [bar](/uri)][ref]\n\n[ref]: /uri") == ["[bar](/uri)", "[ref]"])
+        #expect(links("[foo][bar][baz]\n\n[baz]: /url1\n[foo]: /url2") == ["[bar][baz]"])
+        #expect(links("[foo][bar]\n\n[foo]: /url") == [])
+        // The text inside still parses.
+        #expect(MarkdownHighlighter.tokens(in: "[*a*][r]\n\n[r]: /u").map(\.kind).prefix(2) == [.link(destination: "/u"), .emphasis])
+    }
+
     /// Raw HTML as cmark reads it: a bad attribute name, an unclosed quote, attributes without space
     /// between them or on a closing tag make text; `<!-->` is a whole comment; processing instructions,
     /// declarations and CDATA are HTML; GFM's tag filter shows `<title>`, `<style>`, `<script>` and the

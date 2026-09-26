@@ -77,6 +77,8 @@ final class DocumentViewModel {
     private var renderTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
     private var generation = 0
+    /// The page render in flight; a newer one cancels it.
+    private var pageRender: Task<Void, Never>?
     private var terminationObserver: NSObjectProtocol?
 
     init(
@@ -185,6 +187,9 @@ final class DocumentViewModel {
         do {
             try Self.write(legacy ?? Data(textToSave.utf8), to: fileURL)
             diskText = textToSave
+            // The saved diagrams were drawn while typing; Quick Look's store gets them now.
+            let sources = MermaidRenderer.unsupportedFences(in: textToSave)
+            if !sources.isEmpty { DiagramWebRenderer.shared.keepForQuickLook(sources, theme: theme) }
             if legacy == nil { encoding = .utf8 }
             saveError = nil
             syncDocumentModificationDate(for: fileURL)
@@ -378,14 +383,23 @@ final class DocumentViewModel {
         let generation = generation
         let renderer = renderer
         let text = text
+        let saved = diskText
         let baseURL = fileURL
         let theme = theme
         let remoteContent = remoteContent
         let attachments = attachmentSearch
-        Task.detached(priority: .userInitiated) {
+        // A newer text supersedes this render: its diagrams need not reach the stage (PERF-7).
+        pageRender?.cancel()
+        pageRender = Task.detached(priority: .userInitiated) {
             // Diagrams beautiful-mermaid cannot draw go through mermaid.js in the hidden web view first.
             let sources = MermaidRenderer.unsupportedFences(in: text)
             let diagrams = sources.isEmpty ? [:] : await DiagramWebRenderer.shared.render(sources, theme: theme)
+            guard !Task.isCancelled else { return }
+            if !sources.isEmpty {
+                // Quick Look shows the file on disk: its store gets the diagrams the saved text holds.
+                let kept = Set(MermaidRenderer.unsupportedFences(in: saved))
+                await DiagramWebRenderer.shared.keepForQuickLook(sources.filter(kept.contains), theme: theme)
+            }
             let body = renderer.renderBody(text, baseURL: baseURL, sourcePositions: true, diagrams: diagrams, remoteContent: remoteContent, attachments: attachments)
             let statistics = DocumentStatistics(text: text)
             await MainActor.run { [weak self] in

@@ -128,9 +128,31 @@ final class LoopbackListener: @unchecked Sendable {
         #expect(pie.dark.contains("mermaid-dark-") && pie.light != pie.dark)
         #expect(!pie.light.contains("<script"))
         #expect(diagrams[ganttSource]?.light.contains("Task") == true)
-        // The second time comes from the cache, same content; the store has it for Quick Look.
+        // The second time comes from the cache, same content. Quick Look's store gets what a saved file
+        // holds, when told, not every version rendered while typing.
         #expect(await renderer.render([pieSource], theme: .github)[pieSource] == pie)
-        #expect(store.diagrams(for: [pieSource, ganttSource], theme: .github).count == 2)
+        #expect(store.diagrams(for: [pieSource, ganttSource], theme: .github).isEmpty)
+        renderer.keepForQuickLook([pieSource, "nonsense diagram type"], theme: .github)
+        #expect(store.diagrams(for: [pieSource, ganttSource], theme: .github).count == 1)
+    }
+
+    /// A source mermaid.js rejects is remembered like one it draws: every page render used to pay for it
+    /// again (1.9 s for a 450-node fence). A render that is superseded before its turn on the stage does
+    /// not run: typing left the page seconds behind while old versions rendered one by one.
+    @Test func remembersFailuresAndSkipsSupersededRenders() async throws {
+        let renderer = DiagramWebRenderer()
+        let failing = "nonsense diagram type \(UUID())"
+        _ = await renderer.render([failing], theme: .github)
+        let afterFirst = renderer.stageRenders
+        _ = await renderer.render([failing], theme: .github)
+        #expect(renderer.stageRenders == afterFirst)
+
+        let sources = (1...4).map { "gantt\n  dateFormat YYYY-MM-DD\n  section S\n  Task \($0) :a1, 2026-01-0\($0), 3d" }
+        let before = renderer.stageRenders
+        let superseded = Task { await renderer.render(sources, theme: .macOS) }
+        superseded.cancel()
+        _ = await superseded.value
+        #expect(renderer.stageRenders - before <= 1, "\(renderer.stageRenders - before) renders ran for a cancelled page")
     }
 
     @Test func rasterizesDiagramsForLivePreview() async throws {

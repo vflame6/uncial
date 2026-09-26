@@ -42,7 +42,13 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
     private var pageLoaded: CheckedContinuation<Void, Never>?
     private var libraryLoaded = false
     private var stageTheme: Theme?
-    private var svgCache: [String: PreRenderedDiagram] = [:]
+    /// What mermaid.js made of a source per theme, rejections included (nil), so a failing fence is not
+    /// drawn again on every page render (PERF-7); the oldest go beyond `svgCacheLimit` entries.
+    private var svgCache: [String: PreRenderedDiagram?] = [:]
+    private var svgCacheOrder: [String] = []
+    static let svgCacheLimit = 256
+    /// How many sources went to mermaid.js on the stage, for tests.
+    private(set) var stageRenders = 0
     /// Bitmaps drawn for Live Preview, oldest first out once they hold more than `imageCacheLimit`
     /// bytes of pixels (WebKit's snapshots keep their pixels resident in its helper process).
     private var imageCache: [DiagramRequest: NSImage] = [:]
@@ -62,9 +68,11 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
     // MARK: SVG for the page
 
     /// Light and dark SVG for every source mermaid.js accepts, keyed by source; the rest are left out.
+    /// A cancelled caller (a page render superseded by typing) gets what is done and starts nothing more.
     func render(_ sources: [String], theme: Theme) async -> [String: PreRenderedDiagram] {
         var result: [String: PreRenderedDiagram] = [:]
         for source in sources {
+            guard !Task.isCancelled else { break }
             if let diagram = await variants(for: source, theme: theme) {
                 result[source] = diagram
             }
@@ -72,26 +80,59 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         return result
     }
 
+    /// Hands Quick Look's store the diagrams of `sources` drawn so far: the app calls it with what the
+    /// saved file holds, since Quick Look previews the file on disk (BUG-20: every version typed went
+    /// into the 400-file store and pushed out other documents' diagrams).
+    func keepForQuickLook(_ sources: [String], theme: Theme) {
+        guard let store else { return }
+        var diagrams: [String: PreRenderedDiagram] = [:]
+        for source in sources {
+            if let diagram = svgCache[theme.rawValue + "\u{0}" + source] ?? nil { diagrams[source] = diagram }
+        }
+        if !diagrams.isEmpty { store.save(diagrams, theme: theme) }
+    }
+
     private func variants(for source: String, theme: Theme) async -> PreRenderedDiagram? {
         let key = theme.rawValue + "\u{0}" + source
         if let cached = svgCache[key] { return cached }
-        let diagram = await serialized { () -> PreRenderedDiagram? in
-            guard let webView = await self.prepare(theme: theme) else { return nil }
+        guard !Task.isCancelled else { return nil }
+        // nil: nothing to remember (superseded, the stage unavailable or timed out); .some(nil): mermaid.js
+        // rejected the source.
+        let outcome = await serialized { () -> PreRenderedDiagram?? in
+            // Another request may have drawn it while this one waited.
+            if let cached = self.svgCache[key] { return cached }
+            guard !Task.isCancelled, let webView = await self.prepare(theme: theme) else { return nil }
+            self.stageRenders += 1
             self.nextID += 1
             let id = self.nextID
             let palette = theme.diagramPalette
-            guard let light = await self.svg(source, colors: palette.light, dark: false, id: "mermaid-light-\(id)", in: webView),
-                  let dark = await self.svg(source, colors: palette.dark, dark: true, id: "mermaid-dark-\(id)", in: webView) else { return nil }
-            return PreRenderedDiagram(light: light, dark: dark)
+            do {
+                guard let light = try await self.svg(source, colors: palette.light, dark: false, id: "mermaid-light-\(id)", in: webView),
+                      let dark = try await self.svg(source, colors: palette.dark, dark: true, id: "mermaid-dark-\(id)", in: webView) else {
+                    return .some(nil)
+                }
+                return .some(PreRenderedDiagram(light: light, dark: dark))
+            } catch {
+                return nil
+            }
         }
-        if let diagram {
-            svgCache[key] = diagram
-            store?.save([source: diagram], theme: theme)
-        }
-        return diagram
+        guard let outcome else { return nil }
+        remember(outcome, for: key)
+        return outcome
     }
 
-    private func svg(_ source: String, colors: DiagramPalette.Colors, dark: Bool, id: String, in webView: WKWebView) async -> String? {
+    private func remember(_ diagram: PreRenderedDiagram?, for key: String) {
+        if svgCache.updateValue(diagram, forKey: key) == nil {
+            svgCacheOrder.append(key)
+        }
+        while svgCacheOrder.count > Self.svgCacheLimit {
+            svgCache.removeValue(forKey: svgCacheOrder.removeFirst())
+        }
+    }
+
+    /// The SVG, or nil when mermaid.js rejects the source; throws `TimedOut` when the stage ran out of
+    /// time, which says nothing about the source.
+    private func svg(_ source: String, colors: DiagramPalette.Colors, dark: Bool, id: String, in webView: WKWebView) async throws -> String? {
         let body = """
         mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", darkMode: dark, themeVariables: variables,
                              fontFamily: "system-ui, -apple-system, sans-serif", flowchart: { htmlLabels: false }, logLevel: 5 });
@@ -99,7 +140,14 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         return result.svg;
         """
         let arguments: [String: Any] = ["id": id, "text": source, "dark": dark, "variables": Self.themeVariables(colors)]
-        let value = try? await withTimeout { try await webView.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: .page) }
+        let value: Any?
+        do {
+            value = try await withTimeout { try await webView.callAsyncJavaScript(body, arguments: arguments, in: nil, contentWorld: .page) }
+        } catch let error as TimedOut {
+            throw error
+        } catch {
+            return nil
+        }
         guard let svg = value as? String, svg.hasPrefix("<svg") else { return nil }
         return svg
     }
@@ -375,7 +423,8 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
         }
     }
 
-    /// One diagram at a time on the stage.
+    /// One diagram at a time on the stage. A caller's cancellation reaches the body, which checks it
+    /// once its turn comes.
     private func serialized<T>(_ body: @escaping @MainActor () async -> T) async -> T {
         let previous = last
         let task = Task { @MainActor () -> T in
@@ -383,7 +432,11 @@ final class DiagramWebRenderer: NSObject, WKNavigationDelegate {
             return await body()
         }
         last = Task { _ = await task.value }
-        return await task.value
+        return await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     /// `body`'s result, or `TimedOut` once `timeout` has passed, whichever comes first. WebKit's calls

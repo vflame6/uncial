@@ -8,6 +8,50 @@ import Testing
         #expect(MarkdownText.decode(Data("# Hi".utf8)) == "# Hi")
     }
 
+    private func file(_ data: Data) throws -> URL {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-prefix-\(UUID().uuidString).md")
+        try data.write(to: url)
+        return url
+    }
+
+    /// A view that shows only the beginning (a Finder thumbnail) reads only that much: a longer file is
+    /// cut at its last line break inside the limit, and a cut never splits a character.
+    @Test func readsAPrefixWithoutSplittingCharacters() throws {
+        let small = try file(Data("# Hi\n".utf8))
+        defer { try? FileManager.default.removeItem(at: small) }
+        #expect(try MarkdownText.readPrefix(of: small, maxBytes: 64) == "# Hi\n")
+
+        let lines = (0..<100).map { "line \($0)" }.joined(separator: "\n")
+        let long = try file(Data(lines.utf8))
+        defer { try? FileManager.default.removeItem(at: long) }
+        let prefix = try MarkdownText.readPrefix(of: long, maxBytes: 100)
+        #expect(prefix.hasSuffix("\n") && lines.hasPrefix(prefix) && prefix.utf8.count <= 100)
+
+        let accents = String(repeating: "é", count: 200)
+        let oneLine = try file(Data(accents.utf8))
+        defer { try? FileManager.default.removeItem(at: oneLine) }
+        let cut = try MarkdownText.readPrefix(of: oneLine, maxBytes: 101)
+        #expect(!cut.isEmpty && accents.hasPrefix(cut))
+
+        let faces = String(repeating: "😀", count: 100)
+        let utf16 = try file(faces.data(using: .utf16LittleEndian).map { Data([0xFF, 0xFE]) + $0 }!)
+        defer { try? FileManager.default.removeItem(at: utf16) }
+        let half = try MarkdownText.readPrefix(of: utf16, maxBytes: 100)
+        #expect(!half.isEmpty && faces.hasPrefix(half))
+    }
+
+    /// A 10 MB fenced block outlines in no time from a prefix; parsing it whole took 1.9 s and 300 MB.
+    @Test func aPrefixOutlinesAHugeFileQuickly() throws {
+        let huge = try file(Data(("```\n" + String(repeating: "0123456789abcdef\n", count: 640_000) + "```\n").utf8))
+        defer { try? FileManager.default.removeItem(at: huge) }
+        var count = 0
+        let elapsed = ContinuousClock().measure {
+            count = (try? MarkdownOutline.blocks(in: MarkdownText.readPrefix(of: huge, maxBytes: 64 << 10), limit: 80).count) ?? 0
+        }
+        #expect(count == 1)
+        #expect(elapsed < .milliseconds(200), "took \(elapsed)")
+    }
+
     @Test func decodesUTF16WithBOM() {
         #expect(MarkdownText.decode("# Hi".data(using: .utf16)!) == "# Hi")
     }

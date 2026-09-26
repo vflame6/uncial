@@ -18,6 +18,14 @@ final class DocumentViewModel {
     private(set) var loadError: String?
     private(set) var saveError: String?
 
+    /// What the window reports under its panes, in every mode: a failed save, or a failed reload while
+    /// the page still shows the text read before (with nothing to show, the page itself says it).
+    var problem: String? {
+        if let saveError { return "Couldn't save: \(saveError)" }
+        if let loadError, !body.isEmpty { return "Couldn't reload: \(loadError)" }
+        return nil
+    }
+
     var title: String { fileURL?.lastPathComponent ?? "Markdown" }
     /// The document theme: mermaid.js bakes its colors into the diagrams it draws, so a change re-renders.
     var theme: Theme {

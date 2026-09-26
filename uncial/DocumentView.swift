@@ -35,6 +35,16 @@ struct DocumentView: View {
             } trailing: {
                 preview
             }
+            // A failed save or reload, whatever panes are showing (Read Only has no editor to show it under).
+            if let problem = model.problem {
+                Text(problem)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(.bar)
+            }
             if settings.showStatusBar {
                 StatusBarView(mode: mode, statistics: model.statistics)
             }
@@ -98,35 +108,24 @@ struct DocumentView: View {
     }
 
     private var editor: some View {
-        VStack(spacing: 0) {
-            MarkdownTextView(
-                text: model.text,
-                theme: settings.theme,
-                fontSize: CGFloat(settings.effectiveTextSize),
-                showsLineNumbers: settings.showLineNumbers,
-                autoPairing: settings.autoPairing,
-                continueLists: settings.continueLists,
-                presentation: mode.presentation,
-                readableWidth: settings.readableLineWidth,
-                baseURL: model.fileURL?.deletingLastPathComponent(),
-                loadsRemoteImages: settings.loadRemoteContent,
-                attachmentSearch: settings.attachmentSearch,
-                attachmentDestination: settings.attachmentDestination,
-                scrollTarget: sync.editorTarget,
-                handle: editorHandle,
-                onChange: { model.updateText($0) },
-                onScroll: { sync.editorDidScroll(toLine: $0) }
-            )
-            if let saveError = model.saveError {
-                Text("Couldn't save: \(saveError)")
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.bar)
-            }
-        }
+        MarkdownTextView(
+            text: model.text,
+            theme: settings.theme,
+            fontSize: CGFloat(settings.effectiveTextSize),
+            showsLineNumbers: settings.showLineNumbers,
+            autoPairing: settings.autoPairing,
+            continueLists: settings.continueLists,
+            presentation: mode.presentation,
+            readableWidth: settings.readableLineWidth,
+            baseURL: model.fileURL?.deletingLastPathComponent(),
+            loadsRemoteImages: settings.loadRemoteContent,
+            attachmentSearch: settings.attachmentSearch,
+            attachmentDestination: settings.attachmentDestination,
+            scrollTarget: sync.editorTarget,
+            handle: editorHandle,
+            onChange: { model.updateText($0) },
+            onScroll: { sync.editorDidScroll(toLine: $0) }
+        )
     }
 
     private var preview: some View {

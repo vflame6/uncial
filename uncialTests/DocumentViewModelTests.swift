@@ -279,6 +279,22 @@ import UncialCore
         #expect(model.hasUnsavedChanges == true)
     }
 
+    /// A failed save or reload is reported for the window in every mode: the save error used to show
+    /// only under the editor, and a reload error only in place of an empty page.
+    @Test func reportsSaveAndReloadProblems() async throws {
+        let file = try temporaryFile("# a")
+        let model = DocumentViewModel(fileURL: file, initialText: "# a", renderDelay: .milliseconds(20), saveDelay: .seconds(5))
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(model.problem == nil)
+        try FileManager.default.removeItem(at: file)
+        model.reload()
+        #expect(model.problem?.hasPrefix("Couldn't reload: ") == true)
+        try FileManager.default.removeItem(at: file.deletingLastPathComponent())
+        model.updateText("# b")
+        #expect(model.saveNow() == .failed)
+        #expect(model.problem?.hasPrefix("Couldn't save: ") == true)
+    }
+
     /// A document renamed or moved while open is saved, and watched, where it is now; the old path
     /// is not brought back.
     @Test func followsTheFileWhenItMoves() async throws {

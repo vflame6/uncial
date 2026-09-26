@@ -183,6 +183,11 @@ import Testing
         #expect(has(text, .table, "|") && has(text, .table, "|:--|--:|"))
     }
 
+    /// cmark confirms the underline: `===` under a quote's lazy continuation line is paragraph text.
+    @Test func setextHeadingsAsCmarkReadsThem() {
+        #expect(MarkdownHighlighter.tokens(in: "> foo\nbar\n===").map(\.kind) == [.quote(depth: 1)])
+    }
+
     @Test func setextHeadings() {
         let text = "Title\n===\ntext *e*\n---\n\n---"
         let tokens = MarkdownHighlighter.tokens(in: text)

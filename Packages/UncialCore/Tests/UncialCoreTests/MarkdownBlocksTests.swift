@@ -75,6 +75,13 @@ import Testing
         #expect(definitions("[^1]: /url\n\n[^1]").isEmpty)
     }
 
+    /// The lines that underline a setext heading: not one under a quote's lazy continuation line.
+    @Test func setextUnderlines() {
+        #expect(MarkdownBlocks("Title\n===\n\n> foo\nbar\n===\n\nA\nB\n---").setextUnderlines == [1, 9])
+        // cmark ends the heading on the line after its underline; that line is not the heading's.
+        #expect(MarkdownBlocks("Title\n===\n[x]: /x").linkDefinitions == [MarkdownBlocks.LinkDefinition(label: "x", destination: "/x", lines: 2...2)])
+    }
+
     /// The footnotes the page shows: defined and referenced.
     @Test func footnoteLabels() {
         #expect(MarkdownBlocks("a [^1] b [^2] c [^Big Note]\n\n[^1]: one\n[^3]: three\n[^big note]: four").footnoteLabels == ["1"])

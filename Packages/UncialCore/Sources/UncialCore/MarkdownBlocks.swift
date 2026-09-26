@@ -43,6 +43,9 @@ public struct MarkdownBlocks: Sendable, Equatable {
     /// The labels of the footnotes the page shows, as written: defined and referenced (cmark drops the
     /// others, and an undefined reference stays text).
     public let footnoteLabels: [String]
+    /// The lines that underline a setext heading, outside block quotes (`===` under a quote's lazy
+    /// continuation line is the paragraph's text).
+    public let setextUnderlines: Set<Int>
 
     public init(_ markdown: String) {
         var kinds: [Int: Kind] = [:]
@@ -53,6 +56,7 @@ public struct MarkdownBlocks: Sendable, Equatable {
         var covered = [Bool](repeating: false, count: lines.count)
         var quoted = [Bool](repeating: false, count: lines.count)
         var footnoteLabels: [String] = []
+        var setextUnderlines: Set<Int> = []
         func mark(_ flags: inout [Bool], _ range: ClosedRange<Int>) {
             for line in range where line < flags.count { flags[line] = true }
         }
@@ -65,9 +69,13 @@ public struct MarkdownBlocks: Sendable, Equatable {
                 guard event == CMARK_EVENT_ENTER, let node = cmark_iter_get_node(iterator) else { continue }
                 // cmark's lines are 1-based.
                 let first = Int(cmark_node_get_start_line(node)) - 1
-                let last = Int(cmark_node_get_end_line(node)) - 1
+                var last = Int(cmark_node_get_end_line(node)) - 1
                 guard first >= 0, last >= first else { continue }
                 let type = cmark_node_get_type(node)
+                // cmark ends a setext heading on the line after its underline when one follows.
+                if type == CMARK_NODE_HEADING, last > first {
+                    last = ((first + 1)...last).first { $0 < lines.count && Self.isSetextUnderline(lines[$0]) } ?? last
+                }
                 switch type {
                 case CMARK_NODE_DOCUMENT, CMARK_NODE_LIST:
                     continue
@@ -93,6 +101,7 @@ public struct MarkdownBlocks: Sendable, Equatable {
                 case CMARK_NODE_HEADING where last > first:
                     // A setext heading was a paragraph until its underline.
                     paragraphs.append((first...(last - 1), Int(cmark_node_get_start_column(node)) - 1))
+                    setextUnderlines.insert(last)
                 case CMARK_NODE_HTML_BLOCK:
                     // cmark's range stops a line short for a block its end condition closed (`</script>`,
                     // `-->`); the literal has every line.
@@ -122,6 +131,7 @@ public struct MarkdownBlocks: Sendable, Equatable {
         }
         self.kinds = kinds
         self.footnoteLabels = footnoteLabels
+        self.setextUnderlines = setextUnderlines
 
         // A paragraph of definitions only is gone from the tree: its lines are the runs no block covers.
         var line = 0
@@ -172,6 +182,12 @@ public struct MarkdownBlocks: Sendable, Equatable {
 
     public func kind(ofLine line: Int) -> Kind? {
         kinds[line]
+    }
+
+    /// `===` or `---` alone on its line, indentation and trailing spaces aside.
+    private static func isSetextUnderline(_ line: String) -> Bool {
+        let content = line.trimmingCharacters(in: CharacterSet(charactersIn: " \t"))
+        return !content.isEmpty && (content.allSatisfy { $0 == "=" } || content.allSatisfy { $0 == "-" })
     }
 
     /// How many lines `text` holds, each ended by `\n`, `\r\n` or `\r` (a last one without a break counts).

@@ -13,10 +13,9 @@ import UncialCore
     static let spec = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
         .appendingPathComponent("build/SourcePackages/checkouts/swift-cmark/test/spec.txt")
 
-    /// Examples where Live Preview still hides text the page shows (2026-09-26; the audit found 71).
-    static let knownDifferences: Set<Int> = [
-        63
-    ]
+    /// Examples where Live Preview still hides text the page shows: none since 2026-09-26 (the audit
+    /// found 71).
+    static let knownDifferences: Set<Int> = []
 
     struct Example {
         let number: Int

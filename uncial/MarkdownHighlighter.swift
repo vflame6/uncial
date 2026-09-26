@@ -253,8 +253,9 @@ nonisolated enum MarkdownHighlighter {
                 tokens.append(Token(range: contentRange, kind: .linkDefinition, markers: []))
                 continue
             }
-            // Setext heading: a plain, non-empty line whose next line is `===` or `---`.
-            if whole.length > 0, index < lines.count {
+            // Setext heading: a plain, non-empty line whose next line is `===` or `---` that cmark takes for
+            // an underline (not under a quote's lazy continuation line, BUG-28).
+            if whole.length > 0, index < lines.count, cmarkLines[index] >= bodyStart, blocks.setextUnderlines.contains(cmarkLines[index] - bodyStart) {
                 let underline = source.substring(with: lines[index])
                 if setextUnderline.firstMatch(in: underline, range: NSRange(location: 0, length: (underline as NSString).length)) != nil {
                     tokens.append(Token(range: contentRange, kind: .heading(level: underline.contains("=") ? 1 : 2), markers: []))

@@ -43,9 +43,17 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
     /// windows stay alive (SwiftUI keeps them) and would come back with `makeKeyAndOrderFront`, but
     /// their window controller no longer has a document, so they are left out.
     static var needingReview: [DocumentWindowGuard] {
-        NSApp.orderedWindows.filter { $0.windowController?.document != nil }
-            .compactMap { installed(on: $0) }
-            .filter { $0.model?.needsSavePrompt == true }
+        open.filter { $0.model?.needsSavePrompt == true }
+    }
+
+    /// Before the quit review: every open window's pending automatic save runs now, so a write that
+    /// fails or a change on disk that needs an answer is asked about while its window is still here.
+    static func flushAutomaticSaves() {
+        open.forEach { $0.flushAutomaticSave() }
+    }
+
+    private static var open: [DocumentWindowGuard] {
+        NSApp.orderedWindows.filter { $0.windowController?.document != nil }.compactMap { installed(on: $0) }
     }
 
     /// Asks about every window in turn, front to back, before the app quits, bringing a hidden app
@@ -136,9 +144,17 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
         return window.attachedSheet == nil
     }
 
+    /// Automatic saving writes what is pending now, while the window can still report a failed
+    /// write or ask about a change on disk; either one makes `needsSavePrompt` true.
+    private func flushAutomaticSave() {
+        guard let model, model.autosaves, model.hasUnsavedChanges, model.pendingExternalChange == nil else { return }
+        _ = model.saveBeforeClosing()
+    }
+
     // MARK: - NSWindowDelegate
 
     func windowShouldClose(_ sender: NSWindow) -> Bool {
+        flushAutomaticSave()
         guard let model, model.needsSavePrompt else {
             return next?.windowShouldClose?(sender) ?? true
         }

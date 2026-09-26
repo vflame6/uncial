@@ -26,8 +26,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Manually saved documents with unsaved edits get the Save / Cancel / Don't Save sheet, one window
-    /// at a time; NSDocument knows nothing about those edits (see `DocumentWindowGuard`).
+    /// at a time; NSDocument knows nothing about those edits (see `DocumentWindowGuard`). Automatic
+    /// saves run first, so one that fails (or meets a change on disk) is asked about too.
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        DocumentWindowGuard.flushAutomaticSaves()
         let pending = DocumentWindowGuard.needingReview
         guard !pending.isEmpty else { return .terminateNow }
         Task { @MainActor in

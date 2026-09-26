@@ -24,9 +24,10 @@ final class DocumentViewModel {
         didSet { if theme != oldValue { render() } }
     }
     var hasUnsavedChanges: Bool { text != diskText }
-    /// Unsaved edits that nothing will write on its own (a manually saved document, or an external
-    /// change awaiting its answer): closing, quitting and reverting ask first.
-    var needsSavePrompt: Bool { hasUnsavedChanges && (!autosaves || pendingExternalChange != nil) }
+    /// Unsaved edits that nothing will write on its own (a manually saved document, an external
+    /// change awaiting its answer, or an automatic save that failed): closing, quitting and
+    /// reverting ask first.
+    var needsSavePrompt: Bool { hasUnsavedChanges && (!autosaves || pendingExternalChange != nil || saveError != nil) }
 
     /// Whether edits are written shortly after typing pauses (`AppSettings.autosave`). Changing the
     /// policy settles the file: what was typed under either promise is written right away.
@@ -105,9 +106,10 @@ final class DocumentViewModel {
     }
 
     /// Writes pending edits now when saving is automatic (leaving an editing mode, closing, quitting);
-    /// a manually saved document keeps them for File ▸ Save.
+    /// a manually saved document keeps them for File ▸ Save, and nothing is written while the Ask
+    /// question is open.
     func saveIfAutomatic() {
-        if autosaves {
+        if autosaves, pendingExternalChange == nil {
             saveNow()
         }
     }
@@ -276,6 +278,7 @@ final class DocumentViewModel {
         pendingExternalChange = nil
         diskText = disk
         loadError = nil
+        saveError = nil
         if text != disk {
             text = disk
         }

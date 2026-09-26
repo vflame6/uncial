@@ -214,6 +214,24 @@ import UncialCore
         #expect(model.hasUnsavedChanges == true)
     }
 
+    /// A write that fails under automatic saving leaves edits nothing will write: closing and
+    /// quitting must ask. Reloading drops the edits and the stale error with them.
+    @Test func failedAutomaticSaveNeedsThePrompt() throws {
+        let file = try temporaryFile("one")
+        let directory = file.deletingLastPathComponent()
+        let model = DocumentViewModel(fileURL: file, initialText: "one", saveDelay: .seconds(5))
+        model.autosaves = true
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
+        model.updateText("two")
+        #expect(model.saveNow() == .failed)
+        #expect(model.saveError != nil)
+        #expect(model.needsSavePrompt == true)
+        model.reload()
+        #expect(model.saveError == nil)
+        #expect(model.needsSavePrompt == false)
+    }
+
     /// Saving says what it did, so a closing window can tell a write from a save that waits for an
     /// answer. Before closing, a change on disk is left for the window to ask about.
     @Test func saveReportsWhatItDid() async throws {

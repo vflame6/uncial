@@ -173,6 +173,33 @@ import Testing
         #expect(window.isVisible == false)
     }
 
+    /// With automatic saving, a write that fails at close or quit time keeps the window and asks.
+    @Test func failedAutomaticSaveAsksBeforeClosingOrQuitting() async throws {
+        let file = try temporaryFile("one")
+        let directory = file.deletingLastPathComponent()
+        let (window, guardian) = try await open(file)
+        let model = try #require(guardian.model)
+        model.autosaves = true
+        try FileManager.default.setAttributes([.posixPermissions: 0o555], ofItemAtPath: directory.path)
+        defer { try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path) }
+        model.updateText("two")
+        #expect(NSApp.delegate?.applicationShouldTerminate?(NSApp) == .terminateLater)
+        try await settle()
+        #expect(window.attachedSheet != nil)
+        try click("Cancel", onSheetOf: window)
+        try await waitForSheetToGo(on: window)
+        window.performClose(nil)
+        try await settle()
+        #expect(window.isVisible == true)
+        #expect(window.attachedSheet != nil)
+        #expect(model.saveError != nil)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: directory.path)
+        try click("Save", onSheetOf: window)
+        try await settle()
+        #expect(window.isVisible == false)
+        #expect(try contents(of: file) == "two")
+    }
+
     @Test func cancelKeepsTheWindowAndTheEdits() async throws {
         let file = try temporaryFile("one")
         let (window, guardian) = try await open(file)

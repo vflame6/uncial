@@ -172,6 +172,26 @@ import Testing
         #expect(has(text, .html, "<div align=\"center\">") && has(text, .html, "</div>") && !has(text, .html, "x"))
     }
 
+    /// Inline links read as CommonMark reads them: a badge is a link around an image; a destination may
+    /// hold balanced parentheses or, in `<…>`, spaces; a bare destination with a space is no link. Live
+    /// Preview used to show badges and Wikipedia links as broken text and ⌘-click the wrong target.
+    @Test func inlineLinksReadDestinationsLikeCommonMark() throws {
+        let badge = "[![Build](https://img.shields.io/b.svg)](https://github.com/o/r/actions) text"
+        let tokens = MarkdownHighlighter.tokens(in: badge)
+        #expect(tokens.map(\.kind) == [.link(destination: "https://github.com/o/r/actions"), .image(destination: "https://img.shields.io/b.svg")])
+        try #require(tokens.count == 2)
+        #expect(markers(tokens[0], in: badge) == ["[", "](https://github.com/o/r/actions)"])
+        #expect(markers(tokens[1], in: badge) == ["![", "](https://img.shields.io/b.svg)"])
+        let wiki = "[Mercury](https://en.wikipedia.org/wiki/Mercury_(planet)) rest"
+        #expect(MarkdownHighlighter.tokens(in: wiki).map(\.kind) == [.link(destination: "https://en.wikipedia.org/wiki/Mercury_(planet)")])
+        #expect(MarkdownHighlighter.tokens(in: "![pic](<my image.png>)").map(\.kind) == [.image(destination: "my image.png")])
+        #expect(MarkdownHighlighter.tokens(in: "[link](/my uri)").isEmpty)
+        let titled = "[a](http://x.com 'T') and [b](<c d> (T))"
+        #expect(MarkdownHighlighter.tokens(in: titled).map(\.kind) == [.link(destination: "http://x.com"), .link(destination: "c d")])
+        let nested = "[a [b](c) d](e)"
+        #expect(MarkdownHighlighter.tokens(in: nested).map(\.kind) == [.link(destination: "c")])
+    }
+
     @Test func referenceLinksResolveAgainstDefinitions() {
         let text = "[one][Ref] and [two][] and [Three] but [none][x] and ![pic][img]\n\n[ref]: https://a.example\n[two]: /b\n[three]: <c d> 'T'\n[img]: i.png"
         let tokens = MarkdownHighlighter.tokens(in: text)

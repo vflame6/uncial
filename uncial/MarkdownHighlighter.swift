@@ -99,7 +99,6 @@ nonisolated enum MarkdownHighlighter {
     private static let strong = regex(#"(?<!\\)\*\*(?!\s)[^*\n]+(?<![\s\\])\*\*|(?<!\\)__(?!\s)[^_\n]+(?<![\s\\])__"#)
     private static let emphasis = regex(#"(?<![\w*\\])\*(?!\s)[^*\n]+(?<![\s\\])\*(?![\w*])|(?<![\w_\\])_(?!\s)[^_\n]+(?<![\s\\])_(?![\w_])"#)
     private static let strikethrough = regex(#"~~[^~\n]+~~"#)
-    private static let link = regex(#"(!?\[[^\]\n]*\])(\([^)\n]*\))"#)
     private static let autolink = regex(#"<(?:https?|mailto):[^>\s]+>"#)
     private static let footnoteReference = regex(#"\[\^[^\]\s]+\](?!:)"#)
     private static let html = regex(#"<!--.*?-->|<(/?)([A-Za-z][A-Za-z0-9-]*)((?:\s[^<>\n]*)?)(/?)>"#)
@@ -515,19 +514,30 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: .autolink(destination: scratch.substring(with: inner)), markers: edges(match.range, open: 1, close: 1)))
             mask(match.range)
         }
-        tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask)
-        for match in link.matches(in: scratch as String, range: region) {
-            let isImage = scratch.character(at: match.range.location) == 0x21 // "!"
-            let close = match.range(at: 2)
-            let markers = [NSRange(location: offset + match.range.location, length: isImage ? 2 : 1),
-                           NSRange(location: offset + close.location - 1, length: close.length + 1)]
-            let target = scratch.substring(with: NSRange(location: close.location + 1, length: close.length - 2))
-                .trimmingCharacters(in: .whitespaces)
-            let destination = String(target.split(separator: " ", maxSplits: 1).first ?? "")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "<>"))
-            tokens.append(Token(range: shifted(match.range), kind: isImage ? .image(destination: destination) : .link(destination: destination), markers: markers))
-            mask(close)
+        // Inline links and images, read the way CommonMark reads them (`inlineLink`): images first, so a
+        // badge (a link around an image) keeps both, and before the HTML pass, which took a `<…>`
+        // destination for a tag. Only the markers are masked; the text still parses.
+        for isImage in [true, false] {
+            var index = region.location
+            while index < NSMaxRange(region) {
+                let start = isImage ? index + 1 : index
+                guard start < NSMaxRange(region), scratch.character(at: start) == 0x5B, // "["
+                      !isImage || scratch.character(at: index) == 0x21, // "!"
+                      let link = inlineLink(in: scratch, bracket: start, end: NSMaxRange(region)) else {
+                    index += 1
+                    continue
+                }
+                let opening = NSRange(location: index, length: start + 1 - index)
+                let closing = NSRange(location: link.textEnd, length: link.end - link.textEnd)
+                let kind: Token.Kind = isImage ? .image(destination: link.destination) : .link(destination: link.destination)
+                tokens.append(Token(range: shifted(NSRange(location: index, length: link.end - index)), kind: kind,
+                                    markers: [shifted(opening), shifted(closing)]))
+                mask(opening)
+                mask(closing)
+                index = start + 1
+            }
         }
+        tokens += htmlTokens(in: scratch, region: region, offset: offset, mask: mask)
         for match in footnoteReference.matches(in: scratch as String, range: region) {
             tokens.append(Token(range: shifted(match.range), kind: .footnoteReference, markers: edges(match.range, open: 2, close: 1)))
             mask(match.range)
@@ -560,6 +570,77 @@ nonisolated enum MarkdownHighlighter {
             tokens.append(Token(range: shifted(match.range), kind: .strikethrough, markers: edges(match.range, open: 2, close: 2)))
         }
         return tokens.sorted { $0.range.location < $1.range.location }
+    }
+
+    /// The inline link or image whose text opens at `start` (its `[`, after any `!`), read as CommonMark
+    /// reads it: text in balanced brackets that holds no other link, `(`, a destination either in `<…>`
+    /// (spaces allowed) or as a run with balanced parentheses, an optional title after whitespace in
+    /// `"…"`, `'…'` or `(…)`, and `)`. `textEnd` is the text's `]`, `end` just past the `)`; nil when a
+    /// part is missing (`[a](/my uri)` is no link, as on the page).
+    private static func inlineLink(in text: NSString, bracket start: Int, end limit: Int) -> (textEnd: Int, destination: String, end: Int)? {
+        var depth = 0
+        var index = start
+        var textEnd: Int?
+        while index < limit {
+            let unit = text.character(at: index)
+            if unit == 0x5B {
+                depth += 1
+            } else if unit == 0x5D {
+                depth -= 1
+                if depth == 0 {
+                    textEnd = index
+                    break
+                }
+            }
+            index += 1
+        }
+        guard let textEnd, textEnd + 1 < limit, text.character(at: textEnd + 1) == 0x28, // "("
+              !text.substring(with: NSRange(location: start + 1, length: textEnd - start - 1)).contains("](") else { return nil }
+        index = textEnd + 2
+        func skipSpaces() {
+            while index < limit, [0x20, 0x09].contains(text.character(at: index)) { index += 1 }
+        }
+        skipSpaces()
+        let destination: String
+        if index < limit, text.character(at: index) == 0x3C { // "<"
+            let open = index + 1
+            index = open
+            while index < limit, text.character(at: index) != 0x3E { // ">"
+                if text.character(at: index) == 0x3C { return nil }
+                index += 1
+            }
+            guard index < limit else { return nil }
+            destination = text.substring(with: NSRange(location: open, length: index - open))
+            index += 1
+        } else {
+            let begin = index
+            var parentheses = 0
+            while index < limit {
+                let unit = text.character(at: index)
+                if unit <= 0x20 { break }
+                if unit == 0x28 {
+                    parentheses += 1
+                } else if unit == 0x29 {
+                    if parentheses == 0 { break }
+                    parentheses -= 1
+                }
+                index += 1
+            }
+            guard parentheses == 0 else { return nil }
+            destination = text.substring(with: NSRange(location: begin, length: index - begin))
+        }
+        let afterDestination = index
+        skipSpaces()
+        let closers: [unichar: unichar] = [0x22: 0x22, 0x27: 0x27, 0x28: 0x29] // `"…"`, `'…'`, `(…)`
+        if index > afterDestination, index < limit, let closer = closers[text.character(at: index)] {
+            index += 1
+            while index < limit, text.character(at: index) != closer { index += 1 }
+            guard index < limit else { return nil }
+            index += 1
+            skipSpaces()
+        }
+        guard index < limit, text.character(at: index) == 0x29 else { return nil } // ")"
+        return (textEnd, destination, index + 1)
     }
 
     /// Tags of `scratch` within `region`: comments, `<img>` as images, elements whose closing tag is

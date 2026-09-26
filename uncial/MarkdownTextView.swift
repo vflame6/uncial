@@ -665,7 +665,12 @@ final class ThemedTextView: NSTextView {
         do {
             let stored: [URL]
             if let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [NSURL], !files.isEmpty {
-                stored = try files.map { try importer.store(fileAt: $0 as URL, for: baseURL) }
+                let urls = files.map { $0 as URL }
+                if Self.isLargeImport(urls) {
+                    importInBackground(urls, with: importer, for: baseURL)
+                    return true
+                }
+                stored = try urls.map { try importer.store(fileAt: $0, for: baseURL) }
             } else if let picture = Self.pictureData(on: pasteboard) {
                 stored = [try importer.store(picture.data, named: AttachmentImporter.pastedImageName(extension: picture.extension), for: baseURL)]
             } else {
@@ -677,6 +682,41 @@ final class ThemedTextView: NSTextView {
         } catch {
             if let presentImportError { presentImportError(error) } else { _ = presentError(error) }
             return true
+        }
+    }
+
+    /// Files at least this large in all, or any folder, are copied and compared off the main thread.
+    static let largeImportBytes = 16 << 20
+
+    /// Whether storing `urls` may take long: a folder (a tree to copy) or `largeImportBytes` and more.
+    private static func isLargeImport(_ urls: [URL]) -> Bool {
+        var total = 0
+        for url in urls {
+            let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey])
+            if values?.isDirectory == true { return true }
+            total += values?.fileSize ?? 0
+        }
+        return total >= largeImportBytes
+    }
+
+    /// Stores large files off the main thread (PERF-10: comparing and copying 256 MB froze the editor
+    /// for 1.5–2.4 s) and inserts their Markdown when done: where the paste or drop was when the text
+    /// is unchanged meanwhile, at the selection otherwise.
+    private func importInBackground(_ urls: [URL], with importer: AttachmentImporter, for baseURL: URL) {
+        let range = selectedRange()
+        let before = string
+        Task { @MainActor [weak self] in
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try urls.map { try importer.store(fileAt: $0, for: baseURL) } }
+            }.value
+            guard let self else { return }
+            switch result {
+            case .success(let stored):
+                let markdown = stored.map { AttachmentImporter.markdown(for: $0, relativeTo: baseURL) }.joined(separator: "\n")
+                self.insertText(markdown, replacementRange: self.string == before ? range : self.selectedRange())
+            case .failure(let error):
+                if let presentImportError = self.presentImportError { presentImportError(error) } else { _ = self.presentError(error) }
+            }
         }
     }
 

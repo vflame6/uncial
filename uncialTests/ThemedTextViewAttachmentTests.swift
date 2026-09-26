@@ -77,6 +77,25 @@ import UncialCore
         #expect(editor.string == "one\ntwo")
     }
 
+    /// A large file is copied off the main thread (256 MB took 1.5–2.4 s of frozen editor): the paste
+    /// returns at once and the link goes in where the paste was when the copy is done.
+    @Test func largeFilesImportInTheBackground() async throws {
+        let (directory, sources, editor) = try fixture()
+        let source = sources.appendingPathComponent("big.bin")
+        try Data(count: 20 << 20).write(to: source)
+        let board = pasteboard()
+        #expect(board.writeObjects([source as NSURL]))
+        let start = ContinuousClock.now
+        #expect(editor.readSelection(from: board))
+        #expect(ContinuousClock.now - start < .milliseconds(50))
+        #expect(editor.string == "one\ntwo")
+        for _ in 0..<50 where editor.string == "one\ntwo" {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        #expect(editor.string == "one[big.bin](attachments/big.bin)\ntwo")
+        #expect(FileManager.default.fileExists(atPath: directory.appendingPathComponent("attachments/big.bin").path))
+    }
+
     @Test func textStillPastesAsText() throws {
         let (directory, _, editor) = try fixture()
         let board = pasteboard()

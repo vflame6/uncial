@@ -16,7 +16,7 @@ endif
 # override; NOTARY_PROFILE (a `notarytool store-credentials` profile) notarizes it.
 SIGN_FLAGS = $(if $(SIGN_IDENTITY),CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="$(SIGN_IDENTITY)" OTHER_CODE_SIGN_FLAGS=--timestamp,)
 
-.PHONY: build test core-test install uninstall icon highlight clean bump release
+.PHONY: build test core-test install uninstall icon highlight mermaid clean bump release
 
 # No coverage instrumentation in a build for use: the auto-created scheme gathers coverage when
 # testing and so sets CLANG_COVERAGE_MAPPING for every build of the scheme, which put `__llvm_prf`
@@ -50,6 +50,9 @@ icon:
 
 highlight:
 	scripts/build-highlight.sh
+
+mermaid:
+	scripts/build-mermaid.sh
 
 # Sets MARKETING_VERSION; `make release` does it too.
 bump:

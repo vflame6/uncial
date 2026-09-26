@@ -1,5 +1,6 @@
-mermaid 12.0.0 (https://github.com/mermaid-js/mermaid), the official build dist/mermaid.min.js, run by the app in an
-isolated WebKit view at render time for the diagram types beautiful-mermaid lacks.
+mermaid 12.0.0 (https://github.com/mermaid-js/mermaid), the official build dist/mermaid.min.js as published (sha256
+28fca7ae6ebc7ed7bb63bde63136a74bfef14f296a57e403657eeb8b32836073; compare with `npm pack mermaid@12.0.0`), run by the
+app in an isolated WebKit view at render time for the diagram types beautiful-mermaid lacks.
 
 The MIT License (MIT)
 

@@ -166,6 +166,7 @@ make core-test   # unit tests for the renderer and watcher (swift test)
 make test        # core tests + app unit tests via xcodebuild
 make build       # Release build into ./build
 make highlight   # rebuild the highlight.js bundle (scripts/build-highlight.sh)
+make mermaid     # rebuild the beautiful-mermaid bundle (scripts/build-mermaid.sh)
 make release 1.2.0   # publish version 1.2.0 (maintainers)
 make clean
 ```

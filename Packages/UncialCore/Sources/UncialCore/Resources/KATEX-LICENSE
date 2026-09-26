@@ -1,3 +1,6 @@
+KaTeX 0.18.7 (https://github.com/KaTeX/KaTeX), npm's dist/katex.min.js as published (sha256
+10a91b479cd927446ceb60409fb0d72b5d0d05eaf446c9e52fafd64058c84540, the same as `npm pack katex@0.18.7`).
+
 The MIT License (MIT)
 
 Copyright (c) 2013-2020 Khan Academy and other contributors

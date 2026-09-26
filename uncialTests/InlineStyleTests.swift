@@ -288,6 +288,32 @@ import UncialCore
         #expect(text.attribute(.kern, at: emoji.location + 1, effectiveRange: nil) as? CGFloat == kern)
     }
 
+    /// Aligning tables grows with the document, not with its square: every cell rebuilt the bold and code
+    /// fonts and scanned every token of the document (185 ms for 100 tables, 471 ms for 200).
+    @Test func tableAlignmentGrowsLinearly() {
+        func document(tables: Int) -> String {
+            (0..<tables).map { table in
+                "| **name \(table)** | `code` | value |\n|---|:-:|--:|\n"
+                    + (0..<8).map { row in "| alpha \(table) **beta \(row)** | `x\(row)` | \(table * 10 + row) |\n" }.joined() + "\n"
+            }.joined()
+        }
+        func time(_ text: String) -> Duration {
+            let tokens = MarkdownHighlighter.tokens(in: text)
+            return (0..<3).map { _ in
+                let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
+                // As `rehighlight()` runs it: inside one editing session.
+                return ContinuousClock().measure {
+                    storage.beginEditing()
+                    InlineStyle(style: style).apply(tokens, to: storage, revealed: NSRange(location: 0, length: 0))
+                    storage.endEditing()
+                }
+            }.min()!
+        }
+        let small = time(document(tables: 100))
+        let large = time(document(tables: 200))
+        #expect(large < small * 3, "100 tables \(small), 200 tables \(large)")
+    }
+
     @Test func tablesAlignWithWindowsLineBreaks() {
         let unix = storage("| a | **b** |\n|:--|--:|\n| cc | d |")
         let windows = storage("| a | **b** |\r\n|:--|--:|\r\n| cc | d |")

@@ -444,8 +444,19 @@ struct InlineStyle {
     private func alignTables(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, revealed: NSRange) {
         let markers = MarkerIndex(tokens: tokens)
         let text = storage.string as NSString
+        // Once per pass, not per cell (PERF-5: rebuilding the fonts and scanning every token of the
+        // document for each cell cost 185 ms for 100 tables): the fonts, and the code and strong ranges,
+        // which each row then finds by binary search.
+        let fonts = CellFonts(body: style.body, bold: NSFontManager.shared.convert(style.body, toHaveTrait: .boldFontMask),
+                              code: style.codeFont(within: style.body))
+        let codeRanges = tokens.filter { $0.kind == .inlineCode }.map(\.range)
+        let strongRanges = tokens.filter { $0.kind == .strong }.map(\.range)
         for table in Self.tables(in: tokens, text: text) {
-            let widths = table.map { row in row.cells.map { renderedWidth(of: $0, header: row.isHeader, in: row.range, tokens: tokens, markers: markers, text: text) } }
+            let widths = table.map { row in
+                let code = Self.ranges(codeRanges, startingIn: row.range)
+                let strong = Self.ranges(strongRanges, startingIn: row.range)
+                return row.cells.map { renderedWidth(of: $0, header: row.isHeader, fonts: fonts, code: code, strong: strong, markers: markers, text: text) }
+            }
             let columns = widths.map(\.count).max() ?? 0
             let columnWidths = (0..<columns).map { column in widths.compactMap { $0.indices.contains(column) ? $0[column] : nil }.max() ?? 0 }
             for (row, rowWidths) in zip(table, widths) where !NSLocationInRange(row.range.location, revealed) {
@@ -512,22 +523,37 @@ struct InlineStyle {
 
     /// The width a cell takes once rendered: its visible characters in the body font, bold in the
     /// header row or inside `**…**`, the mono code font inside backticks.
-    private func renderedWidth(of cell: MarkdownHighlighter.TableCell, header: Bool, in row: NSRange, tokens: [MarkdownHighlighter.Token], markers: MarkerIndex, text: NSString) -> CGFloat {
-        let bold = NSFontManager.shared.convert(style.body, toHaveTrait: .boldFontMask)
-        let code = style.codeFont(within: style.body)
-        var codeRanges: [NSRange] = []
-        var boldRanges: [NSRange] = []
-        for token in tokens where NSIntersectionRange(token.range, row).length > 0 {
-            switch token.kind {
-            case .inlineCode: codeRanges.append(token.range)
-            case .strong: boldRanges.append(token.range)
-            default: break
+    /// The fonts a table cell's text is measured in.
+    private struct CellFonts {
+        let body: NSFont
+        let bold: NSFont
+        let code: NSFont
+    }
+
+    /// The ranges of `sorted` (in document order) that start inside `row`: inline tokens never cross a
+    /// line, so these are all that touch it.
+    private static func ranges(_ sorted: [NSRange], startingIn row: NSRange) -> ArraySlice<NSRange> {
+        var low = 0
+        var high = sorted.count
+        while low < high {
+            let mid = (low + high) / 2
+            if sorted[mid].location < row.location {
+                low = mid + 1
+            } else {
+                high = mid
             }
         }
+        var end = low
+        while end < sorted.count, sorted[end].location < NSMaxRange(row) { end += 1 }
+        return sorted[low..<end]
+    }
+
+    private func renderedWidth(of cell: MarkdownHighlighter.TableCell, header: Bool, fonts: CellFonts, code codeRanges: ArraySlice<NSRange>,
+                               strong boldRanges: ArraySlice<NSRange>, markers: MarkerIndex, text: NSString) -> CGFloat {
         func font(at index: Int) -> NSFont {
-            if codeRanges.contains(where: { NSLocationInRange(index, $0) }) { return code }
-            if header || boldRanges.contains(where: { NSLocationInRange(index, $0) }) { return bold }
-            return style.body
+            if codeRanges.contains(where: { NSLocationInRange(index, $0) }) { return fonts.code }
+            if header || boldRanges.contains(where: { NSLocationInRange(index, $0) }) { return fonts.bold }
+            return fonts.body
         }
         var width: CGFloat = 0
         var index = cell.range.location

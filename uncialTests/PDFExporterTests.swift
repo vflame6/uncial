@@ -89,7 +89,9 @@ import WebKit
         let url = folder.appendingPathComponent("stalled.pdf")
         let started = ContinuousClock.now
         try await PDFExporter(loadBudget: .seconds(1)).write(html: html, title: "t", remoteContent: true, to: url)
-        #expect(ContinuousClock.now - started < .seconds(10))
+        let elapsed = ContinuousClock.now - started
+        #expect(elapsed >= .seconds(1), "printed after \(elapsed), before the budget ran out")
+        #expect(elapsed < .seconds(10))
         #expect(PDFDocument(url: url)?.string?.contains("Still printed") == true)
     }
 

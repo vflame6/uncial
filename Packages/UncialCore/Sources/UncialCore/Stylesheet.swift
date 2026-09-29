@@ -5,19 +5,62 @@ import Foundation
 /// The `.hljs-…` rules color highlighted code through the `--code-…` variables, one per
 /// `CodeHighlighter.Scope`, which every theme sets to its `SyntaxPalette` values; the `.callout` rules
 /// take their colors from `--callout-<role>` variables, one per `Callouts.Role`, set to `CalloutPalette`.
+/// `@media print` lays the page out for paper (the PDF export, and a browser printing an exported page);
+/// WebKit honors `break-inside: avoid` but not `break-after: avoid`, hence `.print-keep`.
 public enum Stylesheet {
     /// The base sheet followed by the theme's variables and overrides. Fixed to light or dark (the
     /// app's Appearance setting, for Quick Look, whose window the extension cannot set), the sheet names
     /// that one `color-scheme`, so WebKit resolves the system colors and paints the canvas in it, and
     /// every `prefers-color-scheme` block is applied or dropped: that query answers for the window the
-    /// page is shown in, and no CSS changes it.
-    public static func css(for theme: Theme, appearance: PageAppearance = .system) -> String {
-        let css = base + "\n" + themeBlock(for: theme)
+    /// page is shown in, and no CSS changes it. With `systemColors` (a page for other browsers) the
+    /// WebKit-only system colors become variables with those values (`portable(_:colors:)`).
+    public static func css(for theme: Theme, appearance: PageAppearance = .system, systemColors: SystemColors? = nil) -> String {
+        var css = base + "\n" + themeBlock(for: theme)
+        if let systemColors {
+            css = portable(css, colors: systemColors)
+        }
         switch appearance {
         case .system: return css
         case .light: return fixed(css, to: "light")
         case .dark: return fixed(css, to: "dark")
         }
+    }
+
+    private static let systemColor = try! NSRegularExpression(pattern: #"-apple-system-([a-z]+(?:-[a-z]+)*)"#)
+
+    /// Every WebKit system color the sheets name (`text-background`, `label`, …), in order of first use.
+    public static let systemColorNames: [String] = namedSystemColors(in: base + "\n" + Theme.allCases.map(themeBlock(for:)).joined(separator: "\n"))
+
+    /// The `-apple-system-<name>` colors `css` names, each once, in order of first use. The font keyword
+    /// `-apple-system` (no name after it) is not a color.
+    static func namedSystemColors(in css: String) -> [String] {
+        let text = css as NSString
+        var names: [String] = []
+        for match in systemColor.matches(in: css, range: NSRange(location: 0, length: text.length)) {
+            let name = text.substring(with: match.range(at: 1))
+            if !names.contains(name) { names.append(name) }
+        }
+        return names
+    }
+
+    /// `css` with every `-apple-system-<name>` color `colors` has a light value for replaced by
+    /// `var(--system-<name>)`, and those variables declared ahead of it: the light values on `:root`, the
+    /// dark ones (the light one where there is none) under `prefers-color-scheme: dark`, which a fixed
+    /// appearance applies or drops like the theme's own dark rules. Other browsers drop a declaration
+    /// naming a WebKit system color, and the macOS theme names nothing else.
+    static func portable(_ css: String, colors: SystemColors) -> String {
+        let names = namedSystemColors(in: css).filter { colors.light[$0] != nil }
+        guard !names.isEmpty else { return css }
+        let text = css as NSString
+        var result = css
+        for match in systemColor.matches(in: css, range: NSRange(location: 0, length: text.length)).reversed() {
+            let name = text.substring(with: match.range(at: 1))
+            guard names.contains(name), let range = Range(match.range, in: result) else { continue }
+            result.replaceSubrange(range, with: "var(--system-\(name))")
+        }
+        let light = names.map { "  --system-\($0): \(colors.light[$0]!);" }.joined(separator: "\n")
+        let dark = names.map { "    --system-\($0): \(colors.dark[$0] ?? colors.light[$0]!);" }.joined(separator: "\n")
+        return ":root {\n\(light)\n}\n@media (prefers-color-scheme: dark) {\n  :root {\n\(dark)\n  }\n}\n" + result
     }
 
     private static let colorSchemeQuery = try! NSRegularExpression(pattern: #"@media \(prefers-color-scheme: (light|dark)\) \{"#)
@@ -149,5 +192,14 @@ public enum Stylesheet {
     section.footnotes p { margin-bottom: 8px; }
     pre.front-matter { color: var(--muted); font-size: 80%; background: transparent; border: 1px dashed var(--border); }
     :target { scroll-margin-top: 16px; }
+    @media print {
+      .markdown-body { max-width: none; padding: 0; }
+      html, body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      h1, h2, h3, h4, h5, h6 { break-after: avoid; }
+      pre, table, figure, img, .callout, p.math, .print-keep { break-inside: avoid; }
+      pre, pre code { white-space: pre-wrap; overflow-wrap: anywhere; }
+      table { display: table; width: auto; }
+      .markdown-body > .print-keep:first-child > :first-child { margin-top: 0; }
+    }
     """#
 }

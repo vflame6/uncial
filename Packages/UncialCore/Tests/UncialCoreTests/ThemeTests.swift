@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import UncialCore
 
@@ -146,5 +147,53 @@ import Testing
         for theme in Theme.allCases {
             #expect(Stylesheet.css(for: theme).contains("math { font-family:"), "\(theme) has no math font rule")
         }
+    }
+
+    /// Paper gets the page at full width with its backgrounds, code wrapped instead of clipped, and the
+    /// blocks WebKit keeps whole, `.print-keep` among them (a heading and the block after it, `PDFExporter`).
+    @Test func printRulesInEverySheet() {
+        for theme in Theme.allCases {
+            for appearance in PageAppearance.allCases {
+                let css = Stylesheet.css(for: theme, appearance: appearance)
+                #expect(css.contains("@media print {"), "\(theme) \(appearance)")
+                #expect(css.contains(".markdown-body { max-width: none; padding: 0; }"), "\(theme) \(appearance)")
+                #expect(css.contains("print-color-adjust: exact;"), "\(theme) \(appearance)")
+                #expect(css.contains("pre, table, figure, img, .callout, p.math, .print-keep { break-inside: avoid; }"), "\(theme) \(appearance)")
+                #expect(css.contains("pre, pre code { white-space: pre-wrap; overflow-wrap: anywhere; }"), "\(theme) \(appearance)")
+            }
+        }
+    }
+
+    /// A page shown outside WebKit (an exported HTML file) cannot use WebKit's system colors: each becomes
+    /// a variable the sheet declares, light and dark, and nothing else changes.
+    @Test func systemColorsBecomeDeclaredVariables() {
+        let names = Stylesheet.systemColorNames
+        #expect(names == ["text-background", "label", "secondary-label", "separator", "grid", "blue",
+                          "odd-alternating-content-background", "find-highlight-background", "quaternary-label",
+                          "green", "orange", "red", "purple", "gray"])
+        let colors = SystemColors(light: Dictionary(uniqueKeysWithValues: names.map { ($0, "#111111") }),
+                                  dark: Dictionary(uniqueKeysWithValues: names.map { ($0, "#eeeeee") }))
+        let original = Stylesheet.css(for: .macOS)
+        let portable = Stylesheet.css(for: .macOS, systemColors: colors)
+        #expect(!portable.contains("-apple-system-"))
+        #expect(portable.contains("--font-body: -apple-system, system-ui"))
+        for name in names {
+            #expect(portable.contains("--system-\(name): #111111;") && portable.contains("--system-\(name): #eeeeee;"), "\(name)")
+        }
+        #expect(portable.contains("--bg: var(--system-text-background);"))
+        #expect(portable.contains("--code-bg: color-mix(in srgb, var(--system-label) 6%, transparent);"))
+        #expect(declaredProperties(in: portable).isSuperset(of: declaredProperties(in: original)))
+        for theme in [Theme.github, .solarized] {
+            #expect(Stylesheet.css(for: theme, systemColors: colors) == Stylesheet.css(for: theme))
+        }
+        // Fixed to light, the dark values go with the theme's other dark rules.
+        let light = Stylesheet.css(for: .macOS, appearance: .light, systemColors: colors)
+        #expect(light.contains("--system-label: #111111;") && !light.contains("#eeeeee"))
+    }
+
+    private func declaredProperties(in css: String) -> Set<String> {
+        let declaration = try! NSRegularExpression(pattern: #"--[a-z0-9-]+(?=:)"#)
+        let text = css as NSString
+        return Set(declaration.matches(in: css, range: NSRange(location: 0, length: text.length)).map { text.substring(with: $0.range) })
     }
 }

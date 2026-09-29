@@ -23,6 +23,11 @@ Created by Maksim Radaev/[@vflame6](https://github.com/vflame6)
   quote continuation, find and replace, optional line numbers, and scroll sync
   in Split View.
 - Save with ⌘S, or let Uncial save as you type.
+- Export to PDF or HTML with File ▸ Export… (⌘P): a PDF on your paper size
+  with page numbers, or a single HTML file that carries its pictures, diagrams
+  and styles and looks the same in any browser.
+- An `uncial` command for the terminal: `uncial notes.md` opens the note in
+  Uncial, and creates it first if it does not exist yet.
 - Re-rendering when the file changes on disk, scroll position kept.
 - Local images, heading anchors, YAML front matter, and links that open in the
   browser or, for local Markdown files, in a new window. A link to any other
@@ -68,6 +73,8 @@ brew trust vflame6/uncial
 brew install --cask uncial
 ```
 
+The cask also puts the `uncial` command on your PATH.
+
 From source:
 
 ```sh
@@ -87,6 +94,11 @@ only the maintainer has. Without it, sign the build ad hoc:
 ```sh
 make install SIGN_IDENTITY=-
 ```
+
+Without Homebrew, open Settings ▸ General ▸ Command Line and click Install to
+put the `uncial` command in `/usr/local/bin` (macOS asks for an administrator
+password when that folder is not yours). The command opens the copy of Uncial
+it belongs to, so keep the app in `/Applications`.
 
 ## Enabling the Quick Look extensions
 
@@ -109,11 +121,20 @@ Marked, …), disable it in the same settings pane or macOS may keep using it.
 ## Usage
 
 - Right-click a Markdown file ▸ Open With ▸ Uncial, drop it on the Dock icon, or
-  run `open -a Uncial README.md`. Uncial and its Quick Look extensions handle
-  `.md` and `.markdown` files as well as `.mdown`, `.mkd`, `.mkdn`, `.mkdown`,
-  `.mdwn`, `.mdtxt` and `.mdtext`.
+  run `uncial README.md` (see below) or `open -a Uncial README.md`. Uncial and
+  its Quick Look extensions handle `.md` and `.markdown` files as well as
+  `.mdown`, `.mkd`, `.mkdn`, `.mkdown`, `.mdwn`, `.mdtxt` and `.mdtext`.
 - File ▸ Open (⌘O) and Open Recent work as in any document app. File ▸ New… (⌘N)
   asks where to create an empty Markdown file and opens it.
+- File ▸ Export… (⌘P) saves what the window shows, edits not yet saved
+  included, as a PDF or an HTML file (Format, in the save panel; Uncial
+  remembers the last one). The PDF is light, on the paper size macOS uses by
+  default (A4 or US Letter), with page numbers, and folded callouts print open.
+  The HTML page follows the reader's light or dark setting and keeps any
+  script in the document from running.
+- In Terminal, `uncial` opens Uncial, `uncial notes.md` opens a note (created
+  empty when it does not exist yet and its name ends in `.md` or another
+  Markdown extension), and `uncial *.md` opens several.
 - View ▸ Reload (⌘R) re-reads the file if you ever need to force it.
 - Settings (⌘,) opens on General (appearance, theme, Quick Look, default app,
   attachments, loading from the web); the other tabs are Editor, Shortcuts and
@@ -192,7 +213,7 @@ Override it with `make DEVELOPER_DIR=/path/to/Xcode.app/Contents/Developer …`.
 | Part | What it does |
 |---|---|
 | `Packages/UncialCore` | Swift package. Turns Markdown into a self-contained HTML page: cmark-gfm parsing, heading ids, front matter, math (KaTeX), diagrams (beautiful-mermaid) and code highlighting (highlight.js) done through JavaScriptCore at render time, image inlining, and the three themes as CSS. Also the file watcher and the block outline the thumbnails draw. |
-| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model keeps the editor's text, writes it to the file on ⌘S (or as you type, when automatic saving is on) and reconciles changes that arrive from other programs. A hidden web view runs mermaid.js for the diagram types beautiful-mermaid lacks and draws every diagram to a bitmap for Live Preview. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. |
+| `uncial` (app target) | SwiftUI document app. Shows the HTML in a `WKWebView` with page JavaScript disabled and swaps the rendered body in place as you type. An `NSTextView` provides the editor; the view model keeps the editor's text, writes it to the file on ⌘S (or as you type, when automatic saving is on) and reconciles changes that arrive from other programs. A hidden web view runs mermaid.js for the diagram types beautiful-mermaid lacks and draws every diagram to a bitmap for Live Preview. Settings and the first-run Welcome window drive `pluginkit` and `NSWorkspace` for the two system integrations. File ▸ Export prints the page to PDF in a hidden web view (PDFKit numbers the pages) or writes it as one HTML file; `Resources/uncial` is the shell command. |
 | `UncialQuickLook` | Quick Look Preview Extension. Returns the same HTML through `QLPreviewReply`, so Finder renders it. Reads the theme, the appearance, and the diagrams mermaid.js drew in the app, from the App Group container the app writes to (WebKit cannot run inside the extension). |
 | `UncialThumbnail` | Quick Look Thumbnail Extension. Draws the document's outline (headings, text, lists, quotes, code, rules, tables) as a small page with AppKit for Finder icons, Open panels and Get Info, in the theme's light colors. |
 

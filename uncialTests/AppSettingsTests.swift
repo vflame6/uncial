@@ -30,6 +30,7 @@ import UncialCore
         #expect(settings.attachmentSearchBoundary == .home)
         #expect(settings.attachmentSearch == AttachmentSearch())
         #expect(settings.attachmentDestination == .attachmentsFolder)
+        #expect(settings.exportFormat == .pdf)
         #expect(settings.splitRatio == 0.5)
         #expect(settings.textSize == nil && settings.effectiveTextSize == 13 && settings.textScale == 1)
         #expect(settings.hasCompletedFirstRun == false)
@@ -180,5 +181,13 @@ import UncialCore
         #expect(Appearance.dark.appearance?.name == .darkAqua)
         // What Quick Look gets through the App Group.
         #expect(Appearance.allCases.map(\.pageAppearance) == [.system, .light, .dark])
+    }
+
+    @Test func remembersTheExportFormat() {
+        let defaults = freshDefaults()
+        AppSettings(defaults: defaults, applyAppearance: false).exportFormat = .html
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).exportFormat == .html)
+        defaults.set("docx", forKey: AppSettings.Key.exportFormat)
+        #expect(AppSettings(defaults: defaults, applyAppearance: false).exportFormat == .pdf)
     }
 }

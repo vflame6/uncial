@@ -32,4 +32,9 @@ import Testing
         #expect(AppShortcut.useSelectionForFind.display == "⌘E")
         #expect(AppShortcut.shortcuts(in: "Edit") == [.find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind])
     }
+
+    @Test func exportTakesCommandP() {
+        #expect(AppShortcut.export.display == "⌘P" && AppShortcut.export.title == "Export…")
+        #expect(AppShortcut.shortcuts(in: "File") == [.newDocument, .open, .save, .export, .close, .closeAll])
+    }
 }

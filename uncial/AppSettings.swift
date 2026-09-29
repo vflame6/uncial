@@ -23,6 +23,7 @@ final class AppSettings {
         static let searchesParentsForAttachments = "searchesParentsForAttachments"
         static let attachmentSearchBoundary = "attachmentSearchBoundary"
         static let attachmentDestination = "attachmentDestination"
+        static let exportFormat = "exportFormat"
         static let splitRatio = "splitRatio"
         static let textSize = "textSize"
         static let hasCompletedFirstRun = "hasCompletedFirstRun"
@@ -120,6 +121,11 @@ final class AppSettings {
         didSet { defaults.set(attachmentDestination.rawValue, forKey: Key.attachmentDestination) }
     }
 
+    /// The format File ▸ Export… offers first: the one chosen last.
+    var exportFormat: ExportFormat {
+        didSet { defaults.set(exportFormat.rawValue, forKey: Key.exportFormat) }
+    }
+
     /// Share of a Split View window's width for the source pane, within `SplitLayout.ratioRange`.
     var splitRatio: Double {
         didSet { defaults.set(splitRatio, forKey: Key.splitRatio) }
@@ -186,6 +192,7 @@ final class AppSettings {
         searchesParentsForAttachments = defaults.object(forKey: Key.searchesParentsForAttachments) == nil ? true : defaults.bool(forKey: Key.searchesParentsForAttachments)
         attachmentSearchBoundary = AttachmentSearch.Boundary(rawValue: defaults.string(forKey: Key.attachmentSearchBoundary) ?? "") ?? .home
         attachmentDestination = AttachmentImporter.Destination(rawValue: defaults.string(forKey: Key.attachmentDestination) ?? "") ?? .attachmentsFolder
+        exportFormat = ExportFormat(rawValue: defaults.string(forKey: Key.exportFormat) ?? "") ?? .pdf
         splitRatio = SplitLayout.clamp(defaults.object(forKey: Key.splitRatio) as? Double ?? SplitLayout.defaultRatio)
         let storedSize = defaults.integer(forKey: Key.textSize)
         textSize = storedSize == 0 ? nil : min(max(storedSize, Self.textSizeRange.lowerBound), Self.textSizeRange.upperBound)

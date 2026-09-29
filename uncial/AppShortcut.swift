@@ -3,7 +3,7 @@ import SwiftUI
 /// Every keyboard shortcut the app offers, including the ones macOS provides. Menus bind the
 /// custom ones from here; the Shortcuts settings tab lists all of them, so the two never drift.
 enum AppShortcut: CaseIterable, Identifiable {
-    case newDocument, open, save, close, closeAll
+    case newDocument, open, save, export, close, closeAll
     case readOnly, livePreview, splitView, rawEditor, toggleEditorMode, reload, zoomIn, zoomOut, actualSize
     case find, findAndReplace, findNext, findPrevious, useSelectionForFind
     case settings, quit
@@ -15,6 +15,7 @@ enum AppShortcut: CaseIterable, Identifiable {
         case .newDocument: "New…"
         case .open: "Open…"
         case .save: "Save"
+        case .export: "Export…"
         case .close: "Close"
         case .closeAll: "Close All"
         case .readOnly: "Read Only"
@@ -38,7 +39,7 @@ enum AppShortcut: CaseIterable, Identifiable {
 
     var section: String {
         switch self {
-        case .newDocument, .open, .save, .close, .closeAll: "File"
+        case .newDocument, .open, .save, .export, .close, .closeAll: "File"
         case .readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload, .zoomIn, .zoomOut, .actualSize: "View"
         case .find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind: "Edit"
         case .settings, .quit: "Uncial"
@@ -50,6 +51,7 @@ enum AppShortcut: CaseIterable, Identifiable {
         case .newDocument: "n"
         case .open: "o"
         case .save: "s"
+        case .export: "p"
         case .close: "w"
         case .closeAll: "w"
         case .readOnly: "1"

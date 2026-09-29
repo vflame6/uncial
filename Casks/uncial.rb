@@ -19,6 +19,7 @@ cask "uncial" do
   depends_on macos: :sonoma
 
   app "Uncial.app"
+  binary "#{appdir}/Uncial.app/Contents/Resources/uncial"
 
   uninstall quit: "com.maksimradaev.uncial"
 

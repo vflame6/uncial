@@ -6,16 +6,9 @@ import WebKit
 @testable import Uncial
 
 @MainActor
-@Suite(.serialized) final class PDFExporterTests {
-    private let folder = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-pdf-\(UUID().uuidString)", isDirectory: true)
-
-    init() throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    }
-
-    deinit {
-        try? FileManager.default.removeItem(at: folder)
-    }
+@Suite(.serialized) struct PDFExporterTests {
+    private let directory = TemporaryDirectory()
+    private var folder: URL { directory.url }
 
     /// A long note prints on several pages of the default paper, each numbered in its bottom margin,
     /// with its text selectable, its links live and its title and creator set.
@@ -50,22 +43,15 @@ import WebKit
         <h2>Picture</h2><p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw="></p>
         <details class="callout" data-callout="note"><summary class="callout-title">Folded</summary><div class="callout-content"><p>Inside</p></div></details>
         """
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
-        let window = NSWindow(contentRect: webView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = webView
-        defer { window.close() }
-        webView.loadHTMLString(HTMLDocument.wrap(body: body, title: "t"), baseURL: nil)
-        for _ in 0..<100 where webView.isLoading || webView.estimatedProgress < 1 {
-            try await Task.sleep(for: .milliseconds(50))
+        try await withWebPage(HTMLDocument.wrap(body: body, title: "t")) { webView in
+            let kept = try await webView.evaluateJavaScript(PDFExporter.preparation) as? Int
+            #expect(kept == 2)
+            let shape = try await webView.evaluateJavaScript("""
+            [...document.querySelectorAll('.print-keep')].map(k => [...k.children].map(c => c.tagName).join('+')).join(',')
+              + '|' + document.querySelector('details').open
+            """) as? String
+            #expect(shape == "H2+PRE,H2+P|true")
         }
-        let kept = try await webView.evaluateJavaScript(PDFExporter.preparation) as? Int
-        #expect(kept == 2)
-        let shape = try await webView.evaluateJavaScript("""
-        [...document.querySelectorAll('.print-keep')].map(k => [...k.children].map(c => c.tagName).join('+')).join(',')
-          + '|' + document.querySelector('details').open
-        """) as? String
-        #expect(shape == "H2+PRE,H2+P|true")
     }
 
     /// With remote content off the print view loads nothing from the web, even from a page nothing sanitized.

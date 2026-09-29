@@ -5,16 +5,9 @@ import UncialCore
 @testable import Uncial
 
 @MainActor
-@Suite(.serialized) final class DocumentExporterTests {
-    private let folder = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-export-\(UUID().uuidString)", isDirectory: true)
-
-    init() throws {
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-    }
-
-    deinit {
-        try? FileManager.default.removeItem(at: folder)
-    }
+@Suite(.serialized) struct DocumentExporterTests {
+    private let directory = TemporaryDirectory()
+    private var folder: URL { directory.url }
 
     private func snapshot(_ text: String) -> ExportSnapshot {
         ExportSnapshot(text: text, fileURL: folder.appendingPathComponent("note.md"), theme: .macOS, remoteContent: false, attachments: .direct)

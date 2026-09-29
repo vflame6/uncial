@@ -1,52 +1,7 @@
 import AppKit
-import Network
 import Testing
 import UncialCore
 @testable import Uncial
-
-/// A TCP listener on 127.0.0.1 that counts the connections it gets and drops them.
-final class LoopbackListener: @unchecked Sendable {
-    private let listener: NWListener
-    private let lock = NSLock()
-    private var accepted = 0
-
-    var connections: Int { lock.withLock { accepted } }
-    var port: UInt16 { listener.port?.rawValue ?? 0 }
-
-    init() throws {
-        let parameters = NWParameters.tcp
-        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
-        listener = try NWListener(using: parameters)
-        listener.newConnectionHandler = { [weak self] connection in
-            self?.count()
-            connection.cancel()
-        }
-    }
-
-    private func count() {
-        lock.withLock { accepted += 1 }
-    }
-
-    func start() async {
-        let ready = AsyncStream<Void> { continuation in
-            listener.stateUpdateHandler = { state in
-                switch state {
-                case .ready, .failed, .cancelled:
-                    continuation.yield()
-                    continuation.finish()
-                default:
-                    break
-                }
-            }
-        }
-        listener.start(queue: DispatchQueue(label: "uncial-tests-loopback"))
-        for await _ in ready { break }
-    }
-
-    func stop() {
-        listener.cancel()
-    }
-}
 
 /// The first answer a waiting test gets: the value, or nil from the deadline.
 @MainActor private final class FirstAnswer<T> {
@@ -65,6 +20,8 @@ final class LoopbackListener: @unchecked Sendable {
 /// Real WebKit: the app's hidden mermaid.js stage, whose drawings reach Quick Look through `DiagramStore`.
 @MainActor
 @Suite(.serialized) struct DiagramWebRendererTests {
+    private let directory = TemporaryDirectory()
+
     /// `body`'s value, or nil after `seconds`: a test fails instead of hanging on a stage that does.
     private func within<T>(_ seconds: Double, _ body: @escaping @MainActor () async -> T) async -> T? {
         await withCheckedContinuation { (continuation: CheckedContinuation<T?, Never>) in
@@ -78,9 +35,9 @@ final class LoopbackListener: @unchecked Sendable {
     }
 
     /// A call on the stage that never ends (a promise that never settles and is kept, so it is not
-    /// collected; a loop that never stops) is
-    /// given up after `timeout`, and the stage draws the next formula: the timeout used to wait for the
-    /// very call it was meant to abandon, so one hung render stopped every later diagram and formula.
+    /// collected; a loop that never stops) is given up after `timeout`, and the stage draws the next
+    /// formula: the timeout used to wait for the very call it was meant to abandon, so one hung render
+    /// stopped every later diagram and formula.
     @Test func aHungCallTimesOutAndTheStageRecovers() async throws {
         let renderer = DiagramWebRenderer()
         renderer.timeout = .milliseconds(800)
@@ -95,8 +52,6 @@ final class LoopbackListener: @unchecked Sendable {
         }
     }
 
-    /// The stage needs no network: a diagram naming a web image (mermaid's image shape; front
-    /// matter sends any flowchart to mermaid.js) must not reach the server, whatever the setting.
     /// mermaid.js ships with the app, the only place WebKit can run it, and not in UncialCore's resource
     /// bundle, which both extensions embed (PERF-11: 5.6 MB in each).
     @Test func mermaidShipsOnlyWithTheApp() throws {
@@ -106,6 +61,8 @@ final class LoopbackListener: @unchecked Sendable {
         #expect(coreBundle.url(forResource: "katex.min", withExtension: "js") != nil)
     }
 
+    /// The stage needs no network: a diagram naming a web image (mermaid's image shape; front
+    /// matter sends any flowchart to mermaid.js) must not reach the server, whatever the setting.
     @Test func stageLoadsNothingFromTheWeb() async throws {
         let listener = try LoopbackListener()
         await listener.start()
@@ -125,8 +82,7 @@ final class LoopbackListener: @unchecked Sendable {
 
     @Test func rendersTheTypesBeautifulMermaidLacks() async throws {
         let renderer = DiagramWebRenderer()
-        let store = DiagramStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent("uncial-diagrams-test-\(UUID().uuidString)", isDirectory: true))
-        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let store = DiagramStore(directory: directory.url("diagrams", isDirectory: true))
         renderer.store = store
         let pieSource = "pie title Pets\n  \"Dogs\" : 386\n  \"Cats\" : 85"
         let ganttSource = "gantt\n  title A\n  dateFormat YYYY-MM-DD\n  section S\n  Task :a1, 2014-01-01, 30d"

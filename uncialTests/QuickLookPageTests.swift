@@ -22,57 +22,33 @@ import WebKit
         <svg width="10" height="10"><image href="\(base)/svg.png" width="10" height="10"/></svg>
         <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=">
         """
-        try await load(HTMLDocument.wrap(body: body, title: "t", contentSecurityPolicy: HTMLDocument.offlinePolicy))
+        // Loads may start after the page says it has loaded.
+        let settle: (WKWebView) async throws -> Void = { _ in try await Task.sleep(for: .milliseconds(700)) }
+        try await withWebPage(HTMLDocument.wrap(body: body, title: "t", contentSecurityPolicy: HTMLDocument.offlinePolicy), settle)
         #expect(listener.connections == 0)
-        try await load(HTMLDocument.wrap(body: body, title: "t"))
+        try await withWebPage(HTMLDocument.wrap(body: body, title: "t"), settle)
         #expect(listener.connections > 0)
     }
 
     /// The page follows the app's Light or Dark setting whatever the appearance of the view showing it
     /// (Quick Look's window), in every theme: the macOS theme's system colors through `color-scheme`,
     /// the others' dark values and the diagram's dark drawing through the fixed sheet. System follows the view.
-    @Test func pageTakesTheAppsAppearanceOverItsWindows() async throws {
+    @Test(arguments: Theme.allCases)
+    func pageTakesTheAppsAppearanceOverItsWindows(_ theme: Theme) async throws {
         let figure = "<figure class=\"mermaid\"><div class=\"light\">L</div><div class=\"dark\">D</div></figure>"
-        for theme in Theme.allCases {
-            for (window, appearance, dark) in [(NSAppearance.Name.aqua, PageAppearance.dark, true), (.darkAqua, .light, false),
-                                               (.aqua, .system, false), (.darkAqua, .system, true)] {
-                let html = HTMLDocument.wrap(body: figure, title: "t", theme: theme, appearance: appearance)
-                let shown = try await evaluate(html, in: window, """
+        for (window, appearance, dark) in [(NSAppearance.Name.aqua, PageAppearance.dark, true), (.darkAqua, .light, false),
+                                           (.aqua, .system, false), (.darkAqua, .system, true)] {
+            let html = HTMLDocument.wrap(body: figure, title: "t", theme: theme, appearance: appearance)
+            let shown = try await withWebPage(html, appearance: window) { webView in
+                try await webView.evaluateJavaScript("""
                 [getComputedStyle(document.body).backgroundColor,
                  getComputedStyle(document.querySelector('figure .dark')).display].join('|')
-                """)
-                let parts = shown.split(separator: "|").map(String.init)
-                let rgb = parts[0].split(whereSeparator: { !"0123456789.".contains($0) }).prefix(3).compactMap { Double($0) }
-                #expect(rgb.count == 3 && (rgb.reduce(0, +) / 3 < 128) == dark, "\(theme) \(appearance) in \(window.rawValue): \(parts[0])")
-                #expect((parts[1] != "none") == dark, "\(theme) \(appearance) in \(window.rawValue): diagram \(parts[1])")
+                """) as? String ?? ""
             }
+            let parts = shown.split(separator: "|").map(String.init)
+            let rgb = parts[0].split(whereSeparator: { !"0123456789.".contains($0) }).prefix(3).compactMap { Double($0) }
+            #expect(rgb.count == 3 && (rgb.reduce(0, +) / 3 < 128) == dark, "\(appearance) in \(window.rawValue): \(parts[0])")
+            #expect((parts[1] != "none") == dark, "\(appearance) in \(window.rawValue): diagram \(parts[1])")
         }
-    }
-
-    private func evaluate(_ html: String, in appearance: NSAppearance.Name, _ script: String) async throws -> String {
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
-        let window = NSWindow(contentRect: webView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = webView
-        webView.appearance = NSAppearance(named: appearance)
-        defer { window.close() }
-        webView.loadHTMLString(html, baseURL: nil)
-        for _ in 0..<100 where webView.isLoading || webView.estimatedProgress < 1 {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        return try await webView.evaluateJavaScript(script) as? String ?? ""
-    }
-
-    private func load(_ html: String) async throws {
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
-        let window = NSWindow(contentRect: webView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = webView
-        defer { window.close() }
-        webView.loadHTMLString(html, baseURL: nil)
-        for _ in 0..<100 where webView.isLoading || webView.estimatedProgress < 1 {
-            try await Task.sleep(for: .milliseconds(50))
-        }
-        try await Task.sleep(for: .milliseconds(700))
     }
 }

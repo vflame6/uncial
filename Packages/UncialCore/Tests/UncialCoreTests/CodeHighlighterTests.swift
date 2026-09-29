@@ -19,16 +19,14 @@ import Testing
         "text", "docker", "ps1", "make", "Python", "JavaScript", " Swift ",
     ]
 
-    @Test func knowsEveryLanguageOfTheList() {
-        for language in Self.languages {
-            #expect(CodeHighlighter.supports(language), "\(language) has no grammar")
-        }
+    @Test(arguments: CodeHighlighterTests.languages)
+    func knowsEveryLanguageOfTheList(_ language: String) {
+        #expect(CodeHighlighter.supports(language))
     }
 
-    @Test func resolvesFenceAliases() {
-        for alias in Self.aliases {
-            #expect(CodeHighlighter.supports(alias), "\(alias) resolves to nothing")
-        }
+    @Test(arguments: CodeHighlighterTests.aliases)
+    func resolvesFenceAliases(_ alias: String) {
+        #expect(CodeHighlighter.supports(alias))
     }
 
     /// highlight.js's markdown grammar is quadratic in the length of a line of unmatched `[` (one line
@@ -86,12 +84,14 @@ import Testing
         #expect(CodeHighlighter.html(for: blocks[0], language: "swift")?.hasSuffix("\n") == false)
     }
 
-    @Test func ignoresUnknownLanguages() {
-        for name in ["mermaid", "math", "nope", "", "language-swift"] {
-            #expect(!CodeHighlighter.supports(name), "\(name) should stay plain")
-            #expect(CodeHighlighter.html(for: "x", language: name) == nil)
-            #expect(CodeHighlighter.tokens(in: "x", language: name).isEmpty)
-        }
+    @Test(arguments: ["mermaid", "math", "nope", "", "language-swift"])
+    func ignoresUnknownLanguages(_ name: String) {
+        #expect(!CodeHighlighter.supports(name))
+        #expect(CodeHighlighter.html(for: "x", language: name) == nil)
+        #expect(CodeHighlighter.tokens(in: "x", language: name).isEmpty)
+    }
+
+    @Test func leavesUnknownAndBareFencesAsCmarkWroteThem() {
         let html = "<pre><code class=\"language-mermaid\">graph TD\n</code></pre>\n<pre><code>plain\n</code></pre>"
         #expect(CodeHighlighter.render(html) == html)
     }
@@ -145,16 +145,16 @@ import Testing
         }
     }
 
-    @Test func everyLanguageProducesTokens() {
-        let samples: [String: String] = [
-            "scratch": "when flag clicked\nforever\n  move (10) steps\n  if <touching [edge v]?> then\n    turn cw (15) degrees\n  end\nend",
-            "basic": "10 PRINT \"HELLO\"\n20 GOTO 10", "python": "def f(x):\n    return x + 1  # one", "cobol": "IDENTIFICATION DIVISION.\nPROGRAM-ID. HELLO.\nDISPLAY \"Hi\".",
-            "fortran": "program hello\n  print *, 'Hello'\nend program hello", "prolog": "parent(tom, bob).\nX :- Y.", "x86asm": "mov eax, 1\nint 0x80",
-            "matlab": "x = linspace(0, 1); % comment", "delphi": "program Hello;\nbegin\n  WriteLn('Hi');\nend.", "elm": "main = text \"Hello\"",
-            "vbnet": "Dim x As Integer = 1", "shell": "echo $HOME | grep x", "console": "$ ls -la\ntotal 0", "diff": "- old\n+ new",
-        ]
-        for (language, code) in samples {
-            #expect(!CodeHighlighter.tokens(in: code, language: language).isEmpty, "\(language) produced no token")
-        }
+    /// `supports` says only that a grammar is registered: a sample in each of these comes out with tokens.
+    @Test(arguments: [
+        ("scratch", "when flag clicked\nforever\n  move (10) steps\n  if <touching [edge v]?> then\n    turn cw (15) degrees\n  end\nend"),
+        ("basic", "10 PRINT \"HELLO\"\n20 GOTO 10"), ("python", "def f(x):\n    return x + 1  # one"),
+        ("cobol", "IDENTIFICATION DIVISION.\nPROGRAM-ID. HELLO.\nDISPLAY \"Hi\"."), ("fortran", "program hello\n  print *, 'Hello'\nend program hello"),
+        ("prolog", "parent(tom, bob).\nX :- Y."), ("x86asm", "mov eax, 1\nint 0x80"), ("matlab", "x = linspace(0, 1); % comment"),
+        ("delphi", "program Hello;\nbegin\n  WriteLn('Hi');\nend."), ("elm", "main = text \"Hello\""), ("vbnet", "Dim x As Integer = 1"),
+        ("shell", "echo $HOME | grep x"), ("console", "$ ls -la\ntotal 0"), ("diff", "- old\n+ new"),
+    ])
+    func everyLanguageProducesTokens(_ language: String, _ code: String) {
+        #expect(!CodeHighlighter.tokens(in: code, language: language).isEmpty)
     }
 }

@@ -19,16 +19,15 @@ import Testing
                 == #"<img data-blocked-srcset="a.png 1x, https://x.test/a2.png 2x" src="a.png">"#)
     }
 
-    @Test func leavesLocalAndInlineContentAndLinks() {
-        for html in [
-            #"<img src="a.png"><img src="data:image/png;base64,AAAA"><img src="/abs/a.png">"#,
-            #"<a href="https://x.test">x</a> <a href="//x.test">y</a>"#,
-            #"<p>see &lt;img src="https://x.test/a.png"&gt;</p>"#,
-            #"<pre><code>&lt;link href="https://x.test"&gt;</code></pre>"#,
-            #"<img src="httpbin.png">"#,
-        ] {
-            #expect(RemoteContent.block(in: html) == html, "\(html)")
-        }
+    @Test(arguments: [
+        #"<img src="a.png"><img src="data:image/png;base64,AAAA"><img src="/abs/a.png">"#,
+        #"<a href="https://x.test">x</a> <a href="//x.test">y</a>"#,
+        #"<p>see &lt;img src="https://x.test/a.png"&gt;</p>"#,
+        #"<pre><code>&lt;link href="https://x.test"&gt;</code></pre>"#,
+        #"<img src="httpbin.png">"#,
+    ])
+    func leavesLocalAndInlineContentAndLinks(_ html: String) {
+        #expect(RemoteContent.block(in: html) == html)
     }
 
     @Test func disarmsStyleURLsAndMetaRefresh() {
@@ -44,46 +43,42 @@ import Testing
     /// filter image, a base URL, SMIL setting an `href`, and spellings of a URL the browser accepts
     /// (character references, controls, tabs and newlines inside it, backslashes, no gap before the
     /// attribute).
-    @Test func blocksTheSpellingsBrowsersAccept() {
-        let cases: [(String, String)] = [
-            (#"<table background="http://x.test/t.png"><tr><td background="https://x.test/c.png">x</td></tr></table>"#,
-             #"<table data-blocked-background="http://x.test/t.png"><tr><td data-blocked-background="https://x.test/c.png">x</td></tr></table>"#),
-            (#"<svg><filter id="f"><feImage href="http://x.test/f.png"/></filter></svg>"#,
-             #"<svg><filter id="f"><feImage data-blocked-href="http://x.test/f.png"/></filter></svg>"#),
-            (#"<base href="http://x.test/">"#, #"<base data-blocked-href="http://x.test/">"#),
-            (#"<img src="&#104;ttp://x.test/e.png">"#, #"<img data-blocked-src="&#104;ttp://x.test/e.png">"#),
-            (#"<img src="&#x68;ttps://x.test/h.png">"#, #"<img data-blocked-src="&#x68;ttps://x.test/h.png">"#),
-            (#"<img src="https&colon;//x.test/n.png">"#, #"<img data-blocked-src="https&colon;//x.test/n.png">"#),
-            (#"<img/src="http://x.test/s.png">"#, #"<img/data-blocked-src="http://x.test/s.png">"#),
-            (#"<img alt="a"src="http://x.test/g.png">"#, #"<img alt="a"data-blocked-src="http://x.test/g.png">"#),
-            (#"<img src="&#1;http://x.test/c.png">"#, #"<img data-blocked-src="&#1;http://x.test/c.png">"#),
-            (#"<img src="ht&#9;tp://x.test/t.png">"#, #"<img data-blocked-src="ht&#9;tp://x.test/t.png">"#),
-            ("<img src=\"ht\ntp://x.test/l.png\">", "<img data-blocked-src=\"ht\ntp://x.test/l.png\">"),
-            (#"<img src="\\x.test/b.png">"#, #"<img data-blocked-src="\\x.test/b.png">"#),
-            (#"<svg><image><set attributeName="href" to="http://x.test/set.png"/></image></svg>"#,
-             #"<svg><image><set attributeName="href" data-blocked-to="http://x.test/set.png"/></image></svg>"#),
-            (#"<svg><image><animate attributeName="href" values="a.png;http://x.test/v.png"/></image></svg>"#,
-             #"<svg><image><animate attributeName="href" data-blocked-values="a.png;http://x.test/v.png"/></image></svg>"#),
-            (#"<meta/http-equiv="refresh" content="0;url=https://x.test">"#, #"<meta/data-blocked-http-equiv="refresh" content="0;url=https://x.test">"#),
-        ]
-        for (html, blocked) in cases {
-            #expect(RemoteContent.block(in: html) == blocked)
-        }
+    @Test(arguments: [
+        (#"<table background="http://x.test/t.png"><tr><td background="https://x.test/c.png">x</td></tr></table>"#,
+         #"<table data-blocked-background="http://x.test/t.png"><tr><td data-blocked-background="https://x.test/c.png">x</td></tr></table>"#),
+        (#"<svg><filter id="f"><feImage href="http://x.test/f.png"/></filter></svg>"#,
+         #"<svg><filter id="f"><feImage data-blocked-href="http://x.test/f.png"/></filter></svg>"#),
+        (#"<base href="http://x.test/">"#, #"<base data-blocked-href="http://x.test/">"#),
+        (#"<img src="&#104;ttp://x.test/e.png">"#, #"<img data-blocked-src="&#104;ttp://x.test/e.png">"#),
+        (#"<img src="&#x68;ttps://x.test/h.png">"#, #"<img data-blocked-src="&#x68;ttps://x.test/h.png">"#),
+        (#"<img src="https&colon;//x.test/n.png">"#, #"<img data-blocked-src="https&colon;//x.test/n.png">"#),
+        (#"<img/src="http://x.test/s.png">"#, #"<img/data-blocked-src="http://x.test/s.png">"#),
+        (#"<img alt="a"src="http://x.test/g.png">"#, #"<img alt="a"data-blocked-src="http://x.test/g.png">"#),
+        (#"<img src="&#1;http://x.test/c.png">"#, #"<img data-blocked-src="&#1;http://x.test/c.png">"#),
+        (#"<img src="ht&#9;tp://x.test/t.png">"#, #"<img data-blocked-src="ht&#9;tp://x.test/t.png">"#),
+        ("<img src=\"ht\ntp://x.test/l.png\">", "<img data-blocked-src=\"ht\ntp://x.test/l.png\">"),
+        (#"<img src="\\x.test/b.png">"#, #"<img data-blocked-src="\\x.test/b.png">"#),
+        (#"<svg><image><set attributeName="href" to="http://x.test/set.png"/></image></svg>"#,
+         #"<svg><image><set attributeName="href" data-blocked-to="http://x.test/set.png"/></image></svg>"#),
+        (#"<svg><image><animate attributeName="href" values="a.png;http://x.test/v.png"/></image></svg>"#,
+         #"<svg><image><animate attributeName="href" data-blocked-values="a.png;http://x.test/v.png"/></image></svg>"#),
+        (#"<meta/http-equiv="refresh" content="0;url=https://x.test">"#, #"<meta/data-blocked-http-equiv="refresh" content="0;url=https://x.test">"#),
+    ])
+    func blocksTheSpellingsBrowsersAccept(_ html: String, _ blocked: String) {
+        #expect(RemoteContent.block(in: html) == blocked)
     }
 
     /// A style whose web URL hides behind a CSS escape, a character reference or `image-set()`'s
     /// plain strings loses the whole attribute.
-    @Test func blocksWebURLsHiddenInStyles() {
-        let cases: [(String, String)] = [
-            (#"<div style="background-image: image-set('http://x.test/i.png' 1x)">"#,
-             #"<div data-blocked-style="background-image: image-set('http://x.test/i.png' 1x)">"#),
-            (#"<div style="background: url(ht\74p://x.test/e.png)">"#, #"<div data-blocked-style="background: url(ht\74p://x.test/e.png)">"#),
-            (#"<div style="background: url(&#104;ttp://x.test/r.png)">"#, #"<div data-blocked-style="background: url(&#104;ttp://x.test/r.png)">"#),
-            (#"<div style="background: url(local.png); color: red">"#, #"<div style="background: url(local.png); color: red">"#),
-        ]
-        for (html, blocked) in cases {
-            #expect(RemoteContent.block(in: html) == blocked)
-        }
+    @Test(arguments: [
+        (#"<div style="background-image: image-set('http://x.test/i.png' 1x)">"#,
+         #"<div data-blocked-style="background-image: image-set('http://x.test/i.png' 1x)">"#),
+        (#"<div style="background: url(ht\74p://x.test/e.png)">"#, #"<div data-blocked-style="background: url(ht\74p://x.test/e.png)">"#),
+        (#"<div style="background: url(&#104;ttp://x.test/r.png)">"#, #"<div data-blocked-style="background: url(&#104;ttp://x.test/r.png)">"#),
+        (#"<div style="background: url(local.png); color: red">"#, #"<div style="background: url(local.png); color: red">"#),
+    ])
+    func blocksWebURLsHiddenInStyles(_ html: String, _ blocked: String) {
+        #expect(RemoteContent.block(in: html) == blocked)
     }
 
     /// Quick Look has no content rule list: with remote content off its page carries a policy that

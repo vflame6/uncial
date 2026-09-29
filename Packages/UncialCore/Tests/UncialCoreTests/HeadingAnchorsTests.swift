@@ -20,14 +20,10 @@ import Testing
     }
 
     /// GitHub records every id it gives out and counts on until one is free: `# A`, `# A`, `# A-1` are
-    /// a, a-1 and a-1-1, not a second a-1 that sends in-page links to the wrong heading.
+    /// a, a-1 and a-1-1, not a second a-1 that sends in-page links to the wrong heading. An id a heading
+    /// brings is kept and counts as taken.
     @Test func deduplicatesAgainstEveryIDGiven() {
         #expect(HeadingAnchors.addIDs(to: "<h1>A</h1><h1>A</h1><h1>A-1</h1>") == "<h1 id=\"a\">A</h1><h1 id=\"a-1\">A</h1><h1 id=\"a-1-1\">A-1</h1>")
         #expect(HeadingAnchors.addIDs(to: "<h2 id=\"b\">X</h2><h2>B</h2>") == "<h2 id=\"b\">X</h2><h2 id=\"b-1\">B</h2>")
-    }
-
-    @Test func keepsExistingIDs() {
-        let html = "<h2 id=\"custom\">Title</h2>"
-        #expect(HeadingAnchors.addIDs(to: html) == html)
     }
 }

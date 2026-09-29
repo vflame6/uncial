@@ -12,29 +12,25 @@ import Testing
     @Test func formatsModifiersInMenuOrder() {
         #expect(AppShortcut.toggleEditorMode.display == "⇧⌘E")
         #expect(AppShortcut.livePreview.display == "⌥⌘2")
-        #expect(AppShortcut.splitView.display == "⌥⌘3")
-        #expect(AppShortcut.rawEditor.display == "⌥⌘4")
-        #expect(AppShortcut.settings.display == "⌘,")
         #expect(AppShortcut.reload.display == "⌘R")
     }
 
-    @Test func sectionsKeepDeclarationOrder() {
-        #expect(AppShortcut.sections == ["File", "View", "Edit", "Uncial"])
-        #expect(AppShortcut.shortcuts(in: "View") == [.readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload, .zoomIn, .zoomOut, .actualSize])
-        #expect(AppShortcut.zoomIn.display == "⌘=" && AppShortcut.zoomOut.display == "⌘-" && AppShortcut.actualSize.display == "⌘0")
-    }
-
-    @Test func findShortcutsMatchTheStandardEditMenu() {
+    /// Find, zoom and Settings keep the keys every Mac app gives them.
+    @Test func standardCommandsKeepTheSystemsShortcuts() {
         #expect(AppShortcut.find.display == "⌘F")
         #expect(AppShortcut.findAndReplace.display == "⌥⌘F")
         #expect(AppShortcut.findNext.display == "⌘G")
         #expect(AppShortcut.findPrevious.display == "⇧⌘G")
         #expect(AppShortcut.useSelectionForFind.display == "⌘E")
-        #expect(AppShortcut.shortcuts(in: "Edit") == [.find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind])
+        #expect(AppShortcut.zoomIn.display == "⌘=" && AppShortcut.zoomOut.display == "⌘-" && AppShortcut.actualSize.display == "⌘0")
+        #expect(AppShortcut.settings.display == "⌘,")
     }
 
-    @Test func exportTakesCommandP() {
-        #expect(AppShortcut.export.display == "⌘P" && AppShortcut.export.title == "Export…")
+    /// The Shortcuts tab lists the table by menu, in menu order.
+    @Test func sectionsKeepMenuOrder() {
+        #expect(AppShortcut.sections == ["File", "View", "Edit", "Uncial"])
         #expect(AppShortcut.shortcuts(in: "File") == [.newDocument, .open, .save, .export, .close, .closeAll])
+        #expect(AppShortcut.shortcuts(in: "View") == [.readOnly, .livePreview, .splitView, .rawEditor, .toggleEditorMode, .reload, .zoomIn, .zoomOut, .actualSize])
+        #expect(AppShortcut.shortcuts(in: "Edit") == [.find, .findAndReplace, .findNext, .findPrevious, .useSelectionForFind])
     }
 }

@@ -9,13 +9,10 @@ import Testing
 }
 
 @Suite struct FileWatcherTests {
+    private let directory = TemporaryDirectory()
+
     private func temporaryFile() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("uncial-watch-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent("doc.md")
-        try Data("# one\n".utf8).write(to: file)
-        return file
+        try directory.file("doc.md", "# one\n")
     }
 
     /// Starts a watcher, performs `mutation`, waits `settle`, returns how many callbacks fired.

@@ -90,12 +90,11 @@ import Testing
 
     /// Lines break where cmark breaks them, at `\n`, `\r\n` and `\r`: a vertical tab (Word's line break),
     /// a form feed or U+2028 inside a line shifted every definition below it.
-    @Test func linesBreakOnlyWhereCmarkBreaksThem() {
-        for separator in ["\u{0B}", "\u{0C}", "\u{2028}", "\u{85}"] {
-            let blocks = MarkdownBlocks("x\(separator)y\n\n[foo]: /url\n\n    code\n\n\nafter")
-            #expect(blocks.linkDefinitions == [MarkdownBlocks.LinkDefinition(label: "foo", destination: "/url", lines: 2...2)])
-            #expect((0..<8).map { blocks.kind(ofLine: $0) } == [nil, nil, nil, nil, .indentedCode, nil, nil, nil])
-        }
+    @Test(arguments: ["\u{0B}", "\u{0C}", "\u{2028}", "\u{85}"])
+    func linesBreakOnlyWhereCmarkBreaksThem(_ separator: String) {
+        let blocks = MarkdownBlocks("x\(separator)y\n\n[foo]: /url\n\n    code\n\n\nafter")
+        #expect(blocks.linkDefinitions == [MarkdownBlocks.LinkDefinition(label: "foo", destination: "/url", lines: 2...2)])
+        #expect((0..<8).map { blocks.kind(ofLine: $0) } == [nil, nil, nil, nil, .indentedCode, nil, nil, nil])
     }
 
     @Test func linesCountWithWindowsBreaksAndMultibyteText() {

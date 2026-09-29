@@ -5,23 +5,18 @@ import UncialCore
 
 /// The `uncial` shell command inside the app: the test host is Uncial.app, so its copy is the one that
 /// ships. `/usr/bin/open` is replaced by a stand-in that records its arguments, so nothing opens.
-@Suite(.serialized) final class UncialCommandTests {
+@Suite(.serialized) struct UncialCommandTests {
+    private let directory = TemporaryDirectory()
+    /// The working folder, as `realpath` names it.
     private let folder: URL
     private let log: URL
     private let fakeOpen: URL
 
     init() throws {
-        let base = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-command-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
-        folder = URL(fileURLWithPath: Self.canonical(base.path), isDirectory: true)
+        folder = URL(fileURLWithPath: Self.canonical(directory.url.path), isDirectory: true)
         log = folder.appendingPathComponent("open.log")
-        fakeOpen = folder.appendingPathComponent("fake-open")
-        try "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$UNCIAL_TEST_LOG\"\n".write(to: fakeOpen, atomically: true, encoding: .utf8)
+        fakeOpen = try directory.file("fake-open", "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"$UNCIAL_TEST_LOG\"\n")
         try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: fakeOpen.path)
-    }
-
-    deinit {
-        try? FileManager.default.removeItem(at: folder)
     }
 
     private var script: URL { Bundle.main.url(forResource: "uncial", withExtension: nil)! }

@@ -15,11 +15,11 @@ import Testing
         #expect(credits.attribute(.link, at: 0, effectiveRange: nil) == nil)
     }
 
-    @Test func attributionParsesAsMarkdown() throws {
-        let text = try AttributedString(markdown: AppInfo.attribution)
-        #expect(String(text.characters) == "Created by Maksim Radaev/@vflame6")
-        let links = text.runs.compactMap(\.link)
-        #expect(links == [URL(string: "https://github.com/vflame6")!])
+    /// The About tab and panel show the README's attribution line.
+    @Test func attributionIsTheReadmesLine() throws {
+        let readme = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("README.md")
+        let lines = try String(contentsOf: readme, encoding: .utf8).components(separatedBy: "\n")
+        #expect(lines.contains(AppInfo.attribution))
     }
 
     @Test func panelShowsTheCredits() async throws {

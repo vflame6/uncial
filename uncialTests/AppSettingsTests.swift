@@ -9,10 +9,13 @@ import UncialCore
     private let suites = PreferenceSuites()
     deinit { suites.removeAll() }
 
-    private func freshDefaults() -> UserDefaults { suites.make() }
+    /// The settings as a launch reads them from `defaults`.
+    private func loaded(from defaults: UserDefaults) -> AppSettings {
+        AppSettings(defaults: defaults, applyAppearance: false)
+    }
 
     @Test func defaults() {
-        let settings = AppSettings(defaults: freshDefaults(), applyAppearance: false)
+        let settings = loaded(from: suites.make())
         #expect(settings.appearance == .system)
         #expect(settings.theme == .macOS)
         #expect(settings.defaultEditorMode == .split)
@@ -36,70 +39,77 @@ import UncialCore
         #expect(settings.hasCompletedFirstRun == false)
     }
 
-    @Test func persistsRemoteContentAndExternalChangePolicy() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.loadRemoteContent = false
-        settings.externalChangePolicy = .reload
-        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
-        #expect(reloaded.loadRemoteContent == false)
-        #expect(reloaded.externalChangePolicy == .reload)
-        defaults.set("bogus", forKey: AppSettings.Key.externalChangePolicy)
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).externalChangePolicy == .ask)
-        #expect(ExternalChangePolicy.allCases.map(\.title) == ["Ask", "Keep my edits", "Reload the file"])
-    }
-
-    @Test func persistsAttachmentSearch() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.attachmentsDirectory = "assets"
-        settings.searchesParentsForAttachments = false
-        settings.attachmentSearchBoundary = .root
-        settings.attachmentDestination = .nearestAttachmentsFolder
-        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
-        #expect(reloaded.attachmentsDirectory == "assets")
-        #expect(reloaded.searchesParentsForAttachments == false)
-        #expect(reloaded.attachmentSearchBoundary == .root)
-        #expect(reloaded.attachmentDestination == .nearestAttachmentsFolder)
-        #expect(reloaded.attachmentSearch == AttachmentSearch(directoryName: "assets", searchesParents: false, boundary: .root))
-        defaults.set("bogus", forKey: AppSettings.Key.attachmentSearchBoundary)
-        defaults.set("bogus", forKey: AppSettings.Key.attachmentDestination)
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).attachmentSearchBoundary == .home)
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).attachmentDestination == .attachmentsFolder)
-        #expect(AttachmentSearch.Boundary.allCases.map(\.title) == ["Home folder", "System root"])
-        #expect(AttachmentImporter.Destination.allCases.map(\.title) == ["Attachments folder next to the document", "First attachments folder found above", "The document's folder"])
-    }
-
-    @Test func persistsEditorConveniences() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+    /// Every choice made in Settings is there at the next launch.
+    @Test func persistsEverySetting() {
+        let defaults = suites.make()
+        let settings = loaded(from: defaults)
+        settings.appearance = .dark
+        settings.theme = .solarized
+        settings.defaultEditorMode = .rawEditor
+        settings.syncScrolling = false
         settings.showLineNumbers = true
         settings.autoPairing = false
         settings.continueLists = false
         settings.showStatusBar = true
         settings.readableLineWidth = false
-        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
+        settings.autosave = true
+        settings.externalChangePolicy = .reload
+        settings.loadRemoteContent = false
+        settings.attachmentsDirectory = "assets"
+        settings.searchesParentsForAttachments = false
+        settings.attachmentSearchBoundary = .root
+        settings.attachmentDestination = .nearestAttachmentsFolder
+        settings.exportFormat = .html
+        settings.splitRatio = 0.35
+        settings.textSize = 20
+        settings.markFirstRunCompleted()
+
+        let reloaded = loaded(from: defaults)
+        #expect(reloaded.appearance == .dark)
+        #expect(reloaded.theme == .solarized)
+        #expect(reloaded.defaultEditorMode == .rawEditor)
+        #expect(reloaded.syncScrolling == false)
         #expect(reloaded.showLineNumbers == true)
         #expect(reloaded.autoPairing == false)
         #expect(reloaded.continueLists == false)
         #expect(reloaded.showStatusBar == true)
         #expect(reloaded.readableLineWidth == false)
+        #expect(reloaded.autosave == true)
+        #expect(reloaded.externalChangePolicy == .reload)
+        #expect(reloaded.loadRemoteContent == false)
+        #expect(reloaded.attachmentSearch == AttachmentSearch(directoryName: "assets", searchesParents: false, boundary: .root))
+        #expect(reloaded.attachmentDestination == .nearestAttachmentsFolder)
+        #expect(reloaded.exportFormat == .html)
+        #expect(reloaded.splitRatio == 0.35)
+        #expect(reloaded.textSize == 20)
+        #expect(reloaded.hasCompletedFirstRun == true)
     }
 
-    @Test func persistsAndClampsTheSplitRatio() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.splitRatio = 0.35
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.35)
+    /// A stored value this version cannot use (another version's, a hand edit) falls back to the default,
+    /// and a number out of range is clamped.
+    @Test func unusableStoredValuesFallBack() {
+        let defaults = suites.make()
+        for key in [AppSettings.Key.externalChangePolicy, AppSettings.Key.attachmentSearchBoundary, AppSettings.Key.attachmentDestination, AppSettings.Key.exportFormat, "splitRatio"] {
+            defaults.set("bogus", forKey: key)
+        }
+        defaults.set(0, forKey: "textSize")
+        let bogus = loaded(from: defaults)
+        #expect(bogus.externalChangePolicy == .ask)
+        #expect(bogus.attachmentSearchBoundary == .home)
+        #expect(bogus.attachmentDestination == .attachmentsFolder)
+        #expect(bogus.exportFormat == .pdf)
+        #expect(bogus.splitRatio == 0.5)
+        #expect(bogus.textSize == nil)
         defaults.set(0.95, forKey: "splitRatio")
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.8)
-        defaults.set("wide", forKey: "splitRatio")
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).splitRatio == 0.5)
+        defaults.set(100, forKey: "textSize")
+        let large = loaded(from: defaults)
+        #expect(large.splitRatio == 0.8)
+        #expect(large.textSize == 36)
     }
 
     @Test func zoomsTheTextSizeWithinBounds() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        let defaults = suites.make()
+        let settings = loaded(from: defaults)
         settings.zoomIn()
         #expect(settings.textSize == 14 && settings.effectiveTextSize == 14)
         settings.zoomOut()
@@ -111,66 +121,31 @@ import UncialCore
         settings.textSize = 9
         settings.zoomOut()
         #expect(settings.textSize == 9)
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == 9)
         settings.resetTextSize()
-        #expect(settings.textSize == nil && AppSettings(defaults: defaults, applyAppearance: false).textSize == nil)
-        defaults.set(100, forKey: "textSize")
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == 36)
-        defaults.set(0, forKey: "textSize")
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).textSize == nil)
-    }
-
-    @Test func persistsAutosave() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.autosave = true
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).autosave == true)
-        settings.autosave = false
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).autosave == false)
-    }
-
-    @Test func persistsSyncScrollingOff() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.syncScrolling = false
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).syncScrolling == false)
-    }
-
-    @Test func persistsEverything() {
-        let defaults = freshDefaults()
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
-        settings.appearance = .dark
-        settings.theme = .solarized
-        settings.defaultEditorMode = .rawEditor
-        settings.markFirstRunCompleted()
-        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
-        #expect(reloaded.appearance == .dark)
-        #expect(reloaded.theme == .solarized)
-        #expect(reloaded.defaultEditorMode == .rawEditor)
-        #expect(reloaded.hasCompletedFirstRun == true)
+        #expect(settings.textSize == nil && loaded(from: defaults).textSize == nil)
     }
 
     @Test func migratesLegacyLivePreviewToSplit() {
-        let defaults = freshDefaults()
+        let defaults = suites.make()
         defaults.set("livePreview", forKey: "defaultEditorMode")
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        let settings = loaded(from: defaults)
         #expect(settings.defaultEditorMode == .split)
         #expect(defaults.string(forKey: "defaultEditorMode") == "split")
         settings.defaultEditorMode = .livePreview
         #expect(defaults.string(forKey: "defaultEditorMode") == "inlinePreview")
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).defaultEditorMode == .livePreview)
+        #expect(loaded(from: defaults).defaultEditorMode == .livePreview)
     }
 
     @Test func migratesLegacyThemeKeyToAppearance() {
-        let defaults = freshDefaults()
+        let defaults = suites.make()
         defaults.set("dark", forKey: "theme")
-        let settings = AppSettings(defaults: defaults, applyAppearance: false)
+        let settings = loaded(from: defaults)
         #expect(settings.appearance == .dark)
         #expect(settings.theme == .macOS)
         #expect(defaults.string(forKey: "appearance") == "dark")
         #expect(defaults.string(forKey: "theme") == nil)
         settings.theme = .github
-        let reloaded = AppSettings(defaults: defaults, applyAppearance: false)
+        let reloaded = loaded(from: defaults)
         #expect(reloaded.appearance == .dark)
         #expect(reloaded.theme == .github)
     }
@@ -181,13 +156,5 @@ import UncialCore
         #expect(Appearance.dark.appearance?.name == .darkAqua)
         // What Quick Look gets through the App Group.
         #expect(Appearance.allCases.map(\.pageAppearance) == [.system, .light, .dark])
-    }
-
-    @Test func remembersTheExportFormat() {
-        let defaults = freshDefaults()
-        AppSettings(defaults: defaults, applyAppearance: false).exportFormat = .html
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).exportFormat == .html)
-        defaults.set("docx", forKey: AppSettings.Key.exportFormat)
-        #expect(AppSettings(defaults: defaults, applyAppearance: false).exportFormat == .pdf)
     }
 }

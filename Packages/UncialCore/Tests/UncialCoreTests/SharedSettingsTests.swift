@@ -3,55 +3,36 @@ import Testing
 @testable import UncialCore
 
 @Suite struct SharedSettingsTests {
-    private func directory() throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("uncial-shared-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        return directory
-    }
+    private let directory = TemporaryDirectory()
 
-    @Test func roundTripsTheme() throws {
-        let dir = try directory()
-        try SharedSettings.write(theme: .solarized, remoteContent: true, appearance: .system, to: dir)
-        #expect(SharedSettings.readTheme(from: dir) == .solarized)
-        try SharedSettings.write(theme: .github, remoteContent: true, appearance: .system, to: dir)
-        #expect(SharedSettings.readTheme(from: dir) == .github)
+    /// What the app publishes is what the Quick Look extensions read: the theme, the remote-content
+    /// choice and the System / Light / Dark appearance, each time they are written.
+    @Test func roundTripsEverySetting() throws {
+        try SharedSettings.write(theme: .solarized, remoteContent: false, appearance: .dark, to: directory.url)
+        #expect(SharedSettings.readTheme(from: directory.url) == .solarized)
+        #expect(SharedSettings.readRemoteContent(from: directory.url) == false)
+        #expect(SharedSettings.readAppearance(from: directory.url) == .dark)
+        try SharedSettings.write(theme: .github, remoteContent: true, appearance: .light, to: directory.url)
+        #expect(SharedSettings.readTheme(from: directory.url) == .github)
+        #expect(SharedSettings.readRemoteContent(from: directory.url) == true)
+        #expect(SharedSettings.readAppearance(from: directory.url) == .light)
     }
 
     @Test func createsMissingDirectory() throws {
-        let dir = try directory().appendingPathComponent("nested/deeper", isDirectory: true)
-        try SharedSettings.write(theme: .macOS, remoteContent: true, appearance: .system, to: dir)
-        #expect(SharedSettings.readTheme(from: dir) == .macOS)
+        let nested = directory.url("nested/deeper", isDirectory: true)
+        try SharedSettings.write(theme: .macOS, remoteContent: true, appearance: .system, to: nested)
+        #expect(SharedSettings.readTheme(from: nested) == .macOS)
     }
 
+    /// Nothing published yet, or a value this version does not know, reads as nil: the extension
+    /// falls back to its own default.
     @Test func missingOrUnknownValuesReadAsNil() throws {
-        let dir = try directory()
-        #expect(SharedSettings.readTheme(from: dir) == nil)
-        try (["theme": "neon"] as NSDictionary).write(to: dir.appendingPathComponent("settings.plist"))
-        #expect(SharedSettings.readTheme(from: dir) == nil)
-    }
-
-    @Test func roundTripsRemoteContent() throws {
-        let dir = try directory()
-        #expect(SharedSettings.readRemoteContent(from: dir) == nil)
-        try SharedSettings.write(theme: .github, remoteContent: true, appearance: .system, to: dir)
-        #expect(SharedSettings.readRemoteContent(from: dir) == true)
-        #expect(SharedSettings.readTheme(from: dir) == .github)
-        try SharedSettings.write(theme: .solarized, remoteContent: false, appearance: .system, to: dir)
-        #expect(SharedSettings.readRemoteContent(from: dir) == false)
-    }
-
-    /// The app's System / Light / Dark choice, for the preview extension; nil when never written or unknown.
-    @Test func roundTripsAppearance() throws {
-        let dir = try directory()
-        #expect(SharedSettings.readAppearance(from: dir) == nil)
-        try SharedSettings.write(theme: .github, remoteContent: true, appearance: .dark, to: dir)
-        #expect(SharedSettings.readAppearance(from: dir) == .dark)
-        #expect(SharedSettings.readTheme(from: dir) == .github && SharedSettings.readRemoteContent(from: dir) == true)
-        try SharedSettings.write(theme: .github, remoteContent: true, appearance: .light, to: dir)
-        #expect(SharedSettings.readAppearance(from: dir) == .light)
-        try (["appearance": "sepia"] as NSDictionary).write(to: dir.appendingPathComponent("settings.plist"))
-        #expect(SharedSettings.readAppearance(from: dir) == nil)
+        #expect(SharedSettings.readTheme(from: directory.url) == nil)
+        #expect(SharedSettings.readRemoteContent(from: directory.url) == nil)
+        #expect(SharedSettings.readAppearance(from: directory.url) == nil)
+        try (["theme": "neon", "appearance": "sepia"] as NSDictionary).write(to: directory.url("settings.plist"))
+        #expect(SharedSettings.readTheme(from: directory.url) == nil)
+        #expect(SharedSettings.readAppearance(from: directory.url) == nil)
     }
 
     @Test func groupIdentifierIsTeamPrefixed() {

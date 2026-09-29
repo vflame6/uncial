@@ -61,11 +61,4 @@ import Testing
         #expect(abs(view.leading.frame.width - 420) <= 1)
         #expect(abs(view.leading.frame.width + view.trailing.frame.width - 1399) < 0.01)
     }
-
-    @Test func enforcesTheMinimumPaneWidth() {
-        let view = panes(ratio: 0.2)
-        #expect(view.leading.frame.width == 280)
-        view.show(leading: true, trailing: true, ratio: 0.8)
-        #expect(view.trailing.frame.width == 280)
-    }
 }

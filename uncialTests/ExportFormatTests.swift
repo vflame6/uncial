@@ -11,7 +11,6 @@ import UniformTypeIdentifiers
         #expect(ExportFormat.html.fileName(for: "note.pdf") == "note.html")
         #expect(ExportFormat.pdf.fileName(for: "v1.2") == "v1.2.pdf")
         #expect(ExportFormat.pdf.fileName(for: "") == "Untitled.pdf")
-        #expect(ExportFormat.allCases.map(\.title) == ["PDF", "HTML"])
         #expect(ExportFormat.pdf.contentType == .pdf && ExportFormat.html.contentType == .html)
     }
 

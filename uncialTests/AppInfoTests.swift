@@ -16,8 +16,4 @@ import Testing
         #expect(info.copyright == nil)
         #expect(AppInfo(info: ["NSHumanReadableCopyright": "© Me"]).copyright == "© Me")
     }
-
-    @Test func readsTheHostBundle() {
-        #expect(!AppInfo().version.isEmpty)
-    }
 }

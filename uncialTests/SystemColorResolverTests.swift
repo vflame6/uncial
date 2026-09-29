@@ -32,20 +32,13 @@ import WebKit
         }
     }
 
+    /// The page's background, text and link colors in WebKit.
     private func colors(of html: String, in appearance: NSAppearance.Name) async throws -> String {
-        let webView = WKWebView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
-        let window = NSWindow(contentRect: webView.frame, styleMask: [.borderless], backing: .buffered, defer: false)
-        window.isReleasedWhenClosed = false
-        window.contentView = webView
-        webView.appearance = NSAppearance(named: appearance)
-        defer { window.close() }
-        webView.loadHTMLString(html, baseURL: nil)
-        for _ in 0..<100 where webView.isLoading || webView.estimatedProgress < 1 {
-            try await Task.sleep(for: .milliseconds(50))
+        try await withWebPage(html, appearance: appearance) { webView in
+            try await webView.evaluateJavaScript("""
+            [getComputedStyle(document.body).backgroundColor, getComputedStyle(document.body).color,
+             getComputedStyle(document.querySelector('a')).color].join('|')
+            """) as? String ?? ""
         }
-        return try await webView.evaluateJavaScript("""
-        [getComputedStyle(document.body).backgroundColor, getComputedStyle(document.body).color,
-         getComputedStyle(document.querySelector('a')).color].join('|')
-        """) as? String ?? ""
     }
 }

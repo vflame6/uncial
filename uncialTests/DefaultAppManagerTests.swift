@@ -39,13 +39,11 @@ final class FakeWorkspace: DefaultAppWorkspace {
     private let suites = PreferenceSuites()
     deinit { suites.removeAll() }
 
-    private func freshDefaults() -> UserDefaults { suites.make() }
-
-    /// A failed Make Default's error goes once a refresh finds Uncial the default after all (set
-    /// elsewhere, a retry that took), instead of staying next to a healthy status for the session.
+    /// A failed Make Default shows its error until a refresh finds Uncial the default after all (set
+    /// elsewhere, a retry that took), instead of keeping it next to a healthy status for the session.
     @Test func errorGoesOnceTheGoalIsReached() async {
         let workspace = FakeWorkspace(current: xcode)
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: suites.make())
         workspace.failNext = true
         await manager.makeDefault()
         #expect(manager.errorMessage != nil && manager.isDefault == false)
@@ -58,7 +56,7 @@ final class FakeWorkspace: DefaultAppWorkspace {
 
     @Test func detectsWhetherUncialIsDefault() async {
         let workspace = FakeWorkspace(current: xcode)
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: suites.make())
         await manager.refresh()
         #expect(manager.isDefault == false)
         #expect(manager.currentDefaultName == "Xcode")
@@ -71,7 +69,7 @@ final class FakeWorkspace: DefaultAppWorkspace {
     @Test func everyTypeMustBeUncialToCountAsDefault() async {
         let workspace = FakeWorkspace(current: uncial)
         workspace.current[UTType.markdownVariant.identifier] = xcode
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: suites.make())
         await manager.refresh()
         #expect(manager.isDefault == false)
         #expect(manager.currentDefaultName == "Xcode")
@@ -79,7 +77,7 @@ final class FakeWorkspace: DefaultAppWorkspace {
 
     @Test func makeDefaultRemembersPreviousAndRemoveRestoresIt() async {
         let workspace = FakeWorkspace(current: xcode)
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: suites.make())
         await manager.makeDefault()
         #expect(workspace.setCalls == [uncial, uncial])
         #expect(workspace.setTypes == [.markdown, .markdownVariant])
@@ -93,7 +91,7 @@ final class FakeWorkspace: DefaultAppWorkspace {
     @Test func variantWithoutAHandlerRestoresToTheMarkdownTypesPrevious() async {
         let workspace = FakeWorkspace(current: xcode)
         workspace.current[UTType.markdownVariant.identifier] = nil
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: suites.make())
         await manager.makeDefault()
         #expect(manager.restoreTarget(for: .markdownVariant) == xcode)
         await manager.removeDefault()
@@ -102,17 +100,8 @@ final class FakeWorkspace: DefaultAppWorkspace {
 
     @Test func removeFallsBackToTextEditWithoutPrevious() async {
         let workspace = FakeWorkspace(current: uncial)
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
+        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: suites.make())
         await manager.removeDefault()
         #expect(workspace.setCalls == [textEdit, textEdit])
-    }
-
-    @Test func surfacesErrors() async {
-        let workspace = FakeWorkspace(current: xcode)
-        workspace.failNext = true
-        let manager = DefaultAppManager(workspace: workspace, ownURL: uncial, defaults: freshDefaults())
-        await manager.makeDefault()
-        #expect(manager.errorMessage != nil)
-        #expect(manager.isDefault == false)
     }
 }

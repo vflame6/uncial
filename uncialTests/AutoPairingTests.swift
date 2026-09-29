@@ -43,6 +43,8 @@ import Testing
         #expect(type("([])") == "([])|")
         #expect(type("{a}") == "{a}|")
         #expect(type("[text](url)") == "[text](url)|")
+        // A closer the model did not insert is typed.
+        #expect(type(")", into: "()", selection: NSRange(location: 1, length: 0)) == "()|)")
     }
 
     @Test func closesOnlyInFrontOfWhitespacePunctuationOrClosers() {
@@ -50,10 +52,6 @@ import Testing
         #expect(type("(", into: "x.", selection: NSRange(location: 1, length: 0)) == "x(|).")
         #expect(type("[", into: "()", selection: NSRange(location: 1, length: 0)) == "([|])")
         #expect(type("(", into: "a b", selection: NSRange(location: 1, length: 0)) == "a(|) b")
-    }
-
-    @Test func untrackedClosersAreNotSkipped() {
-        #expect(type(")", into: "()", selection: NSRange(location: 1, length: 0)) == "()|)")
     }
 
     @Test func pairsMarkersOnlyAtWordBoundaries() {

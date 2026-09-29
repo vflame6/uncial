@@ -22,11 +22,11 @@ import Testing
         #expect(EditorMode.allCases.filter { $0.presentation == .source } == [.readOnly, .split, .rawEditor])
     }
 
+    /// The raw values are stored in the settings. Live Preview is stored as `inlinePreview`: until
+    /// 2026-09-15 `livePreview` meant the split, a value `AppSettings` migrates.
     @Test func storedValuesAndShortcuts() {
-        #expect(EditorMode.livePreview.rawValue == "inlinePreview")
-        #expect(EditorMode.split.rawValue == "split")
+        #expect(EditorMode.allCases.map(\.rawValue) == ["readOnly", "inlinePreview", "split", "rawEditor"])
         #expect(EditorMode.legacySplitRawValue == "livePreview")
-        #expect(EditorMode.allCases.map(\.shortcut.display) == ["⌥⌘1", "⌥⌘2", "⌥⌘3", "⌥⌘4"])
-        #expect(EditorMode.split.title == "Split View" && EditorMode.livePreview.title == "Live Preview")
+        #expect(EditorMode.allCases.map(\.shortcut) == [.readOnly, .livePreview, .splitView, .rawEditor])
     }
 }

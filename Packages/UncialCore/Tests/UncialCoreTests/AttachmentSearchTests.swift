@@ -6,6 +6,7 @@ import Testing
     private let home = URL(fileURLWithPath: "/Users/someone", isDirectory: true)
     private let work = URL(fileURLWithPath: "/Users/someone/Notes/Work", isDirectory: true)
     private let picture = URL(fileURLWithPath: "/Users/someone/Notes/Work/img/pic.png")
+    private let directory = TemporaryDirectory()
 
     private func paths(_ urls: [URL]) -> [String] { urls.map(\.path) }
 
@@ -13,10 +14,7 @@ import Testing
     /// /private only from a path that exists, so the document's folder lost it while the missing target
     /// kept it, the two looked unrelated, and the search never ran.
     @Test func searchesForDocumentsUnderPrivate() throws {
-        let real = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-private-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: real, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: real) }
-        let path = real.standardizedFileURL.path
+        let path = directory.url.standardizedFileURL.path
         try #require(path.hasPrefix("/var/"))
         let folder = URL(fileURLWithPath: "/private" + path, isDirectory: true)
         let candidates = AttachmentSearch(boundary: .root).candidates(for: folder.appendingPathComponent("a.gif"), from: folder)
@@ -101,13 +99,10 @@ import Testing
     }
 
     @Test func locatesRealFiles() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-attachments-\(UUID().uuidString)", isDirectory: true)
-        let notes = root.appendingPathComponent("notes/sub", isDirectory: true)
-        try FileManager.default.createDirectory(at: notes, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("attachments"), withIntermediateDirectories: true)
-        try Data("x".utf8).write(to: root.appendingPathComponent("attachments/pic.png"))
+        let notes = try directory.folder("notes/sub")
+        let stored = try directory.file("attachments/pic.png", "x")
         let reference = notes.appendingPathComponent("pic.png")
-        #expect(AttachmentSearch(boundary: .root).locate(reference, from: notes)?.standardizedFileURL.path == root.standardizedFileURL.appendingPathComponent("attachments/pic.png").path)
+        #expect(AttachmentSearch(boundary: .root).locate(reference, from: notes)?.standardizedFileURL.path == stored.standardizedFileURL.path)
         #expect(AttachmentSearch(searchesParents: false).locate(reference, from: notes) == nil)
         #expect(AttachmentSearch.direct.locate(reference, from: notes) == nil)
         try Data("x".utf8).write(to: reference)

@@ -139,3 +139,47 @@ final class LoopbackHTTPServer: @unchecked Sendable {
         lock.withLock { sentBytes[path, default: 0] += bytes }
     }
 }
+
+/// A TCP listener on 127.0.0.1 that counts the connections it gets and drops them.
+final class LoopbackListener: @unchecked Sendable {
+    private let listener: NWListener
+    private let lock = NSLock()
+    private var accepted = 0
+
+    var connections: Int { lock.withLock { accepted } }
+    var port: UInt16 { listener.port?.rawValue ?? 0 }
+
+    init() throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        listener = try NWListener(using: parameters)
+        listener.newConnectionHandler = { [weak self] connection in
+            self?.count()
+            connection.cancel()
+        }
+    }
+
+    private func count() {
+        lock.withLock { accepted += 1 }
+    }
+
+    func start() async {
+        let ready = AsyncStream<Void> { continuation in
+            listener.stateUpdateHandler = { state in
+                switch state {
+                case .ready, .failed, .cancelled:
+                    continuation.yield()
+                    continuation.finish()
+                default:
+                    break
+                }
+            }
+        }
+        listener.start(queue: DispatchQueue(label: "uncial-tests-loopback"))
+        for await _ in ready { break }
+    }
+
+    func stop() {
+        listener.cancel()
+    }
+}

@@ -5,13 +5,11 @@ import UncialCore
 
 @MainActor
 @Suite struct DocumentViewModelTests {
+    private let directory = TemporaryDirectory()
+
+    /// A `doc.md` holding `contents`, in a folder of its own.
     private func temporaryFile(_ contents: String) throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("uncial-model-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent("doc.md")
-        try Data(contents.utf8).write(to: file)
-        return file
+        try directory.file(UUID().uuidString + "/doc.md", contents)
     }
 
     private func contents(of file: URL) throws -> String {
@@ -134,15 +132,6 @@ import UncialCore
         let size = getxattr(file.path, "com.example.uncial", &buffer, buffer.count, 0, 0)
         #expect(size == marker.count && Array(buffer.prefix(max(size, 0))) == marker)
         #expect(try FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as? Int == 0o600)
-    }
-
-    @Test func saveNowWritesImmediately() throws {
-        let file = try temporaryFile("a")
-        let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .seconds(5))
-        model.updateText("b")
-        model.saveNow()
-        #expect(try contents(of: file) == "b")
-        #expect(model.hasUnsavedChanges == false)
     }
 
     @Test func externalChangeIsAdoptedWhenClean() async throws {
@@ -316,16 +305,6 @@ import UncialCore
         #expect(try contents(of: file) == "disk")
     }
 
-    @Test func reportsSaveFailures() throws {
-        let file = try temporaryFile("a")
-        try FileManager.default.removeItem(at: file.deletingLastPathComponent())
-        let model = DocumentViewModel(fileURL: file, initialText: "a", saveDelay: .seconds(5))
-        model.updateText("b")
-        model.saveNow()
-        #expect(model.saveError != nil)
-        #expect(model.hasUnsavedChanges == true)
-    }
-
     /// A failed save or reload is reported for the window in every mode: the save error used to show
     /// only under the editor, and a reload error only in place of an empty page.
     @Test func reportsSaveAndReloadProblems() async throws {
@@ -339,6 +318,7 @@ import UncialCore
         try FileManager.default.removeItem(at: file.deletingLastPathComponent())
         model.updateText("# b")
         #expect(model.saveNow() == .failed)
+        #expect(model.saveError != nil && model.hasUnsavedChanges == true)
         #expect(model.problem?.hasPrefix("Couldn't save: ") == true)
     }
 

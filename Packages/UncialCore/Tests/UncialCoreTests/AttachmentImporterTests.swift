@@ -3,36 +3,35 @@ import Testing
 @testable import UncialCore
 
 @Suite struct AttachmentImporterTests {
-    /// `root/notes/sub/` holds the document, `root/attachments/` exists, `elsewhere/` holds sources.
+    /// `notes/sub/` holds the document, `attachments/` sits at the root, `elsewhere/` holds sources.
     private struct Fixture {
-        let root: URL
-        let sub: URL
-        let elsewhere: URL
+        let directory = TemporaryDirectory()
+        var root: URL { directory.url }
+        var sub: URL { directory.url("notes/sub", isDirectory: true) }
+        var elsewhere: URL { directory.url("elsewhere", isDirectory: true) }
 
         init() throws {
-            root = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-import-\(UUID().uuidString)", isDirectory: true)
-            sub = root.appendingPathComponent("notes/sub", isDirectory: true)
-            elsewhere = root.appendingPathComponent("elsewhere", isDirectory: true)
-            for folder in [sub, elsewhere, root.appendingPathComponent("attachments", isDirectory: true)] {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for folder in ["notes/sub", "elsewhere", "attachments"] {
+                try directory.folder(folder)
             }
         }
 
         func file(_ path: String, _ contents: String = "x") throws -> URL {
-            let url = root.appendingPathComponent(path)
-            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data(contents.utf8).write(to: url)
-            return url
+            try directory.file(path, contents)
         }
 
         func path(_ url: URL) -> String { url.standardizedFileURL.path }
         func relative(_ url: URL) -> String { AttachmentSearch.relativePath(of: url, from: root) }
     }
 
+    private let fixture: Fixture
     private let everywhere = AttachmentSearch(boundary: .root)
 
+    init() throws {
+        fixture = try Fixture()
+    }
+
     @Test func targetFolderPerDestination() throws {
-        let fixture = try Fixture()
         let sub = fixture.sub
         #expect(fixture.relative(AttachmentImporter(search: everywhere).targetDirectory(for: sub)) == "notes/sub/attachments")
         #expect(fixture.relative(AttachmentImporter(search: everywhere, destination: .documentFolder).targetDirectory(for: sub)) == "notes/sub")
@@ -50,7 +49,6 @@ import Testing
     }
 
     @Test func copiesOutsideFilesIntoACreatedFolderUnderFreeNames() throws {
-        let fixture = try Fixture()
         let importer = AttachmentImporter(search: everywhere)
         let first = try fixture.file("elsewhere/pic.png", "one")
         let stored = try importer.store(fileAt: first, for: fixture.sub)
@@ -68,7 +66,6 @@ import Testing
     }
 
     @Test func linksReachableFilesWhereTheyAre() throws {
-        let fixture = try Fixture()
         let importer = AttachmentImporter(search: everywhere)
         let inside = try fixture.file("notes/sub/img/x.png")
         #expect(fixture.path(try importer.store(fileAt: inside, for: fixture.sub)) == fixture.path(inside))
@@ -87,7 +84,6 @@ import Testing
     /// attachments go to is linked where it is: copying it there copied it into itself, over and over,
     /// until paths reached 1024 bytes.
     @Test func linksFoldersThatHoldTheNoteOrTheTarget() throws {
-        let fixture = try Fixture()
         _ = try fixture.file("notes/sub/note.md", "# note")
         let notes = fixture.root.appendingPathComponent("notes", isDirectory: true)
         for destination in AttachmentImporter.Destination.allCases {
@@ -110,7 +106,6 @@ import Testing
 
     /// Any other folder is copied like a file.
     @Test func copiesOtherFolders() throws {
-        let fixture = try Fixture()
         _ = try fixture.file("elsewhere/pack/a.txt", "a")
         let stored = try AttachmentImporter(search: everywhere).store(fileAt: fixture.elsewhere.appendingPathComponent("pack"), for: fixture.sub)
         #expect(fixture.relative(stored) == "notes/sub/attachments/pack")
@@ -118,7 +113,6 @@ import Testing
     }
 
     @Test func storesPictureData() throws {
-        let fixture = try Fixture()
         let importer = AttachmentImporter(search: everywhere, destination: .documentFolder)
         let data = Data("png".utf8)
         let stored = try importer.store(data, named: "pasted.png", for: fixture.sub)
@@ -129,7 +123,6 @@ import Testing
     }
 
     @Test func markdownForImagesAndFiles() throws {
-        let fixture = try Fixture()
         let sub = fixture.sub
         #expect(AttachmentImporter.markdown(for: sub.appendingPathComponent("attachments/pic.png"), relativeTo: sub) == "![pic](attachments/pic.png)")
         #expect(AttachmentImporter.markdown(for: sub.appendingPathComponent("attachments/spec v2 (final).pdf"), relativeTo: sub) == "[spec v2 (final).pdf](attachments/spec%20v2%20%28final%29.pdf)")

@@ -7,21 +7,20 @@ import UncialCore
 @Suite struct ThemedTextViewAttachmentTests {
     private static let pngPixel = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")!
 
-    /// A document folder, a folder of sources beside it, and an editor on "one\ntwo" with the caret after "one".
-    private func fixture() throws -> (directory: URL, sources: URL, editor: ThemedTextView) {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-paste-\(UUID().uuidString)", isDirectory: true)
-        let directory = root.appendingPathComponent("notes", isDirectory: true)
-        let sources = root.appendingPathComponent("sources", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: sources, withIntermediateDirectories: true)
-        let editor = ThemedTextView.standalone()
-        editor.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        editor.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        editor.baseURL = directory
-        editor.attachmentSearch = AttachmentSearch(searchesParents: false)
-        editor.replaceText(with: "one\ntwo")
-        editor.setSelectedRange(NSRange(location: 3, length: 0))
-        return (directory, sources, editor)
+    private let root = TemporaryDirectory()
+    /// The document's folder.
+    private var directory: URL { root.url("notes", isDirectory: true) }
+    /// A folder of files to paste or drop, beside it.
+    private var sources: URL { root.url("sources", isDirectory: true) }
+
+    /// An editor on "one\ntwo" for a document in `directory`, the caret after "one".
+    private func fixture() throws -> ThemedTextView {
+        try root.folder("notes")
+        try root.folder("sources")
+        return editor("one\ntwo", caret: 3) { view in
+            view.baseURL = directory
+            view.attachmentSearch = AttachmentSearch(searchesParents: false)
+        }
     }
 
     /// A private pasteboard, so the tests never touch the general one.
@@ -32,7 +31,7 @@ import UncialCore
     }
 
     @Test func pastesAFileAsACopiedAttachment() throws {
-        let (directory, sources, editor) = try fixture()
+        let editor = try fixture()
         let source = sources.appendingPathComponent("pic.png")
         try Self.pngPixel.write(to: source)
         let board = pasteboard()
@@ -47,7 +46,7 @@ import UncialCore
     }
 
     @Test func pastesPictureDataAsAFile() throws {
-        let (directory, _, editor) = try fixture()
+        let editor = try fixture()
         editor.attachmentDestination = .documentFolder
         let board = pasteboard()
         board.setData(Self.pngPixel, forType: .png)
@@ -63,7 +62,7 @@ import UncialCore
     /// A file that cannot be stored is reported, and nothing else is pasted in its place: the text view
     /// used to fall back to the pasteboard's text, the file's path.
     @Test func aFailedImportPastesNothingElse() throws {
-        let (directory, sources, editor) = try fixture()
+        let editor = try fixture()
         let source = sources.appendingPathComponent("pic.png")
         try Self.pngPixel.write(to: source)
         // The attachments folder cannot be created: a file has its name.
@@ -80,7 +79,7 @@ import UncialCore
     /// A large file is copied off the main thread (256 MB took 1.5–2.4 s of frozen editor): the paste
     /// returns at once and the link goes in where the paste was when the copy is done.
     @Test func largeFilesImportInTheBackground() async throws {
-        let (directory, sources, editor) = try fixture()
+        let editor = try fixture()
         let source = sources.appendingPathComponent("big.bin")
         try Data(count: 20 << 20).write(to: source)
         let board = pasteboard()
@@ -97,7 +96,7 @@ import UncialCore
     }
 
     @Test func textStillPastesAsText() throws {
-        let (directory, _, editor) = try fixture()
+        let editor = try fixture()
         let board = pasteboard()
         board.setString("hey", forType: .string)
         #expect(editor.readSelection(from: board))
@@ -106,7 +105,7 @@ import UncialCore
     }
 
     @Test func dropsFilesAtTheDropPoint() throws {
-        let (directory, sources, editor) = try fixture()
+        let editor = try fixture()
         #expect(editor.registeredDraggedTypes.contains(.fileURL))
         // Set up like the app (plain text, no graphics, in a scroll view in a window): NSTextView's own
         // registration on the way in must not drop the attachment types.

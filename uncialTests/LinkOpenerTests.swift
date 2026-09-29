@@ -26,6 +26,8 @@ final class FakeLinkWorkspace: LinkWorkspace {
 
 @MainActor
 @Suite struct LinkOpenerTests {
+    private let directory = TemporaryDirectory()
+
     private func kind(_ action: LinkOpener.Action) -> String {
         switch action {
         case .open: "open"
@@ -39,18 +41,14 @@ final class FakeLinkWorkspace: LinkWorkspace {
     /// scripts, apps and installers never open from a link (a `.command` next to a cloned README
     /// would run in Terminal), they can only be shown in Finder.
     @Test func decidesWhatAClickDoes() throws {
-        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-links-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: folder) }
         func file(_ name: String, _ contents: String, executable: Bool = false) throws -> URL {
-            let url = folder.appendingPathComponent(name)
-            try Data(contents.utf8).write(to: url)
+            let url = try directory.file(name, contents)
             if executable { try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: url.path) }
             return url
         }
-        let app = folder.appendingPathComponent("Tool.app", isDirectory: true)
-        try FileManager.default.createDirectory(at: app.appendingPathComponent("Contents"), withIntermediateDirectories: true)
-        func action(_ url: URL) -> String { kind(LinkOpener.action(for: url, from: folder, attachments: .direct)) }
+        let app = try directory.folder("Tool.app")
+        try directory.folder("Tool.app/Contents")
+        func action(_ url: URL) -> String { kind(LinkOpener.action(for: url, from: directory.url, attachments: .direct)) }
 
         #expect(action(URL(string: "https://example.com/a")!) == "open")
         #expect(action(URL(string: "mailto:someone@example.com")!) == "open")
@@ -95,14 +93,11 @@ final class FakeLinkWorkspace: LinkWorkspace {
         #expect(workspace.opened == [ssh, web])
         #expect(questions.count == 4)
     }
+
     /// A link to a local file that is not where the page says opens the attachment the search finds.
     @Test func resolvesMissingFilesThroughTheAttachmentSearch() throws {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-links-\(UUID().uuidString)", isDirectory: true)
-        let notes = root.appendingPathComponent("notes", isDirectory: true)
-        try FileManager.default.createDirectory(at: notes, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: root.appendingPathComponent("attachments"), withIntermediateDirectories: true)
-        let stored = root.appendingPathComponent("attachments/spec.pdf")
-        try Data("pdf".utf8).write(to: stored)
+        let notes = try directory.folder("notes")
+        let stored = try directory.file("attachments/spec.pdf", "pdf")
         let link = notes.appendingPathComponent("spec.pdf")
         let everywhere = AttachmentSearch(boundary: .root)
         #expect(LinkOpener.resolve(link, from: notes, attachments: .direct).path == link.path)

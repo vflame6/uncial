@@ -11,6 +11,19 @@ import Testing
         kinds(text).contains { $0.0 == kind && $0.1 == fragment }
     }
 
+    private func token(_ text: String, _ index: Int = 0) -> MarkdownHighlighter.Token {
+        MarkdownHighlighter.tokens(in: text)[index]
+    }
+
+    private func markers(_ token: MarkdownHighlighter.Token, in text: String) -> [String] {
+        token.markers.map { (text as NSString).substring(with: $0) }
+    }
+
+    /// The text of every marker the tokens of `text` hide.
+    private func hidden(_ text: String) -> [String] {
+        MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
+    }
+
     @Test func headingsCoverTheWholeLine() {
         let text = "# Title\ntext"
         #expect(has(text, .heading, "# Title"))
@@ -51,6 +64,9 @@ import Testing
         let tilde = "~~~ aa ``` ~~~\nfoo\n~~~  \nbar *em*"
         #expect(kinds(tilde).filter { $0.0 == .codeBlock }.map(\.1) == ["~~~ aa ``` ~~~", "foo", "~~~  "])
         #expect(has(tilde, .emphasis, "*em*"))
+        // A block closes only with its own character, at least as long as its opening.
+        let longer = "~~~\n```\nstill code\n~~~~\ndone"
+        #expect(kinds(longer).filter { $0.0 == .codeBlock }.map(\.1) == ["~~~", "```", "still code", "~~~~"])
     }
 
     /// Code and HTML blocks as cmark reads them: indented code, and a fence indented inside a list item,
@@ -69,25 +85,24 @@ import Testing
         #expect(tokens.contains { if case .html = $0.kind { return true }; return false })
     }
 
-    @Test func tildeFencesAndLongerClosersWork() {
-        let text = "~~~\n```\nstill code\n~~~~\ndone"
-        #expect(kinds(text).filter { $0.0 == .codeBlock }.count == 4)
-        #expect(!has(text, .codeBlock, "done"))
+    @Test func emphasisStrongAndStrikethrough() {
+        #expect(has("**bold** and *em* and __under__ and ~~gone~~", .strong, "**bold**"))
+        #expect(has("a *b* c", .emphasis, "*b*") && has("a _b_ c", .emphasis, "_b_") && has("a **b** c", .strong, "**b**"))
+        #expect(has("x *em*, y", .emphasis, "*em*") && has("(*em*)", .emphasis, "*em*"))
+        #expect(has("a ~~gone~~ b", .strikethrough, "~~gone~~"))
+        // An escaped delimiter opens or closes nothing.
+        #expect(!has("\\*not italic\\*", .emphasis, "*not italic*"))
+        #expect(!has("\\**not bold\\**", .strong, "**not bold**"))
     }
 
-    /// Emphasis follows CommonMark's flanking rules: a run opens only before text (`a**"foo"**` is no
-    /// emphasis), `_` never inside a word (`foo__bar__`, `__foo__bar`), no delimiter pairs across a link's
-    /// text, and GFM's `~~` the same (`~~ spaced ~~` is not struck). Live Preview hid those markers, which
-    /// the page shows (BUG-28).
-    @Test func emphasisFollowsTheFlankingRules() {
-        for text in ["a**\"foo\"**", "a__\"foo\"__", "foo__bar__", "5__6__78", "__foo__bar", "**(**foo)", "__(__foo)", "_foo [bar_](/url)", "~~ spaced ~~"] {
-            let emphasis = MarkdownHighlighter.tokens(in: text).filter { [.strong, .emphasis, .strikethrough].contains($0.kind) }
-            #expect(emphasis.isEmpty, "\(text)")
-        }
-        #expect(has("**bold** and *em* and __under__ and ~~gone~~", .strong, "**bold**"))
-        #expect(has("x *em*, y", .emphasis, "*em*"))
-        #expect(has("(*em*)", .emphasis, "*em*"))
-        #expect(has("a ~~gone~~ b", .strikethrough, "~~gone~~"))
+    /// Emphasis follows CommonMark's flanking rules: a run opens only before text (`2 * 3 * 4`,
+    /// `a**"foo"**` are no emphasis), `_` never inside a word (`foo__bar__`, `__foo__bar`), no delimiter
+    /// pairs across a link's text, and GFM's `~~` the same (`~~ spaced ~~` is not struck). Live Preview
+    /// hid those markers, which the page shows (BUG-28).
+    @Test(arguments: ["2 * 3 * 4", "a ** b ** c", "a**\"foo\"**", "a__\"foo\"__", "foo__bar__", "5__6__78", "__foo__bar", "**(**foo)", "__(__foo)",
+                      "_foo [bar_](/url)", "~~ spaced ~~"])
+    func emphasisFollowsTheFlankingRules(_ text: String) {
+        #expect(MarkdownHighlighter.tokens(in: text).filter { [.strong, .emphasis, .strikethrough].contains($0.kind) }.isEmpty)
     }
 
     @Test func inlineCodeMasksEmphasis() {
@@ -109,23 +124,6 @@ import Testing
         #expect(MarkdownHighlighter.tokens(in: "`a``b`").map { ("`a``b`" as NSString).substring(with: $0.range) } == ["`a``b`"])
         #expect(MarkdownHighlighter.tokens(in: "``unclosed`").isEmpty)
         #expect(MarkdownHighlighter.tokens(in: "\\`not code`").map(\.kind) == [.escape])
-    }
-
-    @Test func strongAndEmphasis() {
-        let text = "**bold** and _it_ and *em*"
-        #expect(has(text, .strong, "**bold**"))
-        #expect(has(text, .emphasis, "_it_"))
-        #expect(has(text, .emphasis, "*em*"))
-        #expect(!has(text, .emphasis, "*bold*"))
-    }
-
-    @Test func emphasisNeedsFlankingTextAndNoEscape() {
-        #expect(!has("2 * 3 * 4", .emphasis, "* 3 *"))
-        #expect(!has("a ** b ** c", .strong, "** b **"))
-        #expect(!has("\\*not italic\\*", .emphasis, "*not italic*"))
-        #expect(!has("\\**not bold\\**", .strong, "**not bold**"))
-        #expect(has("a *b* c", .emphasis, "*b*") && has("a _b_ c", .emphasis, "_b_"))
-        #expect(has("a **b** c", .strong, "**b**") && has("(*x*)", .emphasis, "*x*"))
     }
 
     @Test func tripleAsterisksAreBoldItalic() {
@@ -157,7 +155,6 @@ import Testing
         let text = "a\n\n---\n\n* * *\n"
         #expect(has(text, .rule, "---"))
         #expect(has(text, .rule, "* * *"))
-        #expect(has("text\n---", .heading, "text"))
     }
 
     @Test func tablesAlignColumns() {
@@ -182,17 +179,15 @@ import Testing
         #expect(has(text, .table, "|") && has(text, .table, "|:--|--:|"))
     }
 
-    /// cmark confirms the underline: `===` under a quote's lazy continuation line is paragraph text.
-    @Test func setextHeadingsAsCmarkReadsThem() {
-        #expect(MarkdownHighlighter.tokens(in: "> foo\nbar\n===").map(\.kind) == [.quote(depth: 1)])
-    }
-
+    /// A line of `===` or `---` under text underlines a heading, after a blank line `---` is a rule; cmark
+    /// confirms the underline: `===` under a quote's lazy continuation line is paragraph text.
     @Test func setextHeadings() {
         let text = "Title\n===\ntext *e*\n---\n\n---"
         let tokens = MarkdownHighlighter.tokens(in: text)
         #expect(tokens.map(\.kind) == [.heading(level: 1), .headingUnderline, .heading(level: 2), .emphasis, .headingUnderline, .rule])
         #expect(tokens[0].markers.isEmpty && markers(tokens[1], in: text) == ["==="])
         #expect(has(text, .heading, "Title") && has(text, .heading, "text *e*") && has(text, .rule, "==="))
+        #expect(MarkdownHighlighter.tokens(in: "> foo\nbar\n===").map(\.kind) == [.quote(depth: 1)])
     }
 
     @Test func footnotesAndHtml() {
@@ -241,20 +236,19 @@ import Testing
         #expect(MarkdownHighlighter.tokens(in: nested).map(\.kind) == [.link(destination: "c")])
     }
 
+    /// cmark's lines break at `\n`, `\r\n` and `\r` only; the editor's also at U+2028, U+2029 and U+0085.
+    /// Blocks keep to their lines either way.
+    @Test(arguments: ["\u{2028}", "\u{2029}", "\u{85}", "\u{0B}"])
+    func blocksKeepToTheirLinesAcrossUnicodeSeparators(_ separator: String) {
+        let text = "a\(separator)b\n\n    code\n\n[x]: /x\n\n*e* [x]"
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        #expect(tokens.map(\.kind) == [.code, .linkDefinition, .emphasis, .link(destination: "/x")])
+        #expect(tokens.prefix(2).map { (text as NSString).substring(with: $0.range) } == ["    code", "[x]: /x"])
+    }
+
     /// Definitions as CommonMark reads them: none inside code, none interrupting a paragraph, nothing but
     /// a title after the destination; and a footnote reference needs its definition. Live Preview made
     /// links of brackets the page shows as text (BUG-28; spec examples 166, 170, 181, 182).
-    /// cmark's lines break at `\n`, `\r\n` and `\r` only; the editor's also at U+2028, U+2029 and U+0085.
-    /// Blocks keep to their lines either way.
-    @Test func blocksKeepToTheirLinesAcrossUnicodeSeparators() {
-        for separator in ["\u{2028}", "\u{2029}", "\u{85}", "\u{0B}"] {
-            let text = "a\(separator)b\n\n    code\n\n[x]: /x\n\n*e* [x]"
-            let tokens = MarkdownHighlighter.tokens(in: text)
-            #expect(tokens.map(\.kind) == [.code, .linkDefinition, .emphasis, .link(destination: "/x")])
-            #expect(tokens.prefix(2).map { (text as NSString).substring(with: $0.range) } == ["    code", "[x]: /x"])
-        }
-    }
-
     @Test func definitionsFollowCommonMark() {
         func references(_ text: String) -> [MarkdownHighlighter.Token.Kind] {
             MarkdownHighlighter.tokens(in: text).map(\.kind).filter {
@@ -307,21 +301,22 @@ import Testing
         #expect(has(text, .math, "$e^{i\\pi}$") && has(text, .math, "x = 1"))
     }
 
-    @Test func frontMatterIsNotARule() {
+    /// Front matter as the page reads it: a leading block, not rules; only when it closes (an unclosed
+    /// `---` is a rule and the text below it Markdown), and behind a byte order mark too.
+    @Test func frontMatterOnlyWhenItCloses() {
         let text = "---\ntitle: x\n---\n# H"
         let spans = kinds(text)
         #expect(spans.filter { $0.0 == .frontMatter }.map(\.1) == ["---", "title: x", "---"])
         #expect(!spans.contains { $0.0 == .rule })
         #expect(has(text, .heading, "# H"))
+        #expect(MarkdownHighlighter.tokens(in: "---\n# Title\ntext *e*").map(\.kind) == [.rule, .heading(level: 1), .emphasis])
+        #expect(MarkdownHighlighter.tokens(in: "\u{FEFF}---\ntitle: x\n---\n# H").map(\.kind) == [.frontMatter, .frontMatter, .frontMatter, .heading(level: 1)])
     }
 
     /// cmark's precedence: math as the page's `MathSource` finds it before cmark reads the line (TeX's
     /// `\{` and `\,` are no escapes there), then escapes, code spans, autolinks and raw HTML, whichever
     /// starts first; a link's `<…>` destination is the link's, and a tag inside link text keeps its `]`.
     @Test func inlineConstructsTakeCmarksPrecedence() {
-        func hidden(_ text: String) -> [String] {
-            MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
-        }
         func kinds(_ text: String) -> [MarkdownHighlighter.Token.Kind] {
             MarkdownHighlighter.tokens(in: text).map(\.kind)
         }
@@ -346,9 +341,7 @@ import Testing
 
     /// Inside an HTML block the browser reads the tags, and it takes what cmark's inline scanner would not.
     @Test func htmlBlockTagsAreTheBrowsers() {
-        let text = "<div>\n<a h*#ref=\"hi\">x</a> </p class=\"y\">\n</div>"
-        let hidden = MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
-        #expect(hidden == ["<div>", "<a h*#ref=\"hi\">", "</a>", "</p class=\"y\">", "</div>"])
+        #expect(hidden("<div>\n<a h*#ref=\"hi\">x</a> </p class=\"y\">\n</div>") == ["<div>", "<a h*#ref=\"hi\">", "</a>", "</p class=\"y\">", "</div>"])
     }
 
     /// No link inside a link: `[foo [bar](/uri)][ref]` links `bar` and `ref`, the outer brackets stay;
@@ -373,9 +366,6 @@ import Testing
     /// declarations and CDATA are HTML; GFM's tag filter shows `<title>`, `<style>`, `<script>` and the
     /// like as text.
     @Test func rawHTMLFollowsCommonMark() {
-        func hidden(_ text: String) -> [String] {
-            MarkdownHighlighter.tokens(in: text).flatMap(\.markers).map { (text as NSString).substring(with: $0) }
-        }
         #expect(hidden("<a h*#ref=\"hi\">").isEmpty)
         #expect(hidden("<a href=\"hi'> <a href=hi'>").isEmpty)
         #expect(hidden("<a href='bar'title=title>").isEmpty)
@@ -388,21 +378,6 @@ import Testing
         #expect(hidden("a <?php echo 1; ?> <!DOCTYPE html> <![CDATA[x]]> b") == ["<?php echo 1; ?>", "<!DOCTYPE html>", "<![CDATA[x]]>"])
         // A closing tag passed over leaves a tag inside its quotes to be read.
         #expect(hidden("</a title=\"<b>\">") == ["<b>"])
-    }
-
-    /// Front matter as the page reads it: only when it closes (an unclosed `---` is a rule and the
-    /// text below it Markdown), and behind a byte order mark too.
-    @Test func frontMatterOnlyWhenItCloses() {
-        #expect(MarkdownHighlighter.tokens(in: "---\n# Title\ntext *e*").map(\.kind) == [.rule, .heading(level: 1), .emphasis])
-        #expect(MarkdownHighlighter.tokens(in: "\u{FEFF}---\ntitle: x\n---\n# H").map(\.kind) == [.frontMatter, .frontMatter, .frontMatter, .heading(level: 1)])
-    }
-
-    private func token(_ text: String, _ index: Int = 0) -> MarkdownHighlighter.Token {
-        MarkdownHighlighter.tokens(in: text)[index]
-    }
-
-    private func markers(_ token: MarkdownHighlighter.Token, in text: String) -> [String] {
-        token.markers.map { (text as NSString).substring(with: $0) }
     }
 
     @Test func headingTokensCarryLevelAndPrefix() {
@@ -476,10 +451,6 @@ import Testing
         #expect(markers(tokens[0], in: text) == ["---"])
         #expect(markers(tokens[1], in: text) == ["```"])
         #expect(tokens[2].markers.isEmpty && markers(tokens[3], in: text) == ["```"])
-    }
-
-    @Test func strikethroughIsColored() {
-        #expect(has("a ~~gone~~ b", .strikethrough, "~~gone~~"))
     }
 
     @Test func plainTextHasNoSpans() {

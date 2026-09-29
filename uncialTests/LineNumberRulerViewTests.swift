@@ -4,28 +4,25 @@ import Testing
 
 @MainActor
 @Suite struct LineNumberRulerViewTests {
-    /// macOS 14 stopped clipping views to their bounds, and the scroll view hands the ruler a dirty rect
-    /// as wide as itself; the gutter must paint only its own strip or it covers the text.
-    @Test func paintsOnlyInsideItsBounds() {
-        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 500, height: 100))
-        let textView = ThemedTextView.standalone()
-        textView.frame = NSRect(x: 0, y: 0, width: 500, height: 100)
-        textView.replaceText(with: "one\ntwo\nthree")
+    /// `textView` in a scroll view with its line numbers showing, the gutter 37 points wide.
+    private func ruler(for textView: ThemedTextView) -> LineNumberRulerView {
+        let scrollView = NSScrollView(frame: textView.frame)
         scrollView.documentView = textView
         scrollView.hasVerticalRuler = true
         let ruler = LineNumberRulerView(textView: textView, scrollView: scrollView)
         scrollView.verticalRulerView = ruler
         scrollView.rulersVisible = true
-        ruler.frame = NSRect(x: 0, y: 0, width: 37, height: 100)
+        ruler.frame = NSRect(x: 0, y: 0, width: 37, height: textView.frame.height)
+        return ruler
+    }
 
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 500, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let context = NSGraphicsContext(bitmapImageRep: rep)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor.red.setFill()
-        NSRect(x: 0, y: 0, width: 500, height: 100).fill()
-        ruler.draw(NSRect(x: 0, y: 0, width: 500, height: 100))
-        NSGraphicsContext.restoreGraphicsState()
+    /// macOS 14 stopped clipping views to their bounds, and the scroll view hands the ruler a dirty rect
+    /// as wide as itself; the gutter must paint only its own strip or it covers the text.
+    @Test func paintsOnlyInsideItsBounds() {
+        let ruler = ruler(for: editor("one\ntwo\nthree", width: 500, height: 100, tracksWidth: true))
+        let rep = bitmap(width: 500, height: 100, background: .red, flipped: false) { _ in
+            ruler.draw(NSRect(x: 0, y: 0, width: 500, height: 100))
+        }
 
         func isRed(_ x: Int, _ y: Int) -> Bool { rep.colorAt(x: x, y: y).map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
         #expect(isRed(200, 50) && isRed(499, 10) && isRed(38, 50))
@@ -36,19 +33,9 @@ import Testing
     /// line height, the band around the caret's lines), which a number drawn at the line's top misses.
     /// An empty line's number sits where a line of text in its style would have its baseline.
     @Test func numbersSitOnTheirLinesBaseline() {
-        let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 500, height: 200))
-        let textView = ThemedTextView.standalone()
-        textView.frame = NSRect(x: 0, y: 0, width: 500, height: 200)
-        textView.presentation = .inline
         // "one\n" 0–3, "two\n" 4–7, "\n" 8, "four" 9–12.
-        textView.replaceText(with: "one\ntwo\n\nfour")
-        textView.setSelectedRange(NSRange(location: 5, length: 0))
-        scrollView.documentView = textView
-        scrollView.hasVerticalRuler = true
-        let ruler = LineNumberRulerView(textView: textView, scrollView: scrollView)
-        scrollView.verticalRulerView = ruler
-        scrollView.rulersVisible = true
-        ruler.frame = NSRect(x: 0, y: 0, width: 37, height: 200)
+        let textView = editor("one\ntwo\n\nfour", presentation: .inline, caret: 5, width: 500, tracksWidth: true)
+        let ruler = ruler(for: textView)
         let layoutManager = textView.layoutManager!
         layoutManager.ensureLayout(for: textView.textContainer!)
 

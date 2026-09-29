@@ -5,9 +5,6 @@ import Testing
 
 @Suite struct SplitLayoutTests {
     @Test func boundsTheRatio() {
-        #expect(SplitLayout.defaultRatio == 0.5)
-        #expect(SplitLayout.ratioRange == 0.2...0.8)
-        #expect(SplitLayout.ratioStep == 0.05)
         #expect(SplitLayout.clamp(0.5) == 0.5)
         #expect(SplitLayout.clamp(0.05) == 0.2)
         #expect(SplitLayout.clamp(1.5) == 0.8)

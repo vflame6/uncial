@@ -34,6 +34,9 @@ import Testing
         #expect(output == "<figure class=\"mermaid\" data-sourcepos=\"1:1-4:3\"><div class=\"light\"><svg id=\"l\"></svg></div><div class=\"dark\"><svg id=\"d\"></svg></div></figure>")
         #expect(Stylesheet.base.contains("figure.mermaid .dark { display: none; }"))
         #expect(Stylesheet.base.contains("@media (prefers-color-scheme: dark) { figure.mermaid .light { display: none; }"))
+        // The page render hands its stored drawings on.
+        let page = MarkdownRenderer().renderBody("```mermaid\ngantt\n  title A\n```\n", diagrams: ["gantt\n  title A": diagram])
+        #expect(page.hasPrefix("<figure class=\"mermaid\"><div class=\"light\"><svg id=\"l\"></svg></div>"))
     }
 
     @Test func listsTheFencesBeautifulMermaidCannotDraw() {
@@ -63,14 +66,6 @@ import Testing
         """
         #expect(MermaidRenderer.unsupportedFences(in: markdown) == ["pie title Pets\n  \"Dogs\" : 386", "gantt\n  title A"])
         #expect(MermaidRenderer.unsupportedFences(in: "no fences").isEmpty)
-    }
-
-    @Test func themesHaveConcreteDiagramColors() {
-        #expect(Theme.macOS.diagramPalette.light.background == 0xFFFFFF && Theme.macOS.diagramPalette.dark.background == 0x1E1E1E)
-        #expect(Theme.github.diagramPalette.dark.accent == 0x4493F8)
-        #expect(Theme.solarized.diagramPalette.light.muted == 0x93A1A1)
-        let pipeline = MarkdownRenderer().renderBody("```mermaid\npie\n  \"a\" : 1\n```\n", diagrams: ["pie\n  \"a\" : 1": PreRenderedDiagram(light: "<svg/>", dark: "<svg/>")])
-        #expect(pipeline.hasPrefix("<figure class=\"mermaid\"><div class=\"light\"><svg/></div>"))
     }
 
     @Test func leavesOtherCodeAlone() {

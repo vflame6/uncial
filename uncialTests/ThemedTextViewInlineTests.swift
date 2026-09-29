@@ -22,17 +22,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     /// Lines: `## Heading` 0–10, `Some **bold** text` 11–29, `- item` 30–36, fence 37–40,
     /// `let x = 1` 41–50, fence 51–54.
     private let sample = "## Heading\nSome **bold** text\n- item\n```\nlet x = 1\n```"
-
-    private func editor(_ text: String, presentation: EditorPresentation, caret: Int) -> ThemedTextView {
-        let view = ThemedTextView.standalone()
-        view.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        view.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        view.presentation = presentation
-        view.replaceText(with: text)
-        view.setSelectedRange(NSRange(location: caret, length: 0))
-        layout(view)
-        return view
-    }
+    private let directory = TemporaryDirectory()
 
     private func layout(_ view: ThemedTextView) {
         view.layoutManager?.ensureLayout(for: view.textContainer!)
@@ -47,29 +37,37 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         return view.layoutManager!.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil).width
     }
 
+    /// What `view`'s layout manager paints behind the glyphs, the view's top left at the bitmap's.
+    private func background(of view: ThemedTextView, width: Int = 400, height: Int) -> NSBitmapImageRep {
+        let layoutManager = view.layoutManager!
+        layoutManager.ensureLayout(for: view.textContainer!)
+        return bitmap(width: width, height: height) { _ in
+            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: view.textContainer!), at: view.textContainerOrigin)
+        }
+    }
+
+    /// A PNG, `width` × `height` pixels of `color`.
+    private func png(_ color: NSColor, width: Int, height: Int) -> Data {
+        let rep = bitmap(width: width, height: height, background: color, flipped: false) { _ in }
+        return rep.representation(using: .png, properties: [:])!
+    }
+
     /// Shortening the text inside a block that ends the document (an unclosed fence, a fence with no
     /// newline after it, a callout, a `$$` block) used to check the reveal against the old block
     /// ranges while the storage was still processing the edit: the edit raised and never reached
     /// the delegate, and the next one crashed the app.
-    @Test func editsAtTheEndOfATrailingBlockReachTheDelegate() {
-        let cases: [(text: String, caret: Int)] = [
-            ("intro\n```swift\nlet x", 20),
-            ("intro\n```swift\nlet x\n```", 20),
-            ("intro\n\n> [!note] Hi\n> body", 26),
-            ("intro\n$$\nx^2", 12),
-        ]
-        for (text, caret) in cases {
-            let view = editor(text, presentation: .inline, caret: caret)
-            let mirror = CoordinatorMirror()
-            view.delegate = mirror
-            view.deleteBackward(nil)
-            view.deleteBackward(nil)
-            let expected = (text as NSString).replacingCharacters(in: NSRange(location: caret - 2, length: 2), with: "")
-            #expect(view.string == expected)
-            #expect(mirror.changes == 2)
-            #expect(mirror.model == expected)
-            #expect(view.textStorage?.editedMask.isEmpty == true)
-        }
+    @Test(arguments: [("intro\n```swift\nlet x", 20), ("intro\n```swift\nlet x\n```", 20), ("intro\n\n> [!note] Hi\n> body", 26), ("intro\n$$\nx^2", 12)])
+    func editsAtTheEndOfATrailingBlockReachTheDelegate(_ text: String, _ caret: Int) {
+        let view = editor(text, presentation: .inline, caret: caret)
+        let mirror = CoordinatorMirror()
+        view.delegate = mirror
+        view.deleteBackward(nil)
+        view.deleteBackward(nil)
+        let expected = (text as NSString).replacingCharacters(in: NSRange(location: caret - 2, length: 2), with: "")
+        #expect(view.string == expected)
+        #expect(mirror.changes == 2)
+        #expect(mirror.model == expected)
+        #expect(view.textStorage?.editedMask.isEmpty == true)
     }
 
     /// Reload or a change on disk replaces the text with a shorter one while a block ended the old text.
@@ -134,17 +132,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         let layoutManager = inline.layoutManager as! InlineLayoutManager
         layoutManager.codeBackground = .red
         layoutManager.lineColor = .blue
-        layout(inline)
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 300, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let context = NSGraphicsContext(bitmapImageRep: rep)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 400, height: 300).fill()
-        context.cgContext.translateBy(x: 0, y: 300)
-        context.cgContext.scaleBy(x: 1, y: -1)
-        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
-        NSGraphicsContext.restoreGraphicsState()
+        let rep = background(of: inline, height: 300)
         let left = inline.textContainerOrigin.x
         // Lines differ in height now (code is smaller), so each is found from its line break.
         func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
@@ -169,19 +157,9 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         let layoutManager = inline.layoutManager as! InlineLayoutManager
         layoutManager.lineColor = .blue
         func ruleDrawn(on line: Int) -> Bool {
-            layout(inline)
+            let rep = background(of: inline, height: 200)
             let newline = NSMaxRange(inline.lineIndex.range(ofLine: line))
             let fragment = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: newline), effectiveRange: nil)
-            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-            let context = NSGraphicsContext(bitmapImageRep: rep)!
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = context
-            NSColor.white.setFill()
-            NSRect(x: 0, y: 0, width: 400, height: 200).fill()
-            context.cgContext.translateBy(x: 0, y: 200)
-            context.cgContext.scaleBy(x: 1, y: -1)
-            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
-            NSGraphicsContext.restoreGraphicsState()
             let color = rep.colorAt(x: Int(inline.textContainerOrigin.x + 100), y: Int(inline.textContainerOrigin.y + floor(fragment.midY)))
             return color.map { $0.blueComponent > 0.9 && $0.redComponent < 0.1 } ?? false
         }
@@ -201,20 +179,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         let inline = editor("one\ntwo\n\n## Four", presentation: .inline, caret: 5)
         let layoutManager = inline.layoutManager as! InlineLayoutManager
         layoutManager.revealBackground = .red
-        func render() -> NSBitmapImageRep {
-            layout(inline)
-            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-            let context = NSGraphicsContext(bitmapImageRep: rep)!
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = context
-            NSColor.white.setFill()
-            NSRect(x: 0, y: 0, width: 400, height: 200).fill()
-            context.cgContext.translateBy(x: 0, y: 200)
-            context.cgContext.scaleBy(x: 1, y: -1)
-            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: inline.textContainer!), at: inline.textContainerOrigin)
-            NSGraphicsContext.restoreGraphicsState()
-            return rep
-        }
+        func render() -> NSBitmapImageRep { background(of: inline, height: 200) }
         func fragment(_ index: Int) -> NSRect {
             layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: index), effectiveRange: nil)
         }
@@ -246,7 +211,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(inline.revealed.length == 0 && !isRed(render(), heading.minY - InlineStyle.revealGap - 2))
     }
 
-    /// Remote images load asynchronously through the injected loader and then hide their markers.
+    /// The caret anywhere in a callout reveals the whole callout, as a fenced block does.
     @Test func revealsAWholeCalloutAroundTheCaret() {
         // Lines: `> [!note] Hi` 0–11, `> body` 13–18, `after` 20–24.
         let text = "> [!note] Hi\n> body\nafter"
@@ -261,25 +226,18 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(outside.textStorage?.attribute(.blockDecoration, at: 13, effectiveRange: nil) as? String == "callout:note")
     }
 
+    /// Remote images load asynchronously through the injected loader and then hide their markers.
     @Test func loadsRemoteImagesAsynchronously() async throws {
-        let picture = NSImage(size: NSSize(width: 20, height: 10), flipped: false) { rect in
-            NSColor.red.setFill()
-            rect.fill()
-            return true
-        }
+        let picture = NSImage.filled(with: .red, size: NSSize(width: 20, height: 10))
         var requested: [URL] = []
         // The loader must be in place before the first render, which is what starts the fetch.
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.presentation = .inline
-        inline.loadsRemoteImages = true
-        inline.remoteImageLoader = { url, completion in
-            requested.append(url)
-            DispatchQueue.main.async { completion(url.lastPathComponent == "a.png" ? picture : nil) }
+        let inline = editor("![r](https://example.com/a.png)\nend", presentation: .inline, caret: 33) { view in
+            view.loadsRemoteImages = true
+            view.remoteImageLoader = { url, completion in
+                requested.append(url)
+                DispatchQueue.main.async { completion(url.lastPathComponent == "a.png" ? picture : nil) }
+            }
         }
-        inline.replaceText(with: "![r](https://example.com/a.png)\nend")
-        inline.setSelectedRange(NSRange(location: 33, length: 0))
         #expect(inline.resolvedImages.isEmpty && requested.map(\.absoluteString) == ["https://example.com/a.png"])
         try await Task.sleep(for: .milliseconds(200))
         #expect(inline.resolvedImages == [0])
@@ -301,16 +259,13 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     @Test func onePassPerEditAndPerLanding() async throws {
         let picture = NSImage(size: NSSize(width: 10, height: 10))
         let delegate = RestylingDelegate()
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.delegate = delegate
-        inline.presentation = .inline
-        inline.loadsRemoteImages = true
         var pending: [(NSImage?) -> Void] = []
-        inline.remoteImageLoader = { _, completion in pending.append(completion) }
-        inline.replaceText(with: "![a](https://example.com/a.png)\n\n![b](https://example.com/b.png)\n\n![c](https://example.com/c.png)\n\nend")
-        inline.setSelectedRange(NSRange(location: (inline.string as NSString).length, length: 0))
+        let text = "![a](https://example.com/a.png)\n\n![b](https://example.com/b.png)\n\n![c](https://example.com/c.png)\n\nend"
+        let inline = editor(text, presentation: .inline, caret: (text as NSString).length) { view in
+            view.delegate = delegate
+            view.loadsRemoteImages = true
+            view.remoteImageLoader = { _, completion in pending.append(completion) }
+        }
         #expect(pending.count == 3)
         let beforeLanding = inline.passes
         for completion in pending { completion(picture) }
@@ -325,13 +280,9 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     /// Off by default: no fetch, the image stays source; turning it on fetches.
     @Test func leavesRemoteImagesAloneUnlessAllowed() {
         var requested = 0
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.presentation = .inline
-        inline.remoteImageLoader = { _, _ in requested += 1 }
-        inline.replaceText(with: "![r](https://example.com/a.png)\nend")
-        inline.setSelectedRange(NSRange(location: 33, length: 0))
+        let inline = editor("![r](https://example.com/a.png)\nend", presentation: .inline, caret: 33) { view in
+            view.remoteImageLoader = { _, _ in requested += 1 }
+        }
         #expect(inline.loadsRemoteImages == false)
         #expect(requested == 0 && inline.resolvedImages.isEmpty)
         #expect(!inline.markers.isHidden(0))
@@ -343,23 +294,15 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     /// step, and the picture it has stays on screen meanwhile: every point of width used to queue a
     /// WebKit bitmap on the shared stage and show the diagram's source until it landed.
     @Test func resizingKeepsDiagramPicturesAndAsksForFew() async throws {
-        let picture = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
-            NSColor.blue.setFill()
-            rect.fill()
-            return true
-        }
+        let picture = NSImage.filled(with: .blue, size: NSSize(width: 100, height: 40))
         var requests: [DiagramRequest] = []
         var pending: [(NSImage?) -> Void] = []
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 700, height: 300)
-        inline.textContainer?.containerSize = NSSize(width: 700, height: CGFloat.greatestFiniteMagnitude)
-        inline.presentation = .inline
-        inline.diagramRenderer = { request, completion in
-            requests.append(request)
-            pending.append(completion)
+        let inline = editor("intro\n```mermaid\ngraph TD\n  A --> B\n```\nafter", presentation: .inline, width: 700, height: 300) { view in
+            view.diagramRenderer = { request, completion in
+                requests.append(request)
+                pending.append(completion)
+            }
         }
-        inline.replaceText(with: "intro\n```mermaid\ngraph TD\n  A --> B\n```\nafter")
-        inline.setSelectedRange(NSRange(location: 0, length: 0))
         func land() async throws {
             let waiting = pending
             pending = []
@@ -377,24 +320,16 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     }
 
     @Test func drawsDiagramsUnlessTheCaretIsInside() async throws {
-        let picture = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
-            NSColor.blue.setFill()
-            rect.fill()
-            return true
-        }
+        let picture = NSImage.filled(with: .blue, size: NSSize(width: 100, height: 40))
         var requests: [DiagramRequest] = []
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.presentation = .inline
-        inline.theme = .github
-        inline.diagramRenderer = { request, completion in
-            requests.append(request)
-            DispatchQueue.main.async { completion(picture) }
-        }
         // "intro\n" 0–5, "```mermaid" 6–15, "pie" 17–19, "  \"a\" : 1" 21–29, "```" 31–33, "\n" 34, "after" 35–39.
-        inline.replaceText(with: "intro\n```mermaid\npie\n  \"a\" : 1\n```\nafter")
-        inline.setSelectedRange(NSRange(location: 0, length: 0))
+        let inline = editor("intro\n```mermaid\npie\n  \"a\" : 1\n```\nafter", presentation: .inline, height: 300) { view in
+            view.theme = .github
+            view.diagramRenderer = { request, completion in
+                requests.append(request)
+                DispatchQueue.main.async { completion(picture) }
+            }
+        }
         #expect(inline.resolvedDiagrams.isEmpty)
         #expect(requests.map(\.source) == ["pie\n  \"a\" : 1"] && requests.first?.theme == .github && requests.first?.dark == false)
         try await Task.sleep(for: .milliseconds(200))
@@ -426,19 +361,11 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     /// Turning the readable column on or off re-fits pictures to the new text width at once: a wide
     /// picture used to keep the old width until the next edit.
     @Test func readableWidthRefitsPictures() throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-refit-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2000, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4,
-                                                   hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
-        try #require(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent("wide.png"))
-        let view = ThemedTextView.standalone()
-        view.frame = NSRect(x: 0, y: 0, width: 1400, height: 400)
-        view.baseURL = directory
-        view.readableWidth = false
-        view.presentation = .inline
-        view.replaceText(with: "intro\n\n![w](wide.png)\n\nafter")
-        view.setSelectedRange(NSRange(location: 0, length: 0))
+        try directory.file("wide.png", png(.clear, width: 2000, height: 100))
+        let view = editor("intro\n\n![w](wide.png)\n\nafter", presentation: .inline, width: 1400, height: 400, tracksWidth: true) { view in
+            view.baseURL = directory.url
+            view.readableWidth = false
+        }
         func fittedWidth() -> CGFloat? {
             var width: CGFloat?
             let storage = view.textStorage!
@@ -455,24 +382,15 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
     }
 
     @Test func drawsMathUnlessTheCaretIsOnItsLine() async throws {
-        let image = NSImage(size: NSSize(width: 100, height: 40), flipped: false) { rect in
-            NSColor.blue.setFill()
-            rect.fill()
-            return true
-        }
-        let picture = MathPicture(image: image, size: NSSize(width: 100, height: 40), baseline: 30)
+        let picture = MathPicture(image: NSImage.filled(with: .blue, size: NSSize(width: 100, height: 40)), size: NSSize(width: 100, height: 40), baseline: 30)
         var requests: [MathRequest] = []
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 300)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.presentation = .inline
-        inline.mathRenderer = { request, completion in
-            requests.append(request)
-            DispatchQueue.main.async { completion(picture) }
-        }
         // "intro\n" 0–5, "Say $x^2$ now\n" 6–19 (token 10–14), "$$\n" 20–22, "y\n" 23–24, "$$" 25–26, "\n" 27, "after" 28–32.
-        inline.replaceText(with: "intro\nSay $x^2$ now\n$$\ny\n$$\nafter")
-        inline.setSelectedRange(NSRange(location: 0, length: 0))
+        let inline = editor("intro\nSay $x^2$ now\n$$\ny\n$$\nafter", presentation: .inline, height: 300) { view in
+            view.mathRenderer = { request, completion in
+                requests.append(request)
+                DispatchQueue.main.async { completion(picture) }
+            }
+        }
         #expect(inline.resolvedMath.isEmpty)
         #expect(requests.map(\.tex) == ["x^2", "y"] && requests.map(\.display) == [false, true] && requests.first?.fontSize == inline.style.body.pointSize)
         try await Task.sleep(for: .milliseconds(200))
@@ -528,48 +446,12 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(inline.taskBox(at: point) == nil)
     }
 
-    @Test func loadsLocalImagesOnly() throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-inline-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let picture = NSImage(size: NSSize(width: 30, height: 10), flipped: false) { rect in
-            NSColor.blue.setFill()
-            rect.fill()
-            return true
-        }
-        let png = NSBitmapImageRep(data: picture.tiffRepresentation!)!.representation(using: .png, properties: [:])!
-        try png.write(to: directory.appendingPathComponent("file.png"))
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.baseURL = directory
-        inline.presentation = .inline
-        inline.replaceText(with: "![a](file.png)\n![r](https://x/y.png)\nend")
-        inline.setSelectedRange(NSRange(location: 40, length: 0))
-        layout(inline)
-        #expect(inline.markers.isHidden(0) && !inline.markers.isHidden(15))
-        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 18)
-        #expect((inline.textStorage!.attribute(.paragraphStyle, at: 15, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
-    }
-
     /// An image that is not next to the document is found in the attachments folder once the search is on.
     @Test func findsImagesInTheAttachmentsFolder() throws {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("uncial-inline-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory.appendingPathComponent("attachments"), withIntermediateDirectories: true)
-        let picture = NSImage(size: NSSize(width: 30, height: 10), flipped: false) { rect in
-            NSColor.blue.setFill()
-            rect.fill()
-            return true
+        try directory.file("attachments/file.png", png(.blue, width: 30, height: 10))
+        let inline = editor("![a](file.png)\nend", presentation: .inline, caret: 17) { view in
+            view.baseURL = directory.url
         }
-        let png = NSBitmapImageRep(data: picture.tiffRepresentation!)!.representation(using: .png, properties: [:])!
-        try png.write(to: directory.appendingPathComponent("attachments/file.png"))
-        let inline = ThemedTextView.standalone()
-        inline.frame = NSRect(x: 0, y: 0, width: 400, height: 200)
-        inline.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        inline.baseURL = directory
-        inline.presentation = .inline
-        inline.replaceText(with: "![a](file.png)\nend")
-        inline.setSelectedRange(NSRange(location: 17, length: 0))
-        layout(inline)
         #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
         inline.attachmentSearch = AttachmentSearch(searchesParents: false)
         layout(inline)

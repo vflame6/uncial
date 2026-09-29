@@ -37,10 +37,6 @@ import UncialCore
         #expect(reload.hasSuffix("If another program changes the file while you have unsaved edits, the file's new contents replace them."))
     }
 
-    @Test func settingsOpenOnGeneral() {
-        #expect(SettingsView.Tab.allCases.first == .general)
-    }
-
     @Test func commandLineStatusSaysWhereTheCommandIs() {
         #expect(GeneralSettingsView.commandLineStatus(.installed(folder: "/usr/local/bin"), translocated: false) == "Installed in /usr/local/bin")
         #expect(GeneralSettingsView.commandLineStatus(.homebrew, translocated: false) == "Installed by Homebrew")

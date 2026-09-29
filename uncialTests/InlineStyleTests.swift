@@ -33,6 +33,25 @@ import UncialCore
         InlineStyle.width(of: text, in: font)
     }
 
+    /// `storage` laid out by an `InlineLayoutManager`, set up by `configure`, in a container `width`
+    /// points wide. The layout manager does not keep its storage: the caller does.
+    private func layOut(_ storage: NSTextStorage, width: CGFloat, configure: (InlineLayoutManager) -> Void = { _ in }) -> (InlineLayoutManager, NSTextContainer) {
+        let layoutManager = InlineLayoutManager()
+        configure(layoutManager)
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: width, height: 1000))
+        layoutManager.addTextContainer(container)
+        layoutManager.ensureLayout(for: container)
+        return (layoutManager, container)
+    }
+
+    /// What the layout manager paints behind the glyphs, the container at the bitmap's top left.
+    private func background(of layoutManager: InlineLayoutManager, in container: NSTextContainer, width: Int, height: Int) -> NSBitmapImageRep {
+        bitmap(width: width, height: height) { _ in
+            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
+        }
+    }
+
     @Test func listsFencedBlocks() {
         // "```math" 0–6, "x" 8, "```" 10–12, "$$" 14–15, "y" 17, "$$" 19–20, "```mermaid" 22–31, "graph TD" 33–40 (unclosed).
         let text = "```math\nx\n```\n$$\ny\n$$\n```mermaid\ngraph TD"
@@ -174,31 +193,16 @@ import UncialCore
         let untitled = self.storage("> [!Warning]\n> body")
         #expect((untitled.attribute(.calloutTitle, at: 0, effectiveRange: nil) as? CalloutTitle)?.defaultTitle == "Warning")
         #expect(color(untitled, 3) == style.muted)
-        #expect(style.calloutColor(for: .danger) == NSColor(rgb: 0xCF222E))
+        // The theme's callout colors, the system's in the macOS theme.
+        #expect(style.calloutColor(for: .danger) == NSColor(rgb: Theme.github.calloutPalette!.light.danger))
         #expect(EditorStyle(theme: .macOS, isDark: false).calloutColor(for: .tip) == .systemTeal)
     }
 
     @Test func layoutManagerPaintsCalloutsAndTheirIcon() {
         // Lines end at 5, 17, 24 and 29.
-        let text = "plain\n> [!tip] Hi\n> body\nafter"
-        let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
-        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage)
-        let layoutManager = InlineLayoutManager()
-        layoutManager.calloutColors = [.tip: .red]
-        storage.addLayoutManager(layoutManager)
-        let container = NSTextContainer(size: NSSize(width: 200, height: 1000))
-        layoutManager.addTextContainer(container)
-        layoutManager.ensureLayout(for: container)
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let context = NSGraphicsContext(bitmapImageRep: rep)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 200, height: 200).fill()
-        context.cgContext.translateBy(x: 0, y: 200)
-        context.cgContext.scaleBy(x: 1, y: -1)
-        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
-        NSGraphicsContext.restoreGraphicsState()
+        let storage = storage("plain\n> [!tip] Hi\n> body\nafter")
+        let (layoutManager, container) = layOut(storage, width: 200) { $0.calloutColors = [.tip: .red] }
+        let rep = background(of: layoutManager, in: container, width: 200, height: 200)
         let ends = [5, 17, 24, 29]
         func rect(_ line: Int) -> NSRect { layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: ends[line]), effectiveRange: nil) }
         func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
@@ -243,40 +247,21 @@ import UncialCore
     }
 
     @Test func layoutManagerDrawsImagesUnderTheirLine() {
-        let picture = NSImage(size: NSSize(width: 40, height: 20), flipped: false) { rect in
-            NSColor.red.setFill()
-            rect.fill()
-            return true
-        }
+        let picture = NSImage.filled(with: .red, size: NSSize(width: 40, height: 20))
         let text = "![a](pic.png)\nafter"
         let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
         InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage, images: { _ in picture }, textWidth: 400)
-        let layoutManager = InlineLayoutManager()
-        storage.addLayoutManager(layoutManager)
-        let container = NSTextContainer(size: NSSize(width: 400, height: 1000))
-        layoutManager.addTextContainer(container)
-        layoutManager.ensureLayout(for: container)
+        let (layoutManager, container) = layOut(storage, width: 400)
         // The page's line height (16 px × 1.5) plus the picture and its gap.
         let first = layoutManager.lineFragmentRect(forGlyphAt: 0, effectiveRange: nil)
         #expect(abs(first.height - (24 + 28)) < 1, "first line \(first.height)")
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let context = NSGraphicsContext(bitmapImageRep: rep)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 400, height: 100).fill()
-        context.cgContext.translateBy(x: 0, y: 100)
-        context.cgContext.scaleBy(x: 1, y: -1)
-        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
-        NSGraphicsContext.restoreGraphicsState()
+        let rep = background(of: layoutManager, in: container, width: 400, height: 100)
         func isRed(_ x: Int, _ y: Int) -> Bool { rep.colorAt(x: x, y: y).map { $0.redComponent > 0.9 && $0.greenComponent < 0.1 } ?? false }
         let top = Int(first.height - InlineStyle.imageGap / 2 - 20)
         #expect(isRed(20, top + 2) && isRed(39, top + 10) && isRed(20, top + 18))
         #expect(!isRed(20, top - 4) && !isRed(20, top + 24) && !isRed(60, top + 10))
     }
 
-    /// A table in a file with Windows line breaks aligns like one with Unix ones: rows were grouped by
-    /// `\n` alone, so with `\r\n` every row stood on its own and nothing was padded.
     /// A cell that ends with an emoji is padded on the emoji itself: the kern used to land on its second
     /// UTF-16 unit, which TextKit ignores, so that row's pipes stood out of line.
     @Test func paddingAfterAnEmojiLandsOnIt() {
@@ -318,6 +303,8 @@ import UncialCore
         #expect(large < small * 3, "50 tables \(small), 100 tables \(large)")
     }
 
+    /// A table in a file with Windows line breaks aligns like one with Unix ones: rows were grouped by
+    /// `\n` alone, so with `\r\n` every row stood on its own and nothing was padded.
     @Test func tablesAlignWithWindowsLineBreaks() {
         let unix = storage("| a | **b** |\n|:--|--:|\n| cc | d |")
         let windows = storage("| a | **b** |\r\n|:--|--:|\r\n| cc | d |")
@@ -384,28 +371,15 @@ import UncialCore
     }
 
     @Test func layoutManagerDrawsTaskBoxesOnlyWhileHidden() {
-        let view = ThemedTextView.standalone()
-        view.frame = NSRect(x: 0, y: 0, width: 400, height: 100)
-        view.textContainer?.containerSize = NSSize(width: 400, height: CGFloat.greatestFiniteMagnitude)
-        view.presentation = .inline
-        view.replaceText(with: "- [ ] a\n- [x] b\nend")
-        view.setSelectedRange(NSRange(location: 18, length: 0))
+        let view = editor("- [ ] a\n- [x] b\nend", presentation: .inline, caret: 18, height: 100)
         let layoutManager = view.layoutManager as! InlineLayoutManager
         layoutManager.lineColor = .blue
         layoutManager.accent = .green
         func render() -> NSBitmapImageRep {
             layoutManager.ensureLayout(for: view.textContainer!)
-            let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 400, pixelsHigh: 100, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-            let context = NSGraphicsContext(bitmapImageRep: rep)!
-            NSGraphicsContext.saveGraphicsState()
-            NSGraphicsContext.current = context
-            NSColor.white.setFill()
-            NSRect(x: 0, y: 0, width: 400, height: 100).fill()
-            context.cgContext.translateBy(x: 0, y: 100)
-            context.cgContext.scaleBy(x: 1, y: -1)
-            layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: view.textContainer!), at: view.textContainerOrigin)
-            NSGraphicsContext.restoreGraphicsState()
-            return rep
+            return bitmap(width: 400, height: 100) { _ in
+                layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: view.textContainer!), at: view.textContainerOrigin)
+            }
         }
         /// The middle of a line's fragment, found from its line break (hidden glyphs at a line start sit on the previous fragment).
         func mid(_ line: Int) -> Int {
@@ -436,26 +410,12 @@ import UncialCore
 
     @Test func layoutManagerPaintsDecorationsBehindTheRightLines() {
         // Lines end at 5, 9, 14, 18, 22, 26 (their line breaks) and 31 (the last character).
-        let text = "plain\n```\ncode\n```\n> q\n---\nafter"
-        let storage = NSTextStorage(string: text, attributes: style.baseAttributes)
-        InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: storage)
-        let layoutManager = InlineLayoutManager()
-        layoutManager.codeBackground = .red
-        layoutManager.lineColor = .blue
-        storage.addLayoutManager(layoutManager)
-        let container = NSTextContainer(size: NSSize(width: 200, height: 1000))
-        layoutManager.addTextContainer(container)
-        layoutManager.ensureLayout(for: container)
-        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 200, pixelsHigh: 200, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let context = NSGraphicsContext(bitmapImageRep: rep)!
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = context
-        NSColor.white.setFill()
-        NSRect(x: 0, y: 0, width: 200, height: 200).fill()
-        context.cgContext.translateBy(x: 0, y: 200)
-        context.cgContext.scaleBy(x: 1, y: -1)
-        layoutManager.drawBackground(forGlyphRange: layoutManager.glyphRange(for: container), at: .zero)
-        NSGraphicsContext.restoreGraphicsState()
+        let storage = storage("plain\n```\ncode\n```\n> q\n---\nafter")
+        let (layoutManager, container) = layOut(storage, width: 200) {
+            $0.codeBackground = .red
+            $0.lineColor = .blue
+        }
+        let rep = background(of: layoutManager, in: container, width: 200, height: 200)
         let ends = [5, 9, 14, 18, 22, 26, 31]
         func pixel(_ x: CGFloat, _ line: Int, _ fraction: CGFloat = 0.5) -> NSColor? {
             let rect = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: ends[line]), effectiveRange: nil)

@@ -7,13 +7,11 @@ import WebKit
 /// what it opened.
 @MainActor
 @Suite(.serialized) struct DocumentWindowGuardTests {
+    private let directory = TemporaryDirectory()
+
+    /// A `doc.md` holding `contents`, in a folder of its own.
     private func temporaryFile(_ contents: String) throws -> URL {
-        let directory = FileManager.default.temporaryDirectory
-            .appendingPathComponent("uncial-guard-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let file = directory.appendingPathComponent("doc.md")
-        try Data(contents.utf8).write(to: file)
-        return file
+        try directory.file(UUID().uuidString + "/doc.md", contents)
     }
 
     private func contents(of file: URL) throws -> String {
@@ -87,8 +85,9 @@ import WebKit
         #expect(window.isVisible == false)
     }
 
-    /// Closing a document window closes its model and takes down the web view and the text view:
-    /// SwiftUI keeps the closed window alive, and with it a WebContent process of about 20 MB.
+    /// A window without unsaved edits closes without asking, and closing it closes its model and takes
+    /// down the web view and the text view: SwiftUI keeps the closed window alive, and with it a
+    /// WebContent process of about 20 MB.
     @Test func closingReleasesTheDocument() async throws {
         let (window, guardian) = try await open(try temporaryFile("# Closing"))
         let model = try #require(guardian.model)
@@ -100,7 +99,7 @@ import WebKit
         #expect(views(of: WKWebView.self, in: window.contentView) + views(of: NSTextView.self, in: window.contentView) > 0)
         window.performClose(nil)
         try await settle()
-        #expect(window.isVisible == false)
+        #expect(window.isVisible == false && window.attachedSheet == nil)
         #expect(model.isOpen == false)
         #expect(views(of: WKWebView.self, in: window.contentView) == 0 && views(of: NSTextView.self, in: window.contentView) == 0)
     }
@@ -138,15 +137,6 @@ import WebKit
         window.performClose(nil)
         try await settle()
         #expect(window.isVisible == false)
-    }
-
-    @Test func closesACleanWindowWithoutAsking() async throws {
-        let file = try temporaryFile("clean")
-        let (window, _) = try await open(file)
-        window.performClose(nil)
-        try await settle()
-        #expect(window.isVisible == false)
-        #expect(window.attachedSheet == nil)
     }
 
     @Test func asksBeforeClosingUnsavedManualEditsAndCanDiscardThem() async throws {
@@ -366,11 +356,13 @@ import WebKit
         #expect(window2.isVisible == false)
     }
 
-    /// A minimized window and the windows of a hidden app are not visible but still hold unsaved
-    /// edits: quitting asks about them, back on screen.
+    /// Quitting asks the app delegate, which lets a clean app go at once. A minimized window and the
+    /// windows of a hidden app are not visible but still hold unsaved edits: quitting asks about them,
+    /// back on screen.
     @Test func quitReviewIncludesMinimizedWindowsAndAHiddenApp() async throws {
         let file = try temporaryFile("one")
         let (window, guardian) = try await open(file)
+        #expect(NSApp.delegate?.applicationShouldTerminate?(NSApp) == .terminateNow)
         let model = try #require(guardian.model)
         model.autosaves = false
         model.updateText("two")
@@ -408,24 +400,6 @@ import WebKit
         window.performClose(nil)
         try await settle()
         if window.attachedSheet != nil { try click("Don't Save", onSheetOf: window) }
-        try await settle()
-        #expect(window.isVisible == false)
-    }
-
-    @Test func quitAsksThroughTheAppDelegate() async throws {
-        let file = try temporaryFile("one")
-        let (window, guardian) = try await open(file)
-        #expect(NSApp.delegate?.applicationShouldTerminate?(NSApp) == .terminateNow)
-        try #require(guardian.model).updateText("two")
-        #expect(NSApp.delegate?.applicationShouldTerminate?(NSApp) == .terminateLater)
-        try await settle()
-        #expect(window.attachedSheet != nil)
-        try click("Cancel", onSheetOf: window)
-        try await waitForSheetToGo(on: window)
-        #expect(window.isVisible == true)
-        window.performClose(nil)
-        try await settle()
-        try click("Don't Save", onSheetOf: window)
         try await settle()
         #expect(window.isVisible == false)
     }

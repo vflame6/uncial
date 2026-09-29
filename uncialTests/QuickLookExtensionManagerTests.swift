@@ -7,8 +7,8 @@ import UncialCore
 @Suite struct QuickLookExtensionManagerTests {
     private struct Failure: Error {}
 
-    /// A failed Install's error goes once a refresh finds the extension enabled after all (switched on
-    /// in System Settings), instead of staying next to a healthy status for the session.
+    /// A failed Install shows its error until a refresh finds the extension enabled after all (switched
+    /// on in System Settings), instead of keeping it next to a healthy status for the session.
     @Test func errorGoesOnceTheGoalIsReached() async {
         var election = "-    com.maksimradaev.uncial.QuickLook(1.0)"
         var failElection = true

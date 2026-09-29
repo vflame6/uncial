@@ -72,20 +72,23 @@ import UncialCore
         #expect((storage.attribute(.backgroundColor, at: 14, effectiveRange: nil) as? NSColor)?.alphaComponent == 0.12)
     }
 
-    @Test func stylesFollowTheThemeAndAppearance() {
-        #expect(EditorStyle(theme: .macOS, isDark: false).color(for: .keyword) == NSColor(rgb: 0x9B2393))
-        #expect(EditorStyle(theme: .macOS, isDark: true).color(for: .keyword) == NSColor(rgb: 0xFC5FA3))
-        #expect(EditorStyle(theme: .solarized, isDark: true).color(for: .string) == NSColor(rgb: 0x2AA198))
+    /// Code in the editor takes the page's colors: the theme's syntax palette for the appearance.
+    @Test(arguments: Theme.allCases)
+    func stylesFollowTheThemeAndAppearance(_ theme: Theme) {
+        for scope in CodeHighlighter.Scope.allCases {
+            #expect(EditorStyle(theme: theme, isDark: false).color(for: scope) == NSColor(rgb: theme.syntaxPalette.light.color(for: scope)), "\(scope)")
+            #expect(EditorStyle(theme: theme, isDark: true).color(for: scope) == NSColor(rgb: theme.syntaxPalette.dark.color(for: scope)), "\(scope)")
+        }
     }
 
     @Test func textViewColorsCodeInBothPresentations() {
-        let view = ThemedTextView.standalone()
-        view.string = swift
-        view.rehighlight()
+        let view = editor(swift)
         #expect(color(view.textStorage!, 9) == view.style.color(for: .keyword))
         view.presentation = .inline
         #expect(color(view.textStorage!, 9) == view.style.color(for: .keyword))
+        let before = view.style.color(for: .keyword)
         view.theme = .solarized
-        #expect(color(view.textStorage!, 9) == NSColor(rgb: 0x859900))
+        #expect(view.style.color(for: .keyword) != before)
+        #expect(color(view.textStorage!, 9) == view.style.color(for: .keyword))
     }
 }

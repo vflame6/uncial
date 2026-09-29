@@ -52,6 +52,33 @@ import UncialCore
         #expect(!html.contains("pie title Pets</code>"))
     }
 
+    /// A large flowchart is laid out off the main actor, as the window's render does it (PERF-8): on the
+    /// main thread the layout froze the window for a second and more, and beautiful-mermaid's context,
+    /// made there, left its collector's timers on the main run loop to wait out every later layout.
+    @Test func exportLaysOutDiagramsOffTheMainActor() async throws {
+        let run = UUID().uuidString.prefix(8)
+        let edges = (0..<70).map { "  N\($0)[\"\(run) \($0)\"] --> N\($0 + 1)\n  N\($0) --> M\($0 % 9)" }.joined(separator: "\n")
+        let url = folder.appendingPathComponent("flowchart.html")
+        var finished = false
+        let exporting = Task { @MainActor in
+            try await DocumentExporter.write(snapshot("```mermaid\ngraph TD\n\(edges)\n```"), as: .html, to: url)
+            finished = true
+        }
+        let start = ContinuousClock.now
+        var last = start
+        var longest: Duration = .zero
+        while !finished, ContinuousClock.now - start < .seconds(60) {
+            try await Task.sleep(for: .milliseconds(5))
+            let now = ContinuousClock.now
+            longest = max(longest, now - last)
+            last = now
+        }
+        try await exporting.value
+        #expect(try String(contentsOf: url, encoding: .utf8).contains("<figure class=\"mermaid\"><svg"))
+        // Other suites' main-actor tests run in between in a full run (up to about 0.3 s).
+        #expect(longest < .milliseconds(600), "the main actor stalled \(longest)")
+    }
+
     @Test func writesAPDF() async throws {
         let url = folder.appendingPathComponent("note.pdf")
         try await DocumentExporter.write(snapshot("# Title\n\nUnsaved words."), as: .pdf, to: url)

@@ -63,7 +63,11 @@ final class DocumentExporter {
     /// or dark with this Mac's system colors (other browsers know none of WebKit's), or a light PDF.
     /// Diagrams only mermaid.js draws come from the diagram stage first, as for the window's page.
     static func write(_ snapshot: ExportSnapshot, as format: ExportFormat, to url: URL) async throws {
-        let sources = MermaidRenderer.unsupportedFences(in: snapshot.text)
+        // Off the main actor, as the window's render does it (PERF-8): beautiful-mermaid lays a large
+        // flowchart out for a second and more, and a context first made on the main thread leaves its
+        // collector's timers there, where they wait out every later layout (probed 2026-09-29).
+        let text = snapshot.text
+        let sources = await Task.detached(priority: .userInitiated) { MermaidRenderer.unsupportedFences(in: text) }.value
         let diagrams = sources.isEmpty ? [:] : await DiagramWebRenderer.shared.render(sources, theme: snapshot.theme)
         let appearance: PageAppearance = format == .pdf ? .light : .system
         let systemColors = format == .html ? SystemColorResolver.current() : nil

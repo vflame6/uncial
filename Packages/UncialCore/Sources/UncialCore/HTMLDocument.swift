@@ -4,12 +4,18 @@ public enum HTMLDocument {
     /// script, fonts only from `data:`, no base URL, no form target.
     public static let offlinePolicy = "default-src 'none'; img-src data: file:; media-src data: file:; style-src 'unsafe-inline'; font-src data:; base-uri 'none'; form-action 'none'"
 
+    /// The Content-Security-Policy of a page that leaves the app with remote content on (File ▸ Export):
+    /// the browser that opens it may load from the web but runs no script from the document, embeds no
+    /// plugin, takes no base URL and sends no form. With remote content off, `offlinePolicy` instead.
+    public static let exportPolicy = "script-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'"
+
     /// A complete page: the theme's CSS inlined, the rendered fragment inside `article.markdown-body`.
     /// `lineNumbers` turns on the source-line gutter (needs `data-line` labels from `SourcePositions.annotate`).
     /// `contentSecurityPolicy` goes first in the head, ahead of anything it governs. `appearance` fixes
     /// the page to light or dark (`Stylesheet.css(for:appearance:)`); by default it follows its view.
+    /// `systemColors` replaces WebKit's system colors for other browsers (`Stylesheet.css(for:appearance:systemColors:)`).
     public static func wrap(body: String, title: String, theme: Theme = .default, lineNumbers: Bool = false, contentSecurityPolicy: String? = nil,
-                            appearance: PageAppearance = .system) -> String {
+                            appearance: PageAppearance = .system, systemColors: SystemColors? = nil) -> String {
         """
         <!DOCTYPE html>
         <html data-theme="\(theme.rawValue)"\(lineNumbers ? " class=\"line-numbers\"" : "")>
@@ -19,7 +25,7 @@ public enum HTMLDocument {
         <meta name="color-scheme" content="\(appearance == .system ? "light dark" : appearance.rawValue)">
         <title>\(HTMLEscaping.escape(title))</title>
         <style>
-        \(Stylesheet.css(for: theme, appearance: appearance))
+        \(Stylesheet.css(for: theme, appearance: appearance, systemColors: systemColors))
         </style>
         </head>
         <body>

@@ -18,6 +18,7 @@ public enum RemoteContent {
         pattern: #"(?<=[\s/"'])(src|srcset|imagesrcset|poster|data|href|xlink:href|background|to|from|values)(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#,
         options: .caseInsensitive)
     private static let metaEquiv = try! NSRegularExpression(pattern: #"(?<=[\s/"'])http-equiv(?=\s*=)"#, options: .caseInsensitive)
+    private static let metaTag = try! NSRegularExpression(pattern: #"<meta\b[^>]*>"#, options: .caseInsensitive)
     private static let styleAttribute = try! NSRegularExpression(
         pattern: #"(?<=[\s/"'])style(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#, options: .caseInsensitive)
     private static let styleURL = try! NSRegularExpression(pattern: #"url\(\s*(?:&quot;|&#39;|['"])?\s*(?:https?:|ftp:|wss?:)?//[^)]*\)"#, options: .caseInsensitive)
@@ -55,6 +56,16 @@ public enum RemoteContent {
             return styleIsRemote(rest) ? "data-blocked-" + attribute : disarmed
         }
         return output
+    }
+
+    /// `html` with every `<meta http-equiv>` renamed as `block(in:)` renames it (`data-blocked-http-equiv`),
+    /// links and resources untouched: a page leaving the app (File ▸ Export) is opened by browsers,
+    /// which follow a refresh, or take a cookie or policy header, the app's web view never obeys.
+    public static func disarmMetaEquiv(in html: String) -> String {
+        guard html.range(of: "http-equiv", options: .caseInsensitive) != nil else { return html }
+        return replacing(metaTag, in: html) { tag in
+            metaEquiv.stringByReplacingMatches(in: tag, range: NSRange(location: 0, length: (tag as NSString).length), withTemplate: "data-blocked-http-equiv")
+        }
     }
 
     /// Whether `value` (an attribute's text) points at the web; a list (`srcset`, SMIL `values`)

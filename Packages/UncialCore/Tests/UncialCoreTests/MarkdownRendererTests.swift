@@ -215,4 +215,36 @@ import Testing
         #expect(html.contains("id=\"the-x-value\""))
         #expect(html.contains("<p data-line=\"8\" data-sourcepos=\"8:1-8:5\">after</p>"))
     }
+
+    /// A page that leaves the app is opened by browsers, which run what the app never does: the policy
+    /// keeps script off with remote content on or off, and a refresh in the document goes nowhere.
+    @Test func exportPageKeepsTheDocumentsScriptOff() {
+        let markdown = """
+        # Note
+
+        <meta http-equiv="refresh" content="0; url=https://x.test/">
+
+        <img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" onerror="alert(1)">
+        """
+        let online = renderer.renderExport(markdown, title: "Q&A <draft>", remoteContent: true)
+        #expect(online.contains(#"<meta http-equiv="Content-Security-Policy" content="\#(HTMLDocument.exportPolicy)">"#))
+        #expect(online.contains(#"data-blocked-http-equiv="refresh""#) && !online.contains(#"<meta http-equiv="refresh""#))
+        #expect(online.contains("<title>Q&amp;A &lt;draft&gt;</title>"))
+        #expect(!online.contains("data-sourcepos") && !online.contains(#"class="line-numbers""#))
+        let offline = renderer.renderExport(markdown, title: "t", remoteContent: false)
+        #expect(offline.contains(#"<meta http-equiv="Content-Security-Policy" content="\#(HTMLDocument.offlinePolicy)">"#))
+        #expect(!offline.contains(#"<meta http-equiv="refresh""#))
+    }
+
+    /// For other browsers the macOS theme's system colors become the variables `systemColors` gives;
+    /// paper keeps WebKit's own, fixed light.
+    @Test func exportPageCarriesSystemColors() {
+        let names = Stylesheet.systemColorNames
+        let colors = SystemColors(light: Dictionary(uniqueKeysWithValues: names.map { ($0, "#111111") }),
+                                  dark: Dictionary(uniqueKeysWithValues: names.map { ($0, "#eeeeee") }))
+        let page = renderer.renderExport("# Hi", title: "t", theme: .macOS, systemColors: colors)
+        #expect(!page.contains("-apple-system-") && page.contains("--system-label: #111111;") && page.contains("--system-label: #eeeeee;"))
+        let paper = renderer.renderExport("# Hi", title: "t", theme: .macOS, appearance: .light)
+        #expect(paper.contains("color-scheme: light;") && paper.contains("-apple-system-label"))
+    }
 }

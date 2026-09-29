@@ -50,4 +50,18 @@ public struct MarkdownRenderer: Sendable {
         HTMLDocument.wrap(body: renderBody(markdown, baseURL: baseURL, diagrams: diagrams, remoteContent: remoteContent, attachments: attachments),
                           title: title, theme: theme, contentSecurityPolicy: remoteContent ? nil : HTMLDocument.offlinePolicy, appearance: appearance)
     }
+
+    /// A standalone page that leaves the app (File ▸ Export): no source positions or line numbers, a
+    /// Content-Security-Policy that keeps the document's script off in any browser (`exportPolicy`, or
+    /// `offlinePolicy` with remote content off), and every `<meta http-equiv>` disarmed. `systemColors`
+    /// replaces the macOS theme's WebKit-only colors for other browsers (the HTML file); the PDF is
+    /// printed by WebKit, fixed light through `appearance`.
+    public func renderExport(_ markdown: String, title: String, baseURL: URL? = nil, theme: Theme = .default, diagrams: [String: PreRenderedDiagram] = [:],
+                             remoteContent: Bool = false, attachments: AttachmentSearch = .direct, appearance: PageAppearance = .system,
+                             systemColors: SystemColors? = nil) -> String {
+        let body = renderBody(markdown, baseURL: baseURL, diagrams: diagrams, remoteContent: remoteContent, attachments: attachments)
+        return HTMLDocument.wrap(body: RemoteContent.disarmMetaEquiv(in: body), title: title, theme: theme,
+                                 contentSecurityPolicy: remoteContent ? HTMLDocument.exportPolicy : HTMLDocument.offlinePolicy,
+                                 appearance: appearance, systemColors: systemColors)
+    }
 }

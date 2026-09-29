@@ -107,4 +107,14 @@ import Testing
         #expect(renderer.renderDocument(markdown, title: "t", remoteContent: true).contains(#"<img src="https://x.test/a.png""#))
         #expect(renderer.renderDocument(markdown, title: "t").contains("data-blocked-src"))
     }
+
+    /// A page leaving the app keeps its resources, but a refresh (or a cookie or policy header) loses
+    /// its power: browsers obey what the app's web view never does.
+    @Test func disarmsMetaEquivAlone() {
+        #expect(RemoteContent.disarmMetaEquiv(in: #"<meta http-equiv="refresh" content="0;url=https://x.test"><img src="https://x.test/a.png">"#)
+                == #"<meta data-blocked-http-equiv="refresh" content="0;url=https://x.test"><img src="https://x.test/a.png">"#)
+        #expect(RemoteContent.disarmMetaEquiv(in: #"<META/HTTP-EQUIV='Set-Cookie' content="a=b">"#)
+                == #"<META/data-blocked-http-equiv='Set-Cookie' content="a=b">"#)
+        #expect(RemoteContent.disarmMetaEquiv(in: "<p>http-equiv</p>") == "<p>http-equiv</p>")
+    }
 }

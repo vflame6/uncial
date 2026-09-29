@@ -92,6 +92,9 @@ check_app() {
     local app=$1 found bundle entitlements executable commands
     found=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" "$app/Contents/Info.plist") || die "cannot read the version of $app"
     [ "$found" = "$version" ] || die "$app is version $found, not $version"
+    # The `uncial` command the cask links (`binary`) and Settings ▸ General ▸ Command Line installs.
+    [ -x "$app/Contents/Resources/uncial" ] || die "$app has no executable Contents/Resources/uncial"
+    "$app/Contents/Resources/uncial" --help >/dev/null || die "$app/Contents/Resources/uncial does not run"
     codesign --verify --deep --strict "$app" || die "the signature of $app does not verify"
     for bundle in "$app" "$app/Contents/PlugIns/UncialQuickLook.appex" "$app/Contents/PlugIns/UncialThumbnail.appex"; do
         # Xcode adds the debugger's entitlement to development-signed builds unless

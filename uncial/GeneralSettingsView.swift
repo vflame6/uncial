@@ -1,11 +1,12 @@
 import SwiftUI
 import UncialCore
 
-/// General tab: appearance, theme, Quick Look extension, default app, attachments, remote content. Also shown in the Welcome window.
+/// General tab: appearance, theme, Quick Look extension, default app, command line tool, attachments, remote content. Also shown in the Welcome window.
 struct GeneralSettingsView: View {
     @Bindable var settings: AppSettings
     var quickLook: QuickLookExtensionManager
     var defaultApp: DefaultAppManager
+    var commandLine: CommandLineToolManager
 
     var body: some View {
         Form {
@@ -70,6 +71,22 @@ struct GeneralSettingsView: View {
             }
 
             Section {
+                LabeledContent {
+                    commandLineButton
+                } label: {
+                    StatusLabel(isOn: commandLine.state.isAvailable,
+                                text: Self.commandLineStatus(commandLine.state, translocated: commandLine.isTranslocated))
+                }
+                if let message = commandLine.errorMessage {
+                    Text(message).font(.caption).foregroundStyle(.red)
+                }
+            } header: {
+                Text("Command Line")
+            } footer: {
+                Text("Type `uncial note.md` in Terminal to open a note in Uncial; a note that does not exist yet is created. The command opens this copy of Uncial, so keep the app in /Applications.")
+            }
+
+            Section {
                 TextField("Attachments folder", text: $settings.attachmentsDirectory, prompt: Text(AttachmentSearch.defaultDirectoryName))
                 Toggle("Search the folders above the document", isOn: $settings.searchesParentsForAttachments)
                 if settings.searchesParentsForAttachments {
@@ -104,6 +121,7 @@ struct GeneralSettingsView: View {
         .task {
             await quickLook.refresh()
             await defaultApp.refresh()
+            commandLine.refresh()
         }
     }
 
@@ -121,6 +139,35 @@ struct GeneralSettingsView: View {
         case .some(true): "Uncial is the default app for Markdown files"
         case .some(false): "Default app: \(defaultApp.currentDefaultName ?? "none")"
         case .none: "Checking…"
+        }
+    }
+
+    @ViewBuilder
+    private var commandLineButton: some View {
+        switch commandLine.state {
+        case .installed:
+            ActionButton(title: "Remove", isBusy: commandLine.isBusy) {
+                Task { await commandLine.remove() }
+            }
+        case .notInstalled, .otherCopy:
+            ActionButton(title: "Install", isBusy: commandLine.isBusy) {
+                Task { await commandLine.install() }
+            }
+            .disabled(commandLine.isTranslocated)
+        case .homebrew, .taken:
+            EmptyView()
+        }
+    }
+
+    /// The Command Line row's status for `state`.
+    static func commandLineStatus(_ state: CommandLineToolState, translocated: Bool) -> String {
+        switch state {
+        case .installed(let folder): "Installed in \(folder)"
+        case .homebrew: "Installed by Homebrew"
+        case .otherCopy(let app): "Opens another copy of Uncial: \(app)"
+        case .taken(let path): "\(path) belongs to another program"
+        case .notInstalled where translocated: "Move Uncial to the Applications folder first"
+        case .notInstalled: "Not installed"
         }
     }
 

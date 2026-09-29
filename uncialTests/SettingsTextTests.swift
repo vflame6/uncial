@@ -40,4 +40,13 @@ import UncialCore
     @Test func settingsOpenOnGeneral() {
         #expect(SettingsView.Tab.allCases.first == .general)
     }
+
+    @Test func commandLineStatusSaysWhereTheCommandIs() {
+        #expect(GeneralSettingsView.commandLineStatus(.installed(folder: "/usr/local/bin"), translocated: false) == "Installed in /usr/local/bin")
+        #expect(GeneralSettingsView.commandLineStatus(.homebrew, translocated: false) == "Installed by Homebrew")
+        #expect(GeneralSettingsView.commandLineStatus(.otherCopy(app: "/tmp/Uncial.app"), translocated: false) == "Opens another copy of Uncial: /tmp/Uncial.app")
+        #expect(GeneralSettingsView.commandLineStatus(.taken(path: "/usr/local/bin/uncial"), translocated: false) == "/usr/local/bin/uncial belongs to another program")
+        #expect(GeneralSettingsView.commandLineStatus(.notInstalled, translocated: false) == "Not installed")
+        #expect(GeneralSettingsView.commandLineStatus(.notInstalled, translocated: true) == "Move Uncial to the Applications folder first")
+    }
 }

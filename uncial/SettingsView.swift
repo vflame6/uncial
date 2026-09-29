@@ -13,7 +13,7 @@ struct SettingsView: View {
 
     var body: some View {
         TabView(selection: $selection) {
-            GeneralSettingsView(settings: .shared, quickLook: .shared, defaultApp: .shared)
+            GeneralSettingsView(settings: .shared, quickLook: .shared, defaultApp: .shared, commandLine: .shared)
                 .tabItem { Label("General", systemImage: "gearshape") }
                 .tag(Tab.general)
             EditorSettingsView(settings: .shared)

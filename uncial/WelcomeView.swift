@@ -20,7 +20,7 @@ struct WelcomeView: View {
             .padding(.top, 24)
             .padding(.horizontal, 32)
 
-            GeneralSettingsView(settings: .shared, quickLook: .shared, defaultApp: .shared)
+            GeneralSettingsView(settings: .shared, quickLook: .shared, defaultApp: .shared, commandLine: .shared)
 
             HStack {
                 Button("Skip", action: finish)

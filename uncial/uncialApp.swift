@@ -39,14 +39,13 @@ struct UncialApp: App {
                     .keyboardShortcut(.save)
                     .disabled(saveDocument == nil)
             }
-            // File ▸ Export… where macOS apps keep it, on ⌘P. SwiftUI's Print… would claim ⌘P too, and
-            // the document cannot print itself (its PDF can), so the print group goes.
-            CommandGroup(replacing: .importExport) {
+            // File ▸ Export… on ⌘P, in the place of SwiftUI's Print…: the document cannot print itself (its
+            // PDF can). A group of its own next to an emptied print group left a separator at the menu's end.
+            CommandGroup(replacing: .printItem) {
                 Button("Export…") { exportDocument?.run() }
                     .keyboardShortcut(.export)
                     .disabled(exportDocument == nil || exportDocument?.isRunning == true)
             }
-            CommandGroup(replacing: .printItem) {}
             // SwiftUI's Edit menu has no Find items; these drive the source editor's find bar (replace
             // row included) or, in Read Only, the rendered page's own bar.
             CommandGroup(after: .pasteboard) {

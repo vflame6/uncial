@@ -5,6 +5,7 @@ struct UncialApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @FocusedValue(\.reloadDocument) private var reloadDocument
     @FocusedValue(\.saveDocument) private var saveDocument
+    @FocusedValue(\.exportDocument) private var exportDocument
     @FocusedValue(\.editorMode) private var editorMode
     @FocusedValue(\.findInDocument) private var findInDocument
 
@@ -38,6 +39,14 @@ struct UncialApp: App {
                     .keyboardShortcut(.save)
                     .disabled(saveDocument == nil)
             }
+            // File ▸ Export… where macOS apps keep it, on ⌘P. SwiftUI's Print… would claim ⌘P too, and
+            // the document cannot print itself (its PDF can), so the print group goes.
+            CommandGroup(replacing: .importExport) {
+                Button("Export…") { exportDocument?.run() }
+                    .keyboardShortcut(.export)
+                    .disabled(exportDocument == nil || exportDocument?.isRunning == true)
+            }
+            CommandGroup(replacing: .printItem) {}
             // SwiftUI's Edit menu has no Find items; these drive the source editor's find bar (replace
             // row included) or, in Read Only, the rendered page's own bar.
             CommandGroup(after: .pasteboard) {

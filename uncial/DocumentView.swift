@@ -8,6 +8,7 @@ struct DocumentView: View {
     @State private var editorHandle = EditorHandle()
     @State private var windowHandle = DocumentWindowHandle()
     @State private var previewFind = PreviewFindController()
+    @State private var exporter = DocumentExporter()
     private let settings: AppSettings
     /// Where the document is now: SwiftUI builds the view again with the new URL when the file is
     /// renamed or moved while open, and the model (kept by `@State`) follows.
@@ -73,6 +74,9 @@ struct DocumentView: View {
         .navigationSubtitle(model.needsSavePrompt ? "Edited" : "")
         .focusedSceneValue(\.reloadDocument, ReloadAction { reload() })
         .focusedSceneValue(\.saveDocument, SaveAction { model.saveNow() })
+        .focusedSceneValue(\.exportDocument, ExportAction(isRunning: exporter.isRunning) {
+            exporter.run(ExportSnapshot(model: model), settings: settings, window: windowHandle.guardian?.window)
+        })
         .focusedSceneValue(\.editorMode, $mode)
         .focusedSceneValue(\.findInDocument, FindAction(supportsReplace: mode.showsEditor) { action in
             if mode.showsEditor {

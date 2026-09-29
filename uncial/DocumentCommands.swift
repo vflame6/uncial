@@ -11,6 +11,13 @@ struct SaveAction {
     let run: @MainActor () -> Void
 }
 
+/// Exports the focused document as PDF or HTML (File ▸ Export…); `isRunning` while its panel is open
+/// or its file is being written.
+struct ExportAction {
+    let isRunning: Bool
+    let run: @MainActor () -> Void
+}
+
 /// Drives the focused window's find bar (Edit ▸ Find): the source editor's when one is visible,
 /// otherwise the rendered page's, which cannot replace.
 struct FindAction {
@@ -24,6 +31,10 @@ private struct ReloadDocumentKey: FocusedValueKey {
 
 private struct SaveDocumentKey: FocusedValueKey {
     typealias Value = SaveAction
+}
+
+private struct ExportDocumentKey: FocusedValueKey {
+    typealias Value = ExportAction
 }
 
 private struct EditorModeKey: FocusedValueKey {
@@ -43,6 +54,11 @@ extension FocusedValues {
     var saveDocument: SaveAction? {
         get { self[SaveDocumentKey.self] }
         set { self[SaveDocumentKey.self] = newValue }
+    }
+
+    var exportDocument: ExportAction? {
+        get { self[ExportDocumentKey.self] }
+        set { self[ExportDocumentKey.self] = newValue }
     }
 
     var editorMode: Binding<EditorMode>? {

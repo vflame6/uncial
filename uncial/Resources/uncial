@@ -1,0 +1,86 @@
+#!/bin/sh
+# uncial: opens Markdown files in Uncial from a shell.
+#
+#   uncial               opens Uncial
+#   uncial FILE...       opens each file; a missing file with a Markdown name is created empty first
+#
+# This script lives in Uncial.app/Contents/Resources and opens the app it lives in, also when it runs
+# through a symbolic link (Homebrew's, or the one Settings > General > Command Line makes).
+# UNCIAL_OPEN replaces /usr/bin/open; the app's tests set it.
+
+markdown_extensions="md markdown mdown mkd mkdn mkdown mdwn mdtxt mdtext"
+
+usage() {
+    echo "usage: uncial [FILE ...]"
+    echo "Opens each FILE in Uncial, creating a missing Markdown file; with no FILE, opens Uncial."
+}
+
+self=$(/bin/realpath "$0") || exit 1
+app=${self%/Contents/Resources/uncial}
+if [ "$app" = "$self" ] || [ ! -d "$app/Contents" ]; then
+    echo "uncial: $self is not inside Uncial.app" >&2
+    exit 1
+fi
+open_command=${UNCIAL_OPEN:-/usr/bin/open}
+
+status=0
+files=0
+options=1
+remaining=$#
+while [ "$remaining" -gt 0 ]; do
+    argument=$1
+    shift
+    remaining=$((remaining - 1))
+    if [ "$options" = 1 ]; then
+        case $argument in
+            --) options=0; continue ;;
+            -h | --help) usage; exit 0 ;;
+            -?*) echo "uncial: unknown option $argument" >&2; usage >&2; exit 2 ;;
+        esac
+    fi
+    files=$((files + 1))
+    # dirname and basename would read a leading dash as an option.
+    case $argument in
+        -*) argument=./$argument ;;
+    esac
+    folder=$(CDPATH='' cd "$(dirname "$argument")" 2>/dev/null && pwd -P) || {
+        echo "uncial: $(dirname "$argument"): No such directory" >&2
+        status=1
+        continue
+    }
+    path=$folder/$(basename "$argument")
+    if [ -d "$path" ]; then
+        echo "uncial: $argument: Is a directory" >&2
+        status=1
+        continue
+    fi
+    if [ ! -e "$path" ]; then
+        name=$(basename "$path")
+        case $name in
+            *.*) extension=$(printf '%s' "${name##*.}" | tr '[:upper:]' '[:lower:]') ;;
+            *) extension= ;;
+        esac
+        case " $markdown_extensions " in
+            *" $extension "*) ;;
+            *)
+                echo "uncial: $argument: not a Markdown file name" >&2
+                status=1
+                continue
+                ;;
+        esac
+        if ! (: > "$path") 2>/dev/null; then
+            echo "uncial: $argument: cannot create the file" >&2
+            status=1
+            continue
+        fi
+    fi
+    # Each accepted file goes to the end of the arguments; the ones read are shifted off the front.
+    set -- "$@" "$path"
+done
+
+if [ $# -eq 0 ]; then
+    [ "$files" -eq 0 ] || exit "$status"
+    exec "$open_command" -a "$app"
+fi
+"$open_command" -a "$app" "$@" || exit 1
+exit "$status"

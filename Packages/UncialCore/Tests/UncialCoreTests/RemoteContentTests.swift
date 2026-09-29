@@ -117,4 +117,21 @@ import Testing
                 == #"<META/data-blocked-http-equiv='Set-Cookie' content="a=b">"#)
         #expect(RemoteContent.disarmMetaEquiv(in: "<p>http-equiv</p>") == "<p>http-equiv</p>")
     }
+
+    /// The tag ends where a browser ends it, not at the first `>`: a `>` inside a quoted value, or a quote
+    /// inside an unquoted one, hid the `http-equiv` after it from a `[^>]*` pattern, and the exported page
+    /// redirected its reader.
+    @Test func disarmsMetaEquivWhateverTheValuesBeforeItHold() {
+        #expect(RemoteContent.disarmMetaEquiv(in: #"<meta content="0;url=https://x.test/#>" http-equiv="refresh">"#)
+                == #"<meta content="0;url=https://x.test/#>" data-blocked-http-equiv="refresh">"#)
+        #expect(RemoteContent.disarmMetaEquiv(in: #"<meta content='a>b' http-equiv=refresh>"#)
+                == #"<meta content='a>b' data-blocked-http-equiv=refresh>"#)
+        #expect(RemoteContent.disarmMetaEquiv(in: #"<meta content=a"b http-equiv=refresh>"#)
+                == #"<meta content=a"b data-blocked-http-equiv=refresh>"#)
+        #expect(RemoteContent.disarmMetaEquiv(in: "<meta\nname=x\thttp-equiv =refresh/>")
+                == "<meta\nname=x\tdata-blocked-http-equiv =refresh/>")
+        // Text and code that merely mention the attribute stay as written.
+        let prose = #"<meta charset="utf-8"><p>set http-equiv="refresh"</p><pre><code>&lt;meta http-equiv="refresh"&gt;</code></pre>"#
+        #expect(RemoteContent.disarmMetaEquiv(in: prose) == prose)
+    }
 }

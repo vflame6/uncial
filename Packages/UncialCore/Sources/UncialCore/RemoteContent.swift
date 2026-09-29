@@ -18,7 +18,6 @@ public enum RemoteContent {
         pattern: #"(?<=[\s/"'])(src|srcset|imagesrcset|poster|data|href|xlink:href|background|to|from|values)(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#,
         options: .caseInsensitive)
     private static let metaEquiv = try! NSRegularExpression(pattern: #"(?<=[\s/"'])http-equiv(?=\s*=)"#, options: .caseInsensitive)
-    private static let metaTag = try! NSRegularExpression(pattern: #"<meta\b[^>]*>"#, options: .caseInsensitive)
     private static let styleAttribute = try! NSRegularExpression(
         pattern: #"(?<=[\s/"'])style(\s*=\s*)(?:"([^"]*)"|'([^']*)'|([^\s>]+))"#, options: .caseInsensitive)
     private static let styleURL = try! NSRegularExpression(pattern: #"url\(\s*(?:&quot;|&#39;|['"])?\s*(?:https?:|ftp:|wss?:)?//[^)]*\)"#, options: .caseInsensitive)
@@ -60,12 +59,88 @@ public enum RemoteContent {
 
     /// `html` with every `<meta http-equiv>` renamed as `block(in:)` renames it (`data-blocked-http-equiv`),
     /// links and resources untouched: a page leaving the app (File ▸ Export) is opened by browsers,
-    /// which follow a refresh, or take a cookie or policy header, the app's web view never obeys.
+    /// which follow a refresh, or take a cookie or policy header, the app's web view never obeys. Each
+    /// meta tag is read as a browser's tokenizer reads it (`attributeNames(in:from:)`): a `[^>]*` pattern
+    /// stopped at a `>` inside a quoted value and missed the `http-equiv` after it.
     public static func disarmMetaEquiv(in html: String) -> String {
         guard html.range(of: "http-equiv", options: .caseInsensitive) != nil else { return html }
-        return replacing(metaTag, in: html) { tag in
-            metaEquiv.stringByReplacingMatches(in: tag, range: NSRange(location: 0, length: (tag as NSString).length), withTemplate: "data-blocked-http-equiv")
+        let bytes = Array(html.utf8)
+        var names: [Range<Int>] = []
+        var index = 0
+        while index < bytes.count {
+            guard startsMetaTag(bytes, at: index) else {
+                index += 1
+                continue
+            }
+            let (found, end) = attributeNames(in: bytes, from: index + 5)
+            names += found.filter { lowercased(bytes[$0]) == Array("http-equiv".utf8) }
+            index = end
         }
+        guard !names.isEmpty else { return html }
+        var output: [UInt8] = []
+        output.reserveCapacity(bytes.count + names.count * 13)
+        var cursor = 0
+        for name in names {
+            output += bytes[cursor..<name.lowerBound]
+            output += Array("data-blocked-http-equiv".utf8)
+            cursor = name.upperBound
+        }
+        output += bytes[cursor...]
+        return String(decoding: output, as: UTF8.self)
+    }
+
+    /// Whether a `<meta` tag starts at `index`: the name in any case, then whitespace, `/` or `>` (or the end).
+    private static func startsMetaTag(_ bytes: [UInt8], at index: Int) -> Bool {
+        guard bytes[index] == UInt8(ascii: "<"), index + 5 <= bytes.count,
+              lowercased(bytes[(index + 1)..<(index + 5)]) == Array("meta".utf8) else { return false }
+        return index + 5 == bytes.count || isTagSpace(bytes[index + 5]) || bytes[index + 5] == UInt8(ascii: "/") || bytes[index + 5] == UInt8(ascii: ">")
+    }
+
+    /// The byte ranges of the attribute names of the start tag whose name ends at `start`, read as the HTML
+    /// tokenizer reads them: a name runs to whitespace, `/`, `>` or `=`; a value in quotes runs to the same
+    /// quote whatever it holds (`>` included), an unquoted one to whitespace or `>` (quotes included).
+    /// Also the index just past the tag's `>`, or the end of the text.
+    static func attributeNames(in bytes: [UInt8], from start: Int) -> (names: [Range<Int>], end: Int) {
+        let slash = UInt8(ascii: "/"), greater = UInt8(ascii: ">"), equals = UInt8(ascii: "=")
+        var names: [Range<Int>] = []
+        var index = start
+        while index < bytes.count {
+            let byte = bytes[index]
+            if isTagSpace(byte) || byte == slash {
+                index += 1
+                continue
+            }
+            if byte == greater { return (names, index + 1) }
+            let nameStart = index
+            index += 1
+            while index < bytes.count, !isTagSpace(bytes[index]), ![slash, greater, equals].contains(bytes[index]) { index += 1 }
+            names.append(nameStart..<index)
+            while index < bytes.count, isTagSpace(bytes[index]) { index += 1 }
+            guard index < bytes.count, bytes[index] == equals else { continue }
+            index += 1
+            while index < bytes.count, isTagSpace(bytes[index]) { index += 1 }
+            guard index < bytes.count else { break }
+            let quote = bytes[index]
+            if quote == UInt8(ascii: "\"") || quote == UInt8(ascii: "'") {
+                index += 1
+                while index < bytes.count, bytes[index] != quote { index += 1 }
+                index += 1
+            } else if quote == greater {
+                return (names, index + 1)
+            } else {
+                while index < bytes.count, !isTagSpace(bytes[index]), bytes[index] != greater { index += 1 }
+            }
+        }
+        return (names, bytes.count)
+    }
+
+    /// HTML's whitespace in tags (tab, line feed, form feed, carriage return, space).
+    private static func isTagSpace(_ byte: UInt8) -> Bool {
+        byte == 0x09 || byte == 0x0A || byte == 0x0C || byte == 0x0D || byte == 0x20
+    }
+
+    private static func lowercased(_ bytes: ArraySlice<UInt8>) -> [UInt8] {
+        bytes.map { $0 >= 0x41 && $0 <= 0x5A ? $0 + 0x20 : $0 }
     }
 
     /// Whether `value` (an attribute's text) points at the web; a list (`srcset`, SMIL `values`)

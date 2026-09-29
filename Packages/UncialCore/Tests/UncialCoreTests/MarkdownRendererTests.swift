@@ -234,6 +234,8 @@ import Testing
         let offline = renderer.renderExport(markdown, title: "t", remoteContent: false)
         #expect(offline.contains(#"<meta http-equiv="Content-Security-Policy" content="\#(HTMLDocument.offlinePolicy)">"#))
         #expect(!offline.contains(#"<meta http-equiv="refresh""#))
+        let hidden = renderer.renderExport(#"<meta content="0;url=https://x.test/#>" http-equiv="refresh">"#, title: "t", remoteContent: true)
+        #expect(!hidden.contains(#"" http-equiv="refresh""#) && hidden.contains(#"data-blocked-http-equiv="refresh""#))
     }
 
     /// For other browsers the macOS theme's system colors become the variables `systemColors` gives;

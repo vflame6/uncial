@@ -3,12 +3,7 @@ import UncialCore
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private let openPanels = OpenPanelPlacement()
-
-    /// `DocumentGroup(viewing:)` still lists a disabled stock "New" next to File ▸ New…; hide it.
-    private func hideStockNewItem() {
-        let selector = #selector(NSDocumentController.newDocument(_:))
-        NSApp.mainMenu?.item(withTitle: "File")?.submenu?.items.first { $0.action == selector }?.isHidden = true
-    }
+    private let fileMenu = FileMenuRepair()
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         openPanels.start()
@@ -27,7 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        hideStockNewItem()
+        // The menu bar is complete here, AppKit's Open Recent included.
+        fileMenu.start()
         if !AppSettings.shared.hasCompletedFirstRun {
             WelcomeWindowController.shared.present()
         }

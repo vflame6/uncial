@@ -4,12 +4,16 @@ import AppKit
 /// ideal width and left Split View lopsided; here entering the two-pane state puts the divider at
 /// `ratio` and a drag then lasts until a pane is hidden again. A hidden pane leaves the split view
 /// (a merely hidden subview keeps its divider), so a single visible pane fills the width.
-final class PaneSplitView: NSSplitView, NSSplitViewDelegate {
+final class PaneSplitView: NSSplitView {
     let leading: NSView
     let trailing: NSView
     var minimumPaneWidth: CGFloat = 280
     private var ratio = SplitLayout.defaultRatio
     private var ratioIsPending = false
+    /// Never the view itself: NSSplitView answers `responds(to: toggleSidebar:)` by asking its delegate, and
+    /// menu validation asks that of every responder in the key window, so a split view that was its own
+    /// delegate recursed until the stack ran out (macOS 27.2, SwiftUI's hidden Help ▸ Toggle Sidebar).
+    private let limits = PaneLimits()
 
     init(leading: NSView, trailing: NSView) {
         self.leading = leading
@@ -19,7 +23,7 @@ final class PaneSplitView: NSSplitView, NSSplitViewDelegate {
         dividerStyle = .thin
         addArrangedSubview(leading)
         addArrangedSubview(trailing)
-        delegate = self
+        delegate = limits
     }
 
     required init?(coder: NSCoder) {
@@ -61,14 +65,19 @@ final class PaneSplitView: NSSplitView, NSSplitViewDelegate {
         let position = SplitLayout.dividerPosition(width: bounds.width, ratio: ratio, minimum: minimumPaneWidth, divider: dividerThickness)
         setPosition(position, ofDividerAt: 0)
     }
+}
 
-    // MARK: NSSplitViewDelegate
-
+/// Keeps a drag of the divider `minimumPaneWidth` short of either edge.
+private final class PaneLimits: NSObject, NSSplitViewDelegate {
     func splitView(_ splitView: NSSplitView, constrainMinCoordinate proposedMinimumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        max(proposedMinimumPosition, minimumPaneWidth)
+        max(proposedMinimumPosition, minimum(of: splitView))
     }
 
     func splitView(_ splitView: NSSplitView, constrainMaxCoordinate proposedMaximumPosition: CGFloat, ofSubviewAt dividerIndex: Int) -> CGFloat {
-        min(proposedMaximumPosition, splitView.bounds.width - dividerThickness - minimumPaneWidth)
+        min(proposedMaximumPosition, splitView.bounds.width - splitView.dividerThickness - minimum(of: splitView))
+    }
+
+    private func minimum(of splitView: NSSplitView) -> CGFloat {
+        (splitView as? PaneSplitView)?.minimumPaneWidth ?? 0
     }
 }

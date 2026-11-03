@@ -61,4 +61,20 @@ import Testing
         #expect(abs(view.leading.frame.width - 420) <= 1)
         #expect(abs(view.leading.frame.width + view.trailing.frame.width - 1399) < 0.01)
     }
+
+    /// A drag stops `minimumPaneWidth` short of either edge.
+    @Test func dragsStopAtTheMinimumPaneWidth() throws {
+        let view = panes()
+        let delegate = try #require(view.delegate)
+        #expect(delegate.splitView?(view, constrainMinCoordinate: 0, ofSubviewAt: 0) == 280)
+        #expect(delegate.splitView?(view, constrainMaxCoordinate: 1000, ofSubviewAt: 0) == 1000 - view.dividerThickness - 280)
+    }
+
+    /// Menu validation asks every responder in the key window's chain whether it handles an item's action,
+    /// SwiftUI's hidden Help ▸ Toggle Sidebar included, and NSSplitView answers `toggleSidebar:` by asking its
+    /// delegate. The split view was its own delegate, so the question went round until the stack ran out:
+    /// on macOS 27.2 the app crashed when a menu opened, or when the system read the menus by itself.
+    @Test func answersTheSidebarQuestionWithoutAskingItself() {
+        #expect(!panes().responds(to: #selector(NSSplitViewController.toggleSidebar(_:))))
+    }
 }

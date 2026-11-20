@@ -5,7 +5,7 @@ import SwiftUI
 /// Stands between a document window and the unsaved edits of a manually saved document: shows the
 /// edited dot in the close button, asks before the window closes or the document reverts, asks what
 /// to do when another program changes the file, and lists the windows the app must ask about before
-/// it quits.
+/// it quits. It also puts the window where its document was last time (`DocumentWindowFrames`).
 ///
 /// Installed as the window's delegate in front of SwiftUI's own window controller, which was the
 /// delegate before (probed 2026-09-16: `AppKitWindowController`, and it answers `windowShouldClose`);
@@ -18,6 +18,8 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
     /// The delegate before us; AppKit reads `responds(to:)` once when the delegate is set.
     nonisolated(unsafe) private weak var next: NSWindowDelegate?
     private static let associationKey = UnsafeMutableRawPointer.allocate(byteCount: 1, alignment: 1)
+    /// Where document windows were. The unit tests' host keeps them in memory, out of the user's defaults.
+    static var frames = DocumentWindowFrames(defaults: AppDelegate.isTestHost(ProcessInfo.processInfo.environment) ? nil : .standard)
 
     /// The window's guard, created on first use, now watching `model`.
     @discardableResult
@@ -75,14 +77,61 @@ final class DocumentWindowGuard: NSObject, NSWindowDelegate {
         next = window.delegate
         super.init()
         window.delegate = self
+        place(window)
     }
 
-    /// The window is going: its model saves what saves on its own and stops (SwiftUI keeps the window
-    /// alive, STAB-5). SwiftUI's controller, the delegate before us, hears about it too.
+    /// The window is going: its place is kept, its model saves what saves on its own and stops (SwiftUI
+    /// keeps the window alive, STAB-5). SwiftUI's controller, the delegate before us, hears about it too.
     func windowWillClose(_ notification: Notification) {
+        rememberFrame()
         model?.saveIfAutomatic()
         model?.close()
         next?.windowWillClose?(notification)
+    }
+
+    // MARK: - The window's place
+
+    /// Puts a window that has not shown yet (the guard arrives before it does, probed 2026-11-20) where
+    /// its document's window was, exactly; or, for a document without a place of its own, where the last
+    /// document window was, and then next to another document's window when that is the very spot, as
+    /// the last window's often is.
+    private func place(_ window: NSWindow) {
+        // Asked before the frame is set: setting it is a move, which is remembered as the document's place.
+        let own = Self.frames.ownFrame(for: model?.fileURL)
+        guard !window.isVisible, let frame = own ?? Self.frames.frame(for: nil) else { return }
+        window.setFrame(from: frame)
+        guard own == nil else { return }
+        let others = NSApp.windows.filter { $0 !== window && $0.isVisible && $0.windowController?.document != nil }
+        for _ in 0..<others.count {
+            guard let covered = others.first(where: { abs($0.frame.minX - window.frame.minX) < 4 && abs($0.frame.maxY - window.frame.maxY) < 4 }) else { break }
+            // To the covered window's corner, which tells where the next window goes, then there.
+            let next = window.cascadeTopLeft(from: NSPoint(x: covered.frame.minX, y: covered.frame.maxY))
+            _ = window.cascadeTopLeft(from: next)
+        }
+    }
+
+    /// Keeps the window's place for the next time its document opens (a tab in the background too:
+    /// it has its window's frame). Not once the window has closed, and not in full screen, whose frame
+    /// is the screen's.
+    private func rememberFrame() {
+        guard let window, let model, model.isOpen, !window.styleMask.contains(.fullScreen) else { return }
+        Self.frames.remember(window.frameDescriptor, for: model.fileURL)
+    }
+
+    func windowDidMove(_ notification: Notification) {
+        rememberFrame()
+        next?.windowDidMove?(notification)
+    }
+
+    /// The size the window is given at once (zoom, a script); a resize by hand is kept when it ends.
+    func windowDidResize(_ notification: Notification) {
+        if window?.inLiveResize != true { rememberFrame() }
+        next?.windowDidResize?(notification)
+    }
+
+    func windowDidEndLiveResize(_ notification: Notification) {
+        rememberFrame()
+        next?.windowDidEndLiveResize?(notification)
     }
 
     /// Mirrors `DocumentViewModel.needsSavePrompt` into the close button's dot and the title's "Edited".

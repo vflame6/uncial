@@ -153,7 +153,9 @@ toolbar, the View menu, or the keyboard:
 | Raw Editor | Markdown source only | ⌥⌘4 |
 
 ⇧⌘E cycles through the four. New windows start in the mode chosen in
-Settings ▸ Editor (Split View by default).
+Settings ▸ Editor (Split View by default). A document's window opens where it
+was when you last closed it, at the size it had; a document you have not opened
+before opens where the last window was.
 
 Edits stay in the window until you save with ⌘S: a window with unsaved changes
 shows *Edited* under its title and the dot in its close button, and closing it,

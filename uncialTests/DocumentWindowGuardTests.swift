@@ -85,6 +85,57 @@ import WebKit
         #expect(window.isVisible == false)
     }
 
+    /// A document's window opens where it was closed, and at that size; a document not open here before
+    /// opens where the last window was, or, with that window still there, at its size next to it. SwiftUI
+    /// opened every document window at the default size in the middle of the screen. (Where the system
+    /// prefers tabs, a second document joins the first one's window, which the test rules out.)
+    @Test func windowsOpenWhereTheyWere() async throws {
+        let suites = PreferenceSuites()
+        let kept = DocumentWindowGuard.frames
+        let tabbing = NSWindow.allowsAutomaticWindowTabbing
+        DocumentWindowGuard.frames = DocumentWindowFrames(defaults: suites.make())
+        NSWindow.allowsAutomaticWindowTabbing = false
+        defer {
+            DocumentWindowGuard.frames = kept
+            NSWindow.allowsAutomaticWindowTabbing = tabbing
+            suites.removeAll()
+        }
+        let screen = try #require(NSScreen.main?.visibleFrame)
+        let place = NSRect(x: screen.minX + 60, y: screen.minY + 80, width: 640, height: 480)
+        let file = try temporaryFile("# Here")
+        let (first, _) = try await open(file)
+        try await settle()
+        #expect(first.frame != place)
+        first.setFrame(place, display: true)
+        first.performClose(nil)
+        try await settle()
+        let (again, _) = try await open(file)
+        try await settle()
+        #expect(again !== first && again.frame == place)
+        // Another document, with that window still open: the same size, not on top of it.
+        let (other, _) = try await open(try temporaryFile("# There"))
+        try await settle()
+        #expect(other.frame.size == place.size)
+        #expect(abs(other.frame.minX - place.minX) > 10 || abs(other.frame.maxY - place.maxY) > 10)
+        other.performClose(nil)
+        again.performClose(nil)
+        try await settle()
+        // And with no window open, exactly where the last one was.
+        let elsewhere = try temporaryFile("# Elsewhere")
+        let (third, _) = try await open(elsewhere)
+        try await settle()
+        #expect(third.frame == place)
+        // A document's own place is its place, another window being there or not: two documents kept
+        // at the same spot (both zoomed, say) open one on the other, and neither is nudged aside for good.
+        let (back, _) = try await open(file)
+        try await settle()
+        #expect(back.frame == place && third.frame == place)
+        back.performClose(nil)
+        third.performClose(nil)
+        try await settle()
+        #expect(DocumentWindowGuard.frames.ownFrame(for: file) == DocumentWindowGuard.frames.ownFrame(for: elsewhere))
+    }
+
     /// A window without unsaved edits closes without asking, and closing it closes its model and takes
     /// down the web view and the text view: SwiftUI keeps the closed window alive, and with it a
     /// WebContent process of about 20 MB.

@@ -177,8 +177,8 @@ sizes: headings, emphasis, code, links, lists, task boxes, quotes, tables,
 images, diagrams and math. The line under the cursor (or the fenced block it is
 in) shows its source instead, in the Raw Editor's monospace look with every
 marker, on a tinted band with room above and below, and returns to the rendered
-look when the cursor leaves. In Split View the
-source and the rendered page scroll together. Settings ▸ Editor holds the
+look when the cursor leaves; a picture stays under its line meanwhile. In Split
+View the source and the rendered page scroll together. Settings ▸ Editor holds the
 editor options: line numbers, auto-closing of brackets and Markdown markers,
 list and quote continuation, text size, the readable column in Live Preview,
 scroll sync and the split ratio. Edit ▸ Find (⌘F) and Find and Replace… (⌥⌘F)

@@ -239,7 +239,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
             }
         }
         #expect(inline.resolvedImages.isEmpty && requested.map(\.absoluteString) == ["https://example.com/a.png"])
-        try await Task.sleep(for: .milliseconds(200))
+        await eventually { inline.resolvedImages == [0] }
         #expect(inline.resolvedImages == [0])
         #expect(inline.markers.isHidden(0) && inline.markers.isHidden(4))
         inline.rehighlight()
@@ -332,7 +332,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         }
         #expect(inline.resolvedDiagrams.isEmpty)
         #expect(requests.map(\.source) == ["pie\n  \"a\" : 1"] && requests.first?.theme == .github && requests.first?.dark == false)
-        try await Task.sleep(for: .milliseconds(200))
+        await eventually { inline.resolvedDiagrams == [6] }
         #expect(inline.resolvedDiagrams == [6])
         #expect(inline.markers.isHidden(6) && inline.markers.isHidden(33) && !inline.markers.isHidden(34))
         let storage = inline.textStorage!
@@ -393,9 +393,9 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         }
         #expect(inline.resolvedMath.isEmpty)
         #expect(requests.map(\.tex) == ["x^2", "y"] && requests.map(\.display) == [false, true] && requests.first?.fontSize == inline.style.body.pointSize)
-        try await Task.sleep(for: .milliseconds(200))
+        await eventually { inline.resolvedMath.count == 2 }
         #expect(inline.resolvedMath == [10: 10, 20: 25])
-        #expect(inline.markers.isAnchor(10) && inline.markers.isHidden(11) && inline.markers.isHidden(14) && !inline.markers.isHidden(15))
+        #expect(!inline.markers.isHidden(10) && inline.markers.isHidden(11) && inline.markers.isHidden(14) && !inline.markers.isHidden(15))
         #expect(inline.markers.isHidden(20) && inline.markers.isHidden(23) && !inline.markers.isHidden(25) && inline.markers.isHidden(26) && !inline.markers.isHidden(27))
         let storage = inline.textStorage!
         #expect((storage.attribute(.mathPicture, at: 10, effectiveRange: nil) as? MathPicture)?.size == NSSize(width: 100, height: 40))
@@ -415,7 +415,7 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         #expect(height >= 2 * plain + 80 && height < 4 * plain + 80, "height \(height)")
         // The caret on the formula's line shows its TeX with the dollars hidden and no picture.
         inline.setSelectedRange(NSRange(location: 8, length: 0))
-        #expect(inline.resolvedMath == [20: 25] && !inline.markers.isAnchor(10) && inline.markers.isHidden(10) && !inline.markers.isHidden(11))
+        #expect(inline.resolvedMath == [20: 25] && inline.markers.isHidden(10) && !inline.markers.isHidden(11))
         #expect(storage.attribute(.mathPicture, at: 10, effectiveRange: nil) == nil)
         // Inside the block the whole block is source again (the raw look), and the other formula a picture.
         inline.setSelectedRange(NSRange(location: 23, length: 0))
@@ -460,6 +460,64 @@ private final class CoordinatorMirror: NSObject, NSTextViewDelegate {
         inline.attachmentSearch = .direct
         layout(inline)
         #expect((inline.textStorage!.attribute(.paragraphStyle, at: 0, effectiveRange: nil) as? NSParagraphStyle)?.paragraphSpacing == 0)
+    }
+
+    /// A paragraph's picture stays under it while the caret is on its line, the source above it: it used
+    /// to go, and to come back when the caret left, so ↑ and ↓ through a note's screenshots moved
+    /// everything below by their height. A file's picture is there even when the pictures are looked up
+    /// again with the caret on its line (another attachments folder): reading a file asks nothing of the web.
+    @Test func aPictureStaysWhileTheCaretIsOnItsLine() throws {
+        try directory.file("shot.png", png(.blue, width: 300, height: 200))
+        // "intro" 0–4, the image 7–23, "after" 26–30.
+        let inline = editor("intro\n\n![shot](shot.png)\n\nafter", presentation: .inline, caret: 28, height: 400) { view in
+            view.baseURL = directory.url
+        }
+        let storage = inline.textStorage!
+        func picture() -> NSSize? { (storage.attribute(.inlineImage, at: 7, effectiveRange: nil) as? InlineImage)?.size }
+        func height() -> CGFloat {
+            layout(inline)
+            return inline.layoutManager!.usedRect(for: inline.textContainer!).height
+        }
+        #expect(picture() == NSSize(width: 300, height: 200))
+        let rendered = height()
+        inline.setSelectedRange(NSRange(location: 9, length: 0))
+        #expect(inline.revealed == NSRange(location: 7, length: 18))
+        #expect((storage.attribute(.font, at: 9, effectiveRange: nil) as? NSFont) == inline.style.regular)
+        #expect(picture() == NSSize(width: 300, height: 200))
+        #expect(inline.resolvedImages == [7])
+        #expect(abs(height() - rendered) < 16, "the text went from \(rendered) to \(height()) points")
+        inline.attachmentSearch = AttachmentSearch(searchesParents: false)
+        #expect(picture() == NSSize(width: 300, height: 200))
+        inline.setSelectedRange(NSRange(location: 2, length: 0))
+        #expect(picture() == NSSize(width: 300, height: 200))
+    }
+
+    /// The paragraph the caret is in asks for no picture: a destination being typed is not fetched
+    /// letter by letter. The picture it had goes with the destination and the new one comes when the
+    /// caret leaves.
+    @Test func aDestinationBeingTypedIsNotFetched() async {
+        let picture = NSImage.filled(with: .red, size: NSSize(width: 20, height: 10))
+        let delegate = RestylingDelegate()
+        var requested: [String] = []
+        let text = "![r](https://example.com/a.png)\n\nend"
+        let inline = editor(text, presentation: .inline, caret: (text as NSString).length) { view in
+            view.delegate = delegate
+            view.loadsRemoteImages = true
+            view.remoteImageLoader = { url, completion in
+                requested.append(url.absoluteString)
+                DispatchQueue.main.async { completion(picture) }
+            }
+        }
+        await eventually { inline.resolvedImages == [0] }
+        #expect(inline.resolvedImages == [0] && requested == ["https://example.com/a.png"])
+        inline.setSelectedRange(NSRange(location: 26, length: 0))
+        #expect(inline.resolvedImages == [0])
+        inline.insertText("b", replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(inline.resolvedImages.isEmpty && requested.count == 1)
+        inline.setSelectedRange(NSRange(location: (inline.string as NSString).length, length: 0))
+        #expect(requested == ["https://example.com/a.png", "https://example.com/ab.png"])
+        await eventually { inline.resolvedImages == [0] }
+        #expect(inline.resolvedImages == [0])
     }
 
     @Test func centersAReadableColumn() {

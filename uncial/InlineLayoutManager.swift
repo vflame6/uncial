@@ -25,6 +25,33 @@ final class InlineLayoutManager: NSLayoutManager {
     /// The band behind the revealed lines, and its room above and below their text.
     var revealBackground: NSColor = .clear
     var revealPadding: CGFloat = InlineStyle.revealPadding
+    /// Told of every picture about to be drawn: one from a file gets its bitmap then, if it has none
+    /// (`LocalPictures`).
+    var willDrawPicture: ((NSImage) -> Void)?
+
+    /// Where the text's characters changed since `takeEditedRange()` last asked: what lies before
+    /// `start` and the last `tail` characters did not.
+    private var edited: (start: Int, tail: Int)?
+
+    override func processEditing(for textStorage: NSTextStorage, edited editMask: NSTextStorageEditActions, range newCharRange: NSRange,
+                                 changeInLength delta: Int, invalidatedRange invalidatedCharRange: NSRange) {
+        if editMask.contains(.editedCharacters) {
+            let range = NSUnionRange(newCharRange, invalidatedCharRange)
+            let tail = max(0, textStorage.length - NSMaxRange(range))
+            edited = (min(edited?.start ?? range.location, range.location), min(edited?.tail ?? tail, tail))
+        }
+        super.processEditing(for: textStorage, edited: editMask, range: newCharRange, changeInLength: delta, invalidatedRange: invalidatedCharRange)
+    }
+
+    /// The stretch of the text, as it is now, that edits changed since this was last asked; nil for none.
+    /// TextKit laid those lines out again by itself, from where the edit was: `ThemedTextView` has them
+    /// laid out from a line's start that a layout of the whole text has too.
+    func takeEditedRange() -> NSRange? {
+        defer { edited = nil }
+        guard let edited, let length = textStorage?.length else { return nil }
+        let start = min(edited.start, length)
+        return NSRange(location: start, length: max(start, length - edited.tail) - start)
+    }
 
     override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
         // First, so the selection and the text's own backgrounds stay on top of it.
@@ -88,10 +115,13 @@ final class InlineLayoutManager: NSLayoutManager {
     }
 
     /// The paragraph's image sits in the spacing below its last line fragment, left-aligned with the text.
+    /// One whose bitmap is still on its way leaves its room empty.
     private func drawImage(in fragment: NSRange, lineRect: NSRect, container: NSTextContainer, storage: NSTextStorage, text: NSString) {
         guard let inline = storage.attribute(.inlineImage, at: fragment.location, effectiveRange: nil) as? InlineImage else { return }
         let paragraph = text.paragraphRange(for: NSRange(location: fragment.location, length: 0))
         guard NSMaxRange(fragment) >= NSMaxRange(paragraph) else { return }
+        willDrawPicture?(inline.image)
+        guard !inline.image.representations.isEmpty else { return }
         let indent = (storage.attribute(.paragraphStyle, at: fragment.location, effectiveRange: nil) as? NSParagraphStyle)?.headIndent ?? 0
         let target = NSRect(x: lineRect.minX + container.lineFragmentPadding + indent,
                             y: lineRect.maxY - InlineStyle.imageGap / 2 - inline.size.height,

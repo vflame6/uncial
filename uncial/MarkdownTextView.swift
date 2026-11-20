@@ -34,7 +34,10 @@ struct MarkdownTextView: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(onChange: onChange, onScroll: onScroll) }
 
-    func makeNSView(context: Context) -> NSScrollView {
+    /// The editor's views as the app builds them: a `ThemedTextView` (TextKit 1: `NSLayoutManager` gives
+    /// the glyph ↔ point ↔ line math the sync needs and the glyph properties the inline presentation
+    /// needs) as the document of a scroll view, with the line-number ruler; text and settings come after.
+    static func makeScrollView() -> NSScrollView {
         let scrollView = NSScrollView()
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
@@ -42,8 +45,6 @@ struct MarkdownTextView: NSViewRepresentable {
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
 
-        // TextKit 1: NSLayoutManager gives the glyph ↔ point ↔ line math the sync needs and the
-        // glyph properties the inline presentation needs.
         let textView = ThemedTextView.standalone()
         textView.minSize = .zero
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
@@ -68,6 +69,15 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.usesFontPanel = false
         textView.importsGraphics = false
         textView.textContainerInset = NSSize(width: 16, height: 16)
+        scrollView.documentView = textView
+        scrollView.hasVerticalRuler = true
+        scrollView.verticalRulerView = LineNumberRulerView(textView: textView, scrollView: scrollView)
+        return scrollView
+    }
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = Self.makeScrollView()
+        guard let textView = scrollView.documentView as? ThemedTextView else { return scrollView }
         textView.delegate = context.coordinator
         textView.autoPairingEnabled = autoPairing
         textView.continuesLists = continueLists
@@ -80,9 +90,6 @@ struct MarkdownTextView: NSViewRepresentable {
         textView.theme = theme
         textView.string = text
         textView.fontSize = fontSize
-        scrollView.documentView = textView
-        scrollView.hasVerticalRuler = true
-        scrollView.verticalRulerView = LineNumberRulerView(textView: textView, scrollView: scrollView)
         scrollView.rulersVisible = showsLineNumbers
         context.coordinator.textView = textView
         context.coordinator.observeScrolling(of: scrollView)
@@ -178,6 +185,11 @@ final class ThemedTextView: NSTextView {
         layoutManager.addTextContainer(container)
         let textView = ThemedTextView(frame: .zero, textContainer: container)
         layoutManager.delegate = textView
+        layoutManager.willDrawPicture = { [weak textView] in textView?.pictures.willDraw($0) }
+        textView.pictures.onLoad = { [weak textView] in
+            guard let textView else { return }
+            textView.setNeedsDisplay(textView.visibleRect)
+        }
         textView.registerForDraggedTypes(textView.readablePasteboardTypes)
         return textView
     }
@@ -247,66 +259,239 @@ final class ThemedTextView: NSTextView {
         rehighlight()
     }
 
-    /// Re-applies base attributes and, per presentation, the Markdown coloring or the inline
-    /// rendering (the page's look outside the revealed lines, the source look inside them), then the
-    /// code inside fenced blocks (`CodeSyntaxStyle`). Attribute-only, so undo is untouched. Inline:
-    /// every glyph is invalidated so markers that appeared or vanished anywhere are hidden or shown
-    /// correctly (regenerated lazily), and the same pass runs when the caret moves to another
-    /// paragraph, since the raw look moves with it.
+    /// Styles the text again: the Markdown coloring or, in the inline presentation, the rendered look
+    /// outside the revealed lines and the source look inside them, then the code inside fenced blocks
+    /// (`CodeSyntaxStyle`). Attribute-only, so undo is untouched.
+    ///
+    /// The look is worked out on a copy and only the lines where it differs change in the text
+    /// (`AttributeDifference`): the layout manager lays out again what the storage reports as edited,
+    /// and it estimates the positions of text it has not laid out. A pass that rewrote every attribute
+    /// (every keystroke, every caret move to another paragraph) left the whole document on such
+    /// estimates: the arrow keys picked their line from them and went back up or skipped lines, the
+    /// view scrolled thousands of points, and the document's height was a fraction of the real one.
     func rehighlight() {
         guard let textStorage, !isRehighlighting else { return }
         passes += 1
         isRehighlighting = true
         defer { isRehighlighting = false }
         let text = string
-        lineIndex = LineIndex(text: text)
-        let full = NSRange(location: 0, length: textStorage.length)
-        let hadMarkers = markers != .empty
-        textStorage.beginEditing()
-        textStorage.setAttributes(style.baseAttributes, range: full)
-        if textStorage.length <= Self.highlightingLimit {
-            let tokens = MarkdownHighlighter.tokens(in: text)
-            literalBlocks = MarkdownHighlighter.literalBlocks(in: tokens)
+        let length = textStorage.length
+        let reading = read(text, length: length)
+        let target = NSTextStorage(string: text, attributes: style.baseAttributes)
+        var found = InlineStyle.Resolved()
+        var foundMarkers = MarkerIndex.empty
+        var reveal = NSRange(location: 0, length: 0)
+        if let reading {
+            target.beginEditing()
             switch presentation {
             case .source:
-                for span in MarkdownHighlighter.spans(from: tokens) where NSMaxRange(span.range) <= textStorage.length {
-                    textStorage.addAttributes(style.attributes(for: span.kind), range: span.range)
+                for span in MarkdownHighlighter.spans(from: reading.tokens) where NSMaxRange(span.range) <= length {
+                    target.addAttributes(style.attributes(for: span.kind), range: span.range)
                 }
-                markers = .empty
-                revealed = NSRange(location: 0, length: 0)
             case .inline:
-                let textWidth = (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
                 // A diagram or formula the caret is in stays source, so the reveal is settled first, from the new tokens.
-                let callouts = MarkdownHighlighter.calloutBlocks(in: tokens, text: text as NSString).map(\.range)
-                let reveal = MarkerIndex(tokens: tokens, calloutBlocks: callouts).revealedRange(for: selectedRange(), in: text as NSString)
-                let resolved = InlineStyle(style: style).apply(tokens, to: textStorage, images: { self.image(for: $0) },
-                                                               diagrams: { self.image(forDiagram: $0) }, math: { self.picture(forMath: $0, display: $1) },
-                                                               revealed: reveal, textWidth: textWidth)
-                resolvedImages = resolved.images
-                resolvedDiagrams = resolved.diagrams
-                resolvedMath = resolved.math
-                markers = MarkerIndex(tokens: tokens, resolvedImages: resolvedImages, resolvedDiagrams: resolvedDiagrams,
-                                      resolvedMath: resolvedMath, calloutBlocks: callouts)
-                revealed = markers.revealedRange(for: selectedRange(), in: text as NSString)
+                reveal = reading.blocks.revealedRange(for: selectedRange(), in: reading.text)
+                found = InlineStyle(style: style).apply(reading.tokens, to: target, images: { self.image(for: $0) },
+                                                        loadedImages: { self.loadedImage(for: $0) }, diagrams: { self.image(forDiagram: $0) },
+                                                        math: { self.picture(forMath: $0, display: $1) }, revealed: reveal, textWidth: textWidth)
+                foundMarkers = MarkerIndex(tokens: reading.tokens, resolvedImages: found.images, resolvedDiagrams: found.diagrams,
+                                           resolvedMath: found.math, calloutBlocks: reading.callouts)
             }
-            CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)
-        } else {
-            markers = .empty
-            revealed = NSRange(location: 0, length: 0)
-            literalBlocks = []
+            CodeSyntaxStyle.apply(reading.tokens, to: target, style: style)
+            Self.markGlyphs(of: foundMarkers, revealed: reveal, in: target)
+            target.endEditing()
         }
-        if presentation == .source {
-            resolvedImages = []
-            resolvedDiagrams = []
-            resolvedMath = [:]
-        }
-        textStorage.endEditing()
+        let changed = AttributeDifference.lines(of: textStorage, differingFrom: target, lines: lineIndex)
+        // What an edit changed TextKit has laid out again already, from the edit on.
+        let edited = (layoutManager as? InlineLayoutManager)?.takeEditedRange()
+        // Before the text changes: the glyphs made for it read these.
+        markers = foundMarkers
+        revealed = reveal
+        resolvedImages = found.images
+        resolvedDiagrams = found.diagrams
+        resolvedMath = found.math
+        literalBlocks = reading?.literalBlocks ?? []
+        adopt(target, in: changed)
         typingAttributes = style.baseAttributes
-        if presentation == .inline || hadMarkers {
-            layoutManager?.invalidateGlyphs(forCharacterRange: full, changeInLength: 0, actualCharacterRange: nil)
-            layoutManager?.invalidateLayout(forCharacterRange: full, actualCharacterRange: nil)
-        }
+        invalidate(Self.joined(changed + [edited ?? NSRange(location: 0, length: 0)]))
+        completeLayout()
         lineNumberView?.invalidate()
+    }
+
+    /// What a pass reads from the text; kept while the text stays the same, so that a pass after a
+    /// picture landed, the width changed or the caret moved does not read it again (tokenizing is
+    /// more than half of a pass).
+    private struct Reading {
+        let text: NSString
+        let tokens: [MarkdownHighlighter.Token]
+        let callouts: [NSRange]
+        let literalBlocks: [NSRange]
+        /// The blocks that reveal as a whole, whatever pictures are drawn.
+        let blocks: MarkerIndex
+        /// Fenced code as `CodeSyntaxStyle` pairs it, a fence with the next fence, in order.
+        let codeBlocks: [NSRange]
+    }
+
+    private var reading: Reading?
+
+    /// The reading of `text`, nil above the highlighting limit; `lineIndex` follows the text here.
+    private func read(_ text: String, length: Int) -> Reading? {
+        guard length <= Self.highlightingLimit else {
+            reading = nil
+            lineIndex = LineIndex(text: text)
+            return nil
+        }
+        if let reading, reading.text.isEqual(to: text) { return reading }
+        lineIndex = LineIndex(text: text)
+        let tokens = MarkdownHighlighter.tokens(in: text)
+        let source = text as NSString
+        let callouts = MarkdownHighlighter.calloutBlocks(in: tokens, text: source).map(\.range)
+        let fresh = Reading(text: source, tokens: tokens, callouts: callouts, literalBlocks: MarkdownHighlighter.literalBlocks(in: tokens),
+                            blocks: MarkerIndex(tokens: tokens, calloutBlocks: callouts), codeBlocks: Self.codeBlocks(in: tokens))
+        reading = fresh
+        return fresh
+    }
+
+    /// Every fenced code block from its opening fence to its closing one, or to its last line of code
+    /// when it is not closed.
+    private static func codeBlocks(in tokens: [MarkdownHighlighter.Token]) -> [NSRange] {
+        var blocks: [NSRange] = []
+        var start: Int?
+        var end = 0
+        for token in tokens {
+            switch token.kind {
+            case .fence:
+                if let opening = start {
+                    blocks.append(NSRange(location: opening, length: NSMaxRange(token.range) - opening))
+                    start = nil
+                } else {
+                    start = token.range.location
+                    end = NSMaxRange(token.range)
+                }
+            case .code where start != nil:
+                end = NSMaxRange(token.range)
+            default:
+                break
+            }
+        }
+        if let opening = start {
+            blocks.append(NSRange(location: opening, length: end - opening))
+        }
+        return blocks
+    }
+
+    /// The room for text in a line, which bounds the pictures.
+    private var textWidth: CGFloat {
+        (textContainer?.size.width ?? 0) - 2 * (textContainer?.lineFragmentPadding ?? 0)
+    }
+
+    /// Writes into the text's look what the glyphs and the layout do with it: the markers hidden
+    /// outside `revealed` (`.hiddenMarker`), the list markers drawn as bullets (`.listBullet`) and where
+    /// the revealed lines start and end (`.revealStart`, `.revealEnd`; within `range` when only that
+    /// part is styled). The delegate
+    /// methods at the end of this file read nothing else, so they are right for a text that was edited
+    /// and not styled yet: TextKit makes glyphs and lines again as soon as a character changes, before
+    /// `textDidChange`, and `markers` and `revealed` then still count in the text before the edit.
+    private static func markGlyphs(of markers: MarkerIndex, revealed: NSRange, in storage: NSTextStorage, within range: NSRange? = nil) {
+        let length = storage.length
+        for hidden in markers.hidden where NSMaxRange(hidden) <= length {
+            for part in InlineStyle.complement(of: revealed, in: hidden) where part.length > 0 {
+                storage.addAttribute(.hiddenMarker, value: true, range: part)
+            }
+        }
+        for bullet in markers.bullets where bullet < length {
+            storage.addAttribute(.listBullet, value: true, range: NSRange(location: bullet, length: 1))
+        }
+        let whole = range ?? NSRange(location: 0, length: length)
+        guard revealed.length > 0, NSMaxRange(revealed) <= length else { return }
+        if NSLocationInRange(revealed.location, whole) {
+            storage.addAttribute(.revealStart, value: true, range: NSRange(location: revealed.location, length: 1))
+        }
+        if NSLocationInRange(NSMaxRange(revealed) - 1, whole) {
+            storage.addAttribute(.revealEnd, value: true, range: NSRange(location: NSMaxRange(revealed) - 1, length: 1))
+        }
+    }
+
+    /// More changed stretches than this are taken as one: each is an edit of its own to the storage.
+    private static let separateEdits = 64
+
+    /// Gives the text `target`'s attributes over `ranges`, each stretch as an edit of its own, so that
+    /// the layout manager lays those out again and nothing between them.
+    private func adopt(_ target: NSAttributedString, in ranges: [NSRange]) {
+        guard let textStorage, let first = ranges.first, let last = ranges.last else { return }
+        let edits = ranges.count > Self.separateEdits ? [NSUnionRange(first, last)] : ranges
+        for range in edits {
+            textStorage.beginEditing()
+            target.enumerateAttributes(in: range, options: .longestEffectiveRangeNotRequired) { attributes, run, _ in
+                textStorage.setAttributes(attributes, range: run)
+            }
+            textStorage.endEditing()
+        }
+    }
+
+    /// Has the glyphs and the layout of `ranges` made again, each between two places where a layout
+    /// of the whole text starts a line too. The hidden markers a paragraph starts with belong to the
+    /// last line of the paragraph before, which for that keeps no room under it (a heading's divider)
+    /// and whose line they would otherwise start; and TextKit lays out again from the first glyph it
+    /// is told of. Begun at a paragraph that starts hidden, the layout gave it a line of its own start
+    /// (with the room a callout's title keeps above it); begun at one that just stopped starting
+    /// hidden, it left the paragraph before as it was with those markers. So a stretch starts a
+    /// paragraph early, further back while that one begins with a hidden marker, and ends after the
+    /// hidden markers that follow it.
+    private func invalidate(_ ranges: [NSRange]) {
+        guard let layoutManager, let textStorage else { return }
+        let text = textStorage.mutableString
+        func isHidden(_ index: Int, _ run: NSRangePointer? = nil) -> Bool {
+            textStorage.attribute(.hiddenMarker, at: index, effectiveRange: run) != nil
+        }
+        func paragraphStart(before location: Int) -> Int {
+            location > 0 ? text.paragraphRange(for: NSRange(location: location - 1, length: 0)).location : 0
+        }
+        for range in ranges where range.length > 0 && NSMaxRange(range) <= text.length {
+            var start = paragraphStart(before: text.paragraphRange(for: NSRange(location: range.location, length: 0)).location)
+            while start > 0, isHidden(start) {
+                start = paragraphStart(before: start)
+            }
+            var end = NSMaxRange(text.paragraphRange(for: NSRange(location: NSMaxRange(range) - 1, length: 0)))
+            var run = NSRange()
+            while end < text.length, isHidden(end, &run) {
+                end = NSMaxRange(run)
+            }
+            let extended = NSRange(location: start, length: end - start)
+            layoutManager.invalidateGlyphs(forCharacterRange: extended, changeInLength: 0, actualCharacterRange: nil)
+            layoutManager.invalidateLayout(forCharacterRange: extended, actualCharacterRange: nil)
+        }
+    }
+
+    /// A text narrower than this is not laid out whole: the view has no width yet when the text goes
+    /// in, and a line per character is a long layout.
+    private static let narrowestLayout: CGFloat = 100
+
+    /// Lays out whatever is not laid out, so that every position and the document's height are exact:
+    /// TextKit estimates the positions of text it has not laid out, far off for Markdown (a quarter
+    /// of the real height for a note of 4,800 lines), and corrects them as the view scrolls there.
+    /// With every pass keeping the layout it does not change, this is a fraction of a millisecond
+    /// but for a new text, a new look or a new width. Not while the width is still changing, and not
+    /// above the highlighting limit, where the text is plain and may be very long.
+    private func completeLayout() {
+        guard let layoutManager, let textContainer, let textStorage, !inLiveResize, !isSettingWidth else { return }
+        awaitsLayout = false
+        guard textStorage.length <= Self.highlightingLimit, textContainer.size.width >= Self.narrowestLayout else { return }
+        layoutManager.ensureLayout(for: textContainer)
+    }
+
+    /// How long the width has to stay the same before the text is laid out whole again.
+    static let layoutSettleDelay: TimeInterval = 0.05
+
+    /// A new width leaves all of the text to lay out again: once the width has settled, not at every
+    /// step of an animated resize.
+    private func scheduleLayoutCompletion() {
+        NSObject.cancelPreviousPerformRequests(withTarget: self, selector: #selector(completeLayoutOnceSettled), object: nil)
+        perform(#selector(completeLayoutOnceSettled), with: nil, afterDelay: Self.layoutSettleDelay)
+    }
+
+    @objc private func completeLayoutOnceSettled() {
+        completeLayout()
     }
 
     // MARK: Inline presentation
@@ -332,7 +517,7 @@ final class ThemedTextView: NSTextView {
     var baseURL: URL? {
         didSet {
             guard baseURL != oldValue else { return }
-            imageCache.removeAll()
+            forgetImages()
             if presentation == .inline { rehighlight() }
         }
     }
@@ -341,7 +526,7 @@ final class ThemedTextView: NSTextView {
     var loadsRemoteImages = false {
         didSet {
             guard loadsRemoteImages != oldValue else { return }
-            imageCache.removeAll()
+            forgetImages()
             if presentation == .inline { rehighlight() }
         }
     }
@@ -350,7 +535,7 @@ final class ThemedTextView: NSTextView {
     var attachmentSearch: AttachmentSearch = .direct {
         didSet {
             guard attachmentSearch != oldValue else { return }
-            imageCache.removeAll()
+            forgetImages()
             if presentation == .inline { rehighlight() }
         }
     }
@@ -362,6 +547,14 @@ final class ThemedTextView: NSTextView {
     private(set) var resolvedImages: Set<Int> = []
     private var imageCache: [String: NSImage?] = [:]
     private var pendingImages: Set<String> = []
+    /// The pictures of local image files: sized at once, their bitmaps decoded in the background.
+    private let pictures = LocalPictures()
+
+    /// Another folder, another search or another policy: every destination is looked up again.
+    private func forgetImages() {
+        imageCache.removeAll()
+        pictures.removeAll()
+    }
     /// Fetches a remote image, within `RemoteImageLoader`'s bounds, and calls back on the main thread;
     /// tests inject their own.
     var remoteImageLoader: (URL, @escaping (NSImage?) -> Void) -> Void = { url, completion in
@@ -394,6 +587,11 @@ final class ThemedTextView: NSTextView {
         }
     }
     private var layoutWidth: CGFloat = 0
+    /// Set while a new width is taken in: the pass that re-fits the pictures leaves the layout to
+    /// `scheduleLayoutCompletion()`.
+    private var isSettingWidth = false
+    /// Set from a change of width until the text is laid out whole at it (`completeLayout()`).
+    private var awaitsLayout = false
     /// The paragraphs (or fenced block) whose markers are shown because the selection touches them.
     private(set) var revealed = NSRange(location: 0, length: 0) {
         didSet {
@@ -405,22 +603,132 @@ final class ThemedTextView: NSTextView {
     private var bulletCache: (font: NSFont, glyph: CGGlyph?)?
 
     /// The raw look follows the caret: when it enters another paragraph, the paragraph it left goes
-    /// back to the rendered look and the new one to the source look, which is the same attribute
-    /// pass as after an edit. Not while a drag is still selecting, and not while the storage is
-    /// still processing an edit: the layout manager moves the selection from inside that, when
-    /// `markers` still describe the text before it, and `textDidChange`'s pass follows anyway.
+    /// back to the rendered look and the new one to the source look. Not while a drag is still
+    /// selecting, and not while the storage is still processing an edit: the layout manager moves
+    /// the selection from inside that, when `markers` still describe the text before it, and
+    /// `textDidChange`'s pass follows anyway.
     private func updateReveal(stillSelecting: Bool = false) {
         guard presentation == .inline, !stillSelecting, !isRehighlighting, !isReplacingText, let textStorage,
               textStorage.editedMask.isEmpty, textStorage.length <= Self.highlightingLimit else { return }
         let next = markers.revealedRange(for: selectedRange(), in: currentText)
         guard next != revealed else { return }
-        rehighlight()
+        // The reading describes the text before an edit that has not reached `textDidChange` yet.
+        guard let reading, reading.text.isEqual(currentText) else {
+            rehighlight()
+            return
+        }
+        moveReveal(to: next, reading: reading)
     }
 
-    /// Local images load right away (found through `attachmentSearch` when they are not where the
-    /// destination says); http(s) ones are fetched once through `remoteImageLoader` (only with
-    /// `loadsRemoteImages`) and, once here, re-render the text. Every outcome is cached per
-    /// destination, misses too.
+    /// Moves the reveal by styling again the lines it leaves and the lines it enters, and nothing
+    /// else: the rest of the text keeps its look and its layout, so the caret's next line is where
+    /// the layout says and the view stays where it is. The look is the one a whole pass gives
+    /// (`ThemedTextViewLayoutTests.movingTheCaretStylesLikeAWholePass`).
+    private func moveReveal(to next: NSRange, reading: Reading) {
+        guard let textStorage else { return }
+        isRehighlighting = true
+        defer { isRehighlighting = false }
+        let ranges = Self.joined([styledLines(around: revealed, reading: reading), styledLines(around: next, reading: reading)])
+        revealed = next
+        var found = InlineStyle.Resolved(images: resolvedImages, diagrams: resolvedDiagrams, math: resolvedMath)
+        let inline = InlineStyle(style: style)
+        for range in ranges {
+            let tokens = Array(reading.tokens[Self.tokens(of: reading.tokens, startingIn: range)])
+            textStorage.beginEditing()
+            textStorage.setAttributes(style.baseAttributes, range: range)
+            let part = inline.apply(tokens, to: textStorage, images: { self.image(for: $0) }, loadedImages: { self.loadedImage(for: $0) },
+                                    diagrams: { self.image(forDiagram: $0) }, math: { self.picture(forMath: $0, display: $1) },
+                                    revealed: next, textWidth: textWidth, range: range)
+            CodeSyntaxStyle.apply(tokens, to: textStorage, style: style)
+            Self.markGlyphs(of: MarkerIndex(tokens: tokens, resolvedImages: part.images, resolvedDiagrams: part.diagrams, resolvedMath: part.math),
+                            revealed: next, in: textStorage, within: range)
+            textStorage.endEditing()
+            found.images = found.images.filter { !NSLocationInRange($0, range) }.union(part.images)
+            found.diagrams = found.diagrams.filter { !NSLocationInRange($0, range) }.union(part.diagrams)
+            found.math = found.math.filter { !NSLocationInRange($0.key, range) }.merging(part.math) { $1 }
+        }
+        resolvedImages = found.images
+        resolvedDiagrams = found.diagrams
+        resolvedMath = found.math
+        markers = MarkerIndex(tokens: reading.tokens, resolvedImages: found.images, resolvedDiagrams: found.diagrams,
+                              resolvedMath: found.math, calloutBlocks: reading.callouts)
+        typingAttributes = style.baseAttributes
+        invalidate(ranges)
+        completeLayout()
+        lineNumberView?.invalidate()
+    }
+
+    /// The lines to style again when the reveal covers or uncovers `range`: its paragraphs; the whole
+    /// of a fenced code block, whose colors come from its fence; and, for a table row, the whole table,
+    /// since a row's padding comes from every row's width. The blocks that reveal as one are whole in
+    /// `range` already (`MarkerIndex.revealedRange`), but they pair a fence with a `$$` line as well as
+    /// with a fence, so under a `$$` that is not closed they are not the code blocks.
+    private func styledLines(around range: NSRange, reading: Reading) -> NSRange {
+        let text = reading.text
+        let clipped = NSIntersectionRange(range, NSRange(location: 0, length: text.length))
+        guard clipped.length > 0 else { return NSRange(location: min(range.location, text.length), length: 0) }
+        var lines = text.paragraphRange(for: clipped)
+        for block in reading.codeBlocks where block.location < NSMaxRange(lines) && NSIntersectionRange(block, lines).length > 0 {
+            lines = NSUnionRange(lines, text.lineRange(for: block))
+        }
+        func isTableLine(at location: Int) -> Bool {
+            let line = text.lineRange(for: NSRange(location: location, length: 0))
+            guard let first = Self.tokens(of: reading.tokens, startingIn: line).first else { return false }
+            switch reading.tokens[first].kind {
+            case .tableRow, .tableDelimiter: return true
+            default: return false
+            }
+        }
+        if isTableLine(at: lines.location) {
+            while lines.location > 0, isTableLine(at: lines.location - 1) {
+                lines = NSUnionRange(text.lineRange(for: NSRange(location: lines.location - 1, length: 0)), lines)
+            }
+        }
+        if isTableLine(at: NSMaxRange(lines) - 1) {
+            while NSMaxRange(lines) < text.length, isTableLine(at: NSMaxRange(lines)) {
+                lines = NSUnionRange(lines, text.lineRange(for: NSRange(location: NSMaxRange(lines), length: 0)))
+            }
+        }
+        return lines
+    }
+
+    /// The indexes of the tokens that start in `lines`, whole lines of the text: the tokens come line
+    /// by line in the text's order (within a line in no order), so they are one run.
+    private static func tokens(of tokens: [MarkdownHighlighter.Token], startingIn lines: NSRange) -> Range<Int> {
+        func firstIndex(at location: Int) -> Int {
+            var low = 0
+            var high = tokens.count
+            while low < high {
+                let mid = (low + high) / 2
+                if tokens[mid].range.location < location {
+                    low = mid + 1
+                } else {
+                    high = mid
+                }
+            }
+            return low
+        }
+        let lower = firstIndex(at: lines.location)
+        return lower..<max(lower, firstIndex(at: NSMaxRange(lines)))
+    }
+
+    /// `ranges` in order, without the empty ones, those that overlap or touch as one.
+    private static func joined(_ ranges: [NSRange]) -> [NSRange] {
+        var result: [NSRange] = []
+        for range in ranges.filter({ $0.length > 0 }).sorted(by: { $0.location < $1.location }) {
+            if let last = result.last, range.location <= NSMaxRange(last) {
+                result[result.count - 1] = NSUnionRange(last, range)
+            } else {
+                result.append(range)
+            }
+        }
+        return result
+    }
+
+    /// Local images are here right away, as far as the layout goes (found through `attachmentSearch`
+    /// when they are not where the destination says): their size is, and `LocalPictures` brings the
+    /// bitmap. http(s) ones are fetched once through `remoteImageLoader` (only with `loadsRemoteImages`)
+    /// and, once here, re-render the text. Every outcome is cached per destination, misses too.
     func image(for destination: String) -> NSImage? {
         if let cached = imageCache[destination] { return cached }
         let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL ?? baseURL?.appendingPathComponent(destination)
@@ -430,7 +738,7 @@ final class ThemedTextView: NSTextView {
         }
         if url.isFileURL {
             let located = baseURL.flatMap { attachmentSearch.locate(url, from: $0) } ?? url
-            let loaded = NSImage(contentsOf: located)
+            let loaded = pictures.picture(at: located)
             imageCache[destination] = .some(loaded)
             return loaded
         }
@@ -451,6 +759,14 @@ final class ThemedTextView: NSTextView {
             }
         }
         return nil
+    }
+
+    /// The picture for `destination` that asks nothing of the web: the one already here, or a file's.
+    /// It is what the caret's own paragraph shows, where a destination may be half typed.
+    private func loadedImage(for destination: String) -> NSImage? {
+        if let cached = imageCache[destination] { return cached }
+        let url = URL(string: destination, relativeTo: baseURL)?.absoluteURL ?? baseURL?.appendingPathComponent(destination)
+        return url?.isFileURL == true ? image(for: destination) : nil
     }
 
     /// Diagram pictures are drawn for text widths in steps of this many points, so a resize asks
@@ -504,12 +820,14 @@ final class ThemedTextView: NSTextView {
         return latest
     }
 
-    /// Pictures stood in at the old width while the window was resized; the new width's are drawn now.
+    /// Pictures stood in at the old width while the window was resized; the new width's are drawn now,
+    /// and the text, laid out only where it showed during the resize, is laid out whole.
     override func viewDidEndLiveResize() {
         super.viewDidEndLiveResize()
         if presentation == .inline, !resolvedDiagrams.isEmpty {
             rehighlight()
         }
+        completeLayout()
     }
 
     /// A formula's picture in the current look, once `mathRenderer` has drawn it; the first call
@@ -542,13 +860,23 @@ final class ThemedTextView: NSTextView {
     }
 
     /// The column follows the width, and pictures are fitted to the text width, so a width change
-    /// re-fits both.
+    /// re-fits both; the text is laid out whole again once the width has settled.
+    ///
+    /// Until then the text's height is a guess, and the view does not get shorter on a guess: one
+    /// below the visible part's height hides a scroll bar that takes room (System Settings ▸ Appearance
+    /// ▸ Show scroll bars: Always, or a mouse), which widens the text, which drops the layout again,
+    /// and the bar and the layout went round after each other.
     override func setFrameSize(_ newSize: NSSize) {
-        super.setFrameSize(newSize)
-        guard newSize.width != layoutWidth else { return }
+        let isNewWidth = newSize.width != layoutWidth
+        if isNewWidth { awaitsLayout = true }
+        super.setFrameSize(awaitsLayout ? NSSize(width: newSize.width, height: max(newSize.height, frame.height)) : newSize)
+        guard isNewWidth else { return }
         layoutWidth = newSize.width
+        isSettingWidth = true
         updateInsets()
         refitPictures()
+        isSettingWidth = false
+        scheduleLayoutCompletion()
     }
 
     /// Fits Live Preview's pictures (images, diagrams, formulas) to the text width again.
@@ -812,6 +1140,7 @@ final class ThemedTextView: NSTextView {
     }
 
     override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting stillSelectingFlag: Bool) {
+        if !isMovingVertically { verticalAnchor = nil }
         super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelectingFlag)
         if !isApplyingPairEdit, let range = ranges.first?.rangeValue {
             pairing.selectionChanged(to: range)
@@ -855,6 +1184,197 @@ final class ThemedTextView: NSTextView {
         setSelectedRange(edit.selection)
     }
 
+    // MARK: Up and down
+
+    /// Where ↑ and ↓ keep the caret, from the text container's left edge, while one follows another;
+    /// any other change of the selection forgets it.
+    private var verticalAnchor: CGFloat?
+    private var isMovingVertically = false
+
+    override func moveDown(_ sender: Any?) {
+        if !moveCaret(down: true) { super.moveDown(sender) }
+    }
+
+    override func moveUp(_ sender: Any?) {
+        if !moveCaret(down: false) { super.moveUp(sender) }
+    }
+
+    /// A line on screen: its glyphs, its rect in the text container, and whether it is the empty line
+    /// after the text's last line break, which has no glyphs.
+    private struct ScreenLine {
+        let glyphs: NSRange
+        let rect: NSRect
+        var isExtra = false
+    }
+
+    /// ↑ and ↓ in the inline presentation: to the line on screen above or below, at the place the
+    /// caret keeps. NSTextView's own pick the character from the next line's glyphs, and the hidden
+    /// markers a paragraph starts with are laid out at the end of the line before it: ↓ landed on
+    /// them, in the paragraph after the one it should reach, whenever that one was empty or shorter
+    /// than the caret's place (the empty line before every heading, quote and code block was skipped).
+    /// False when this does not apply (the source look, marked text, several selections).
+    private func moveCaret(down: Bool) -> Bool {
+        guard presentation == .inline, !hasMarkedText(), selectedRanges.count == 1, let layoutManager, let textContainer, let textStorage,
+              textStorage.length > 0, textStorage.length <= Self.highlightingLimit else { return false }
+        let text = textStorage.mutableString
+        let selection = selectedRange()
+        let caret = down ? NSMaxRange(selection) : selection.location
+        let upstream = selection.length == 0 && selectionAffinity == .upstream
+        guard let current = screenLine(ofCaretAt: caret, upstream: upstream) else { return false }
+        let anchor = verticalAnchor ?? caretPlace(at: caret, in: current)
+        var destination: (location: Int, affinity: NSSelectionAffinity)
+        if let target = screenLine(next: down, to: current) {
+            destination = character(at: anchor, in: target, text: text, layoutManager: layoutManager, textContainer: textContainer)
+            if down, let block = collapsedBlock(endingInLineAt: destination.location, text: text) {
+                // A block drawn as a picture shows its last line break only: ↓ enters it at its first line.
+                destination = (block.location, .downstream)
+            }
+        } else {
+            // Past the first or the last line: to the text's start or end, as NSTextView goes.
+            destination = (down ? text.length : 0, .downstream)
+        }
+        isMovingVertically = true
+        verticalAnchor = anchor
+        setSelectedRanges([NSValue(range: NSRange(location: destination.location, length: 0))], affinity: destination.affinity, stillSelecting: false)
+        isMovingVertically = false
+        scrollRangeToVisible(selectedRange())
+        return true
+    }
+
+    /// The diagram or formula block drawn as a picture whose last line holds `location`: the block's
+    /// other lines are hidden, line breaks and all, so they are no lines on screen.
+    private func collapsedBlock(endingInLineAt location: Int, text: NSString) -> NSRange? {
+        guard let textStorage, location <= text.length else { return nil }
+        let lineStart = text.lineRange(for: NSRange(location: location, length: 0)).location
+        guard lineStart > 0, textStorage.attribute(.hiddenMarker, at: lineStart - 1, effectiveRange: nil) != nil else { return nil }
+        return markers.blocks.first { $0.location < lineStart && NSLocationInRange(lineStart, $0) }
+    }
+
+    /// The line on screen the caret at `index` is in. A caret at a soft line break belongs to the line
+    /// before it when `upstream`. An index whose glyphs are hidden (a selection ending where a rendered
+    /// paragraph starts) counts as the first character of its line that shows.
+    private func screenLine(ofCaretAt index: Int, upstream: Bool) -> ScreenLine? {
+        guard let layoutManager, let textStorage, layoutManager.numberOfGlyphs > 0 else { return nil }
+        let text = textStorage.mutableString
+        if index >= text.length {
+            if layoutManager.extraLineFragmentTextContainer != nil {
+                return ScreenLine(glyphs: NSRange(location: layoutManager.numberOfGlyphs, length: 0), rect: layoutManager.extraLineFragmentRect, isExtra: true)
+            }
+            return screenLine(holdingGlyph: layoutManager.numberOfGlyphs - 1)
+        }
+        var visible = index
+        var contentsEnd = 0
+        text.getLineStart(nil, end: nil, contentsEnd: &contentsEnd, for: NSRange(location: index, length: 0))
+        while visible < contentsEnd, textStorage.attribute(.hiddenMarker, at: visible, effectiveRange: nil) != nil { visible += 1 }
+        let glyph = layoutManager.glyphIndexForCharacter(at: visible)
+        guard let line = screenLine(holdingGlyph: glyph) else { return nil }
+        if upstream, glyph == line.glyphs.location, glyph > 0, index > 0, !Self.isLineBreak(text.character(at: index - 1)) {
+            return screenLine(holdingGlyph: glyph - 1)
+        }
+        return line
+    }
+
+    private func screenLine(holdingGlyph glyph: Int) -> ScreenLine? {
+        guard let layoutManager, glyph >= 0, glyph < layoutManager.numberOfGlyphs else { return nil }
+        var glyphs = NSRange()
+        let rect = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &glyphs)
+        return glyphs.length > 0 ? ScreenLine(glyphs: glyphs, rect: rect) : nil
+    }
+
+    /// The line on screen after (or before) `line`; nil past the last (or the first).
+    private func screenLine(next down: Bool, to line: ScreenLine) -> ScreenLine? {
+        guard let layoutManager else { return nil }
+        if down {
+            guard !line.isExtra else { return nil }
+            if NSMaxRange(line.glyphs) < layoutManager.numberOfGlyphs { return screenLine(holdingGlyph: NSMaxRange(line.glyphs)) }
+            guard layoutManager.extraLineFragmentTextContainer != nil else { return nil }
+            return ScreenLine(glyphs: NSRange(location: layoutManager.numberOfGlyphs, length: 0), rect: layoutManager.extraLineFragmentRect, isExtra: true)
+        }
+        return screenLine(holdingGlyph: (line.isExtra ? layoutManager.numberOfGlyphs : line.glyphs.location) - 1)
+    }
+
+    /// How far from the text container's left edge the caret at `index` stands in `line`.
+    private func caretPlace(at index: Int, in line: ScreenLine) -> CGFloat {
+        guard let layoutManager, let textContainer, let textStorage else { return 0 }
+        if line.isExtra { return layoutManager.extraLineFragmentUsedRect.minX }
+        let glyph = index < textStorage.length ? layoutManager.glyphIndexForCharacter(at: index) : layoutManager.numberOfGlyphs
+        // After the line's last glyph: the text's end, or a soft line break the caret stays before.
+        guard glyph < NSMaxRange(line.glyphs) else {
+            return layoutManager.lineFragmentUsedRect(forGlyphAt: NSMaxRange(line.glyphs) - 1, effectiveRange: nil).maxX - textContainer.lineFragmentPadding
+        }
+        // Hidden glyphs before the line's first one that shows stand where it does.
+        return line.rect.minX + layoutManager.location(forGlyphAt: max(glyph, line.glyphs.location)).x
+    }
+
+    /// The caret position in `line` nearest `place`: within the line of text `line` shows, so never on
+    /// the hidden markers of the next paragraph that are laid out at its end. At the left edge of a
+    /// paragraph's first line it is the paragraph's start, before the markers hidden there.
+    private func character(at place: CGFloat, in line: ScreenLine, text: NSString, layoutManager: NSLayoutManager,
+                           textContainer: NSTextContainer) -> (location: Int, affinity: NSSelectionAffinity) {
+        guard !line.isExtra else { return (text.length, .downstream) }
+        let first = layoutManager.characterIndexForGlyph(at: line.glyphs.location)
+        var lineStart = 0, contentsEnd = 0
+        text.getLineStart(&lineStart, end: nil, contentsEnd: &contentsEnd, for: NSRange(location: first, length: 0))
+        // Where the line on screen ends: at the line break, or before it where the text wraps.
+        let shown = NSMaxRange(layoutManager.characterRange(forGlyphRange: line.glyphs, actualGlyphRange: nil))
+        let wraps = shown < contentsEnd
+        let end = wraps ? shown : contentsEnd
+        var fraction: CGFloat = 0
+        var index = layoutManager.characterIndex(for: NSPoint(x: place, y: line.rect.midY), in: textContainer, fractionOfDistanceBetweenInsertionPoints: &fraction)
+        if fraction > 0.5, index < text.length { index = NSMaxRange(text.rangeOfComposedCharacterSequence(at: index)) }
+        if index <= first {
+            // Left of the first character that shows: the paragraph's start when only hidden markers come before it.
+            let startsParagraph = (lineStart..<first).allSatisfy { textStorage?.attribute(.hiddenMarker, at: $0, effectiveRange: nil) != nil }
+            return (startsParagraph ? lineStart : first, .downstream)
+        }
+        guard index < end else { return (end, wraps ? .upstream : .downstream) }
+        return (index, .downstream)
+    }
+
+    private static func isLineBreak(_ character: unichar) -> Bool {
+        [0x0A, 0x0D, 0x2028, 0x2029, 0x0085].contains(character)
+    }
+
+    // MARK: Scrolling to the caret
+
+    /// Room kept between the line scrolled into view and the edge of the visible part.
+    static let scrollMargin: CGFloat = 8
+
+    /// Scrolls the least that shows the lines of `range`, when they are less than half a screen away:
+    /// the caret went a line up or down, or text was typed at the edge. NSTextView centers whatever
+    /// was out of sight, so every arrow key at the edge of the visible part moved the text half a
+    /// screen. What is further away (a search result, the other end of the document) is centered as
+    /// before, with text around it.
+    override func scrollRangeToVisible(_ range: NSRange) {
+        guard let lines = rect(ofLinesIn: range) else {
+            super.scrollRangeToVisible(range)
+            return
+        }
+        let visible = visibleRect
+        let wanted = lines.insetBy(dx: 0, dy: -Self.scrollMargin)
+        let above = visible.minY - wanted.minY
+        let below = wanted.maxY - visible.maxY
+        guard above > 0 || below > 0 else { return }
+        guard wanted.height <= visible.height, max(above, below) <= visible.height / 2 else {
+            super.scrollRangeToVisible(range)
+            return
+        }
+        scrollToVisible(NSRect(x: visible.minX, y: wanted.minY, width: visible.width, height: wanted.height))
+    }
+
+    /// The lines on screen that hold `range` (the caret's line for an empty one), in the view's coordinates.
+    private func rect(ofLinesIn range: NSRange) -> NSRect? {
+        guard let layoutManager, let textContainer, let textStorage, textStorage.length > 0, NSMaxRange(range) <= textStorage.length else { return nil }
+        let origin = textContainerOrigin
+        if range.length == 0 {
+            guard let line = screenLine(ofCaretAt: range.location, upstream: selectionAffinity == .upstream) else { return nil }
+            return line.rect.offsetBy(dx: origin.x, dy: origin.y)
+        }
+        let glyphs = layoutManager.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+        guard glyphs.length > 0 else { return nil }
+        return layoutManager.boundingRect(forGlyphRange: glyphs, in: textContainer).offsetBy(dx: origin.x, dy: origin.y)
+    }
+
     // MARK: Scroll math
 
     /// 0-based logical line at the top of the visible area plus the fraction scrolled into it.
@@ -877,7 +1397,9 @@ final class ThemedTextView: NSTextView {
         let whole = min(max(Int(line.rounded(.down)), 0), lineIndex.count - 1)
         let rect = boundingRect(ofLine: whole)
         let fraction = min(max(line - Double(whole), 0), 1)
-        var y = rect.minY + fraction * rect.height + textContainerInset.height
+        // The text's start is its top, with the room above the first line: the preview at its top
+        // would otherwise leave the editor that room short.
+        var y = line <= 0 ? 0 : rect.minY + fraction * rect.height + textContainerInset.height
         let maxY = max(0, frame.height - clipView.bounds.height)
         y = min(max(y, 0), maxY)
         isProgrammaticScroll = true
@@ -902,27 +1424,33 @@ final class ThemedTextView: NSTextView {
 }
 
 extension ThemedTextView: NSLayoutManagerDelegate {
-    /// Hides markers outside the revealed range (zero-width `.null` glyphs) and re-glyphs list
-    /// bullets. Works only from the arrays it is handed: any glyph-tree query here throws
-    /// "reentrant glyph generation problem" (probed 2026-09-15).
+    /// Hides markers (zero-width `.null` glyphs), draws list markers as bullets and makes a formula's
+    /// anchor a control glyph, as the text's look says (`.hiddenMarker`, `.listBullet`, `.mathPicture`;
+    /// see `markGlyphs`). Works only from the arrays it is handed and from the text's attributes: any
+    /// glyph-tree query here throws "reentrant glyph generation problem" (probed 2026-09-15).
     func layoutManager(_ layoutManager: NSLayoutManager, shouldGenerateGlyphs glyphs: UnsafePointer<CGGlyph>, properties: UnsafePointer<NSLayoutManager.GlyphProperty>, characterIndexes: UnsafePointer<Int>, font: NSFont, forGlyphRange glyphRange: NSRange) -> Int {
-        guard presentation == .inline, glyphRange.length > 0 else { return 0 }
+        guard presentation == .inline, glyphRange.length > 0, let textStorage else { return 0 }
         let count = glyphRange.length
         let first = characterIndexes[0]
         let span = NSRange(location: first, length: characterIndexes[count - 1] - first + 1)
-        let wantsBullet = markers.hasBullet(in: span)
-        let wantsAnchor = markers.hasAnchor(in: span)
-        guard markers.hasHidden(in: span) || wantsBullet || wantsAnchor else { return 0 }
-        let bullet = wantsBullet ? bulletGlyph(for: font) : nil
+        guard NSMaxRange(span) <= textStorage.length else { return 0 }
+        let hidden = Self.stretches(of: .hiddenMarker, in: span, of: textStorage)
+        let bullets = Self.stretches(of: .listBullet, in: span, of: textStorage)
+        let anchors = Self.stretches(of: .mathPicture, in: span, of: textStorage)
+        guard !hidden.isEmpty || !bullets.isEmpty || !anchors.isEmpty else { return 0 }
+        let bullet = bullets.isEmpty ? nil : bulletGlyph(for: font)
         var newGlyphs = Array(UnsafeBufferPointer(start: glyphs, count: count))
         var newProperties = Array(UnsafeBufferPointer(start: properties, count: count))
+        func holds(_ stretches: [NSRange], _ character: Int) -> Bool {
+            stretches.contains { NSLocationInRange(character, $0) }
+        }
         for index in 0..<count {
             let character = characterIndexes[index]
-            if wantsAnchor, markers.isAnchor(character) {
+            if holds(anchors, character) {
                 newProperties[index] = .controlCharacter
-            } else if markers.isHidden(character), !NSLocationInRange(character, revealed) {
+            } else if holds(hidden, character) {
                 newProperties[index] = .null
-            } else if let bullet, markers.bullets.contains(character) {
+            } else if let bullet, holds(bullets, character) {
                 newGlyphs[index] = bullet
             }
         }
@@ -930,9 +1458,23 @@ extension ThemedTextView: NSLayoutManagerDelegate {
         return count
     }
 
+    /// The stretches of `range` that carry `key`, in order.
+    private static func stretches(of key: NSAttributedString.Key, in range: NSRange, of storage: NSTextStorage) -> [NSRange] {
+        var found: [NSRange] = []
+        var index = range.location
+        while index < NSMaxRange(range) {
+            var run = NSRange()
+            if storage.attribute(key, at: index, longestEffectiveRange: &run, in: range) != nil {
+                found.append(run)
+            }
+            index = max(NSMaxRange(run), index + 1)
+        }
+        return found
+    }
+
     /// A formula's anchor is a control glyph laid out as whitespace of the picture's width…
     func layoutManager(_ layoutManager: NSLayoutManager, shouldUse action: NSLayoutManager.ControlCharacterAction, forControlCharacterAt charIndex: Int) -> NSLayoutManager.ControlCharacterAction {
-        markers.isAnchor(charIndex) ? .whitespace : action
+        mathPicture(at: charIndex) != nil ? .whitespace : action
     }
 
     func layoutManager(_ layoutManager: NSLayoutManager, boundingBoxForControlGlyphAt glyphIndex: Int, for textContainer: NSTextContainer, proposedLineFragment proposedRect: NSRect, glyphPosition: NSPoint, characterIndex charIndex: Int) -> NSRect {
@@ -940,26 +1482,26 @@ extension ThemedTextView: NSLayoutManagerDelegate {
     }
 
     /// …and its line grows to hold the picture above and below the baseline, since the box's own
-    /// height is ignored (probed 2026-09-16); the lines after follow. The revealed lines' first and
-    /// last fragments get the room for the band behind them (`InlineStyle.revealRoom`) outside their
-    /// used rect, which the caret spans: paragraph spacing would not do, since TextKit 1 applies none
-    /// before the text's first paragraph and none after a line whose fragment also holds the next
-    /// paragraph's hidden markers (probed 2026-09-26).
+    /// height is ignored (probed 2026-09-16); the lines after follow. The first and the last line on
+    /// screen of the revealed lines (`.revealStart`, `.revealEnd`) get the room for the band behind them
+    /// (`InlineStyle.revealRoom`) outside their used rect, which the caret spans: paragraph spacing
+    /// would not do, since TextKit 1 applies none before the text's first paragraph and none after a
+    /// line whose fragment also holds the next paragraph's hidden markers (probed 2026-09-26).
     func layoutManager(_ layoutManager: NSLayoutManager, shouldSetLineFragmentRect lineFragmentRect: UnsafeMutablePointer<NSRect>, lineFragmentUsedRect: UnsafeMutablePointer<NSRect>, baselineOffset: UnsafeMutablePointer<CGFloat>, in textContainer: NSTextContainer, forGlyphRange glyphRange: NSRange) -> Bool {
-        let reveals = presentation == .inline && revealed.length > 0
-        guard !markers.anchors.isEmpty || reveals else { return false }
+        guard presentation == .inline, let textStorage else { return false }
         let characters = layoutManager.characterRange(forGlyphRange: glyphRange, actualGlyphRange: nil)
+        guard characters.length > 0, NSMaxRange(characters) <= textStorage.length else { return false }
         var above: CGFloat = 0
         var below: CGFloat = 0
-        for anchor in markers.anchors(in: characters) {
-            guard let picture = mathPicture(at: anchor) else { continue }
+        for anchor in Self.stretches(of: .mathPicture, in: characters, of: textStorage) {
+            guard let picture = mathPicture(at: anchor.location) else { continue }
             above = max(above, picture.baseline + InlineStyle.mathGap)
             below = max(below, picture.size.height - picture.baseline + InlineStyle.mathGap)
         }
         let extraAbove = max(0, above - baselineOffset.pointee)
         let extraBelow = max(0, below - (lineFragmentRect.pointee.height - baselineOffset.pointee))
-        let startsReveal = reveals && NSLocationInRange(revealed.location, characters)
-        let endsReveal = reveals && NSLocationInRange(NSMaxRange(revealed) - 1, characters)
+        let startsReveal = !Self.stretches(of: .revealStart, in: characters, of: textStorage).isEmpty
+        let endsReveal = !Self.stretches(of: .revealEnd, in: characters, of: textStorage).isEmpty
         let room = startsReveal || endsReveal ? InlineStyle(style: style).revealRoom : 0
         let roomAbove = startsReveal ? room : 0
         let roomBelow = endsReveal ? room : 0

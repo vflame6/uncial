@@ -13,6 +13,18 @@ extension NSAttributedString.Key {
     static let mathPicture = NSAttributedString.Key("uncialMathPicture")
     /// A `CalloutTitle` on a callout's first line: `InlineLayoutManager` draws the icon before it.
     static let calloutTitle = NSAttributedString.Key("uncialCalloutTitle")
+    /// `true` on the characters whose glyphs `ThemedTextView` hides (a marker outside the revealed
+    /// lines). Like the two below it draws nothing and tells the glyphs and the layout what to do:
+    /// attributes move with the text when it is edited, where an index of the text's positions is
+    /// that of the text before the edit until the next styling pass, and a pass sees where they changed.
+    static let hiddenMarker = NSAttributedString.Key("uncialHiddenMarker")
+    /// `true` on a list marker (`-`, `*`, `+`) drawn as a bullet.
+    static let listBullet = NSAttributedString.Key("uncialListBullet")
+    /// `true` on the first character of the revealed lines and on their last: the lines on screen that
+    /// hold them get room for the band, above and below. On those two characters alone, so that a line's
+    /// layout comes from its own characters and changes when they do.
+    static let revealStart = NSAttributedString.Key("uncialRevealStart")
+    static let revealEnd = NSAttributedString.Key("uncialRevealEnd")
 }
 
 /// A callout's first line: the type it is drawn as, its quote depth (the icon sits at that
@@ -27,6 +39,21 @@ final class CalloutTitle: NSObject {
         self.depth = depth
         self.defaultTitle = defaultTitle
     }
+
+    /// By value, as for the pictures below: every styling pass makes these anew, and the ones of a
+    /// pass that changes nothing must equal the ones in the text.
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? CalloutTitle else { return false }
+        return type == other.type && depth == other.depth && defaultTitle == other.defaultTitle
+    }
+
+    override var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(type)
+        hasher.combine(depth)
+        hasher.combine(defaultTitle)
+        return hasher.finalize()
+    }
 }
 
 /// A loaded image and the size it is drawn at under its paragraph.
@@ -37,6 +64,19 @@ final class InlineImage: NSObject {
     init(image: NSImage, size: NSSize) {
         self.image = image
         self.size = size
+    }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? InlineImage else { return false }
+        return image === other.image && size == other.size
+    }
+
+    override var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(ObjectIdentifier(image))
+        hasher.combine(size.width)
+        hasher.combine(size.height)
+        return hasher.finalize()
     }
 }
 
@@ -51,6 +91,20 @@ final class MathPicture: NSObject {
         self.image = image
         self.size = size
         self.baseline = baseline
+    }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? MathPicture else { return false }
+        return image === other.image && size == other.size && baseline == other.baseline
+    }
+
+    override var hash: Int {
+        var hasher = Hasher()
+        hasher.combine(ObjectIdentifier(image))
+        hasher.combine(size.width)
+        hasher.combine(size.height)
+        hasher.combine(baseline)
+        return hasher.finalize()
     }
 
     /// Scaled down, never up, to fit `width`.
@@ -69,9 +123,10 @@ final class MathPicture: NSObject {
 /// role color with their icon and title, the decoration a stack per quote level (`callout:<type>` or
 /// `quote`, `quote:N` for plain quotes). The revealed lines, the caret's paragraph
 /// or its fenced block, keep the source look: SF Mono and the source presentation's coloring, no
-/// decorations, no pictures; at the page's line height, with room above and below (`revealRoom`,
-/// added by `ThemedTextView` in layout) for the band `InlineLayoutManager` draws behind them.
-/// Attribute-only, so undo never sees it.
+/// decorations, no diagram or formula; at the page's line height, with room above and below
+/// (`revealRoom`, added by `ThemedTextView` in layout) for the band `InlineLayoutManager` draws behind
+/// them. An image stays under its paragraph there, if it is a file's or loaded already: nothing below
+/// the caret moves as it passes a picture. Attribute-only, so undo never sees it.
 struct InlineStyle {
     static let quoteIndent: CGFloat = 16
     /// A callout's icon, in points at the system size, and the room between it and the title.
@@ -178,23 +233,31 @@ struct InlineStyle {
 
     /// `storage` must already carry the base attributes for its whole text. `images` loads an
     /// image token's destination, `diagrams` a mermaid fence's picture and `math` a formula's (TeX,
-    /// display); nil keeps any of them as source, and nothing inside `revealed` is asked for.
+    /// display); nil keeps any of them as source, and nothing inside `revealed` is asked for: a
+    /// destination or a formula being typed is not fetched or drawn letter by letter. An image there
+    /// gets the picture `loadedImages` has for its destination, which must fetch nothing.
     /// `textWidth` is the room for text, which bounds the drawn sizes. Returns what got a picture.
+    ///
+    /// With `range`, only that part of the text is styled, from the tokens that start in it: whole
+    /// lines carrying the base attributes, that hold every block (fenced code, callout, table) they
+    /// hold a line of. That is how a caret move restyles the lines it leaves and enters.
     @discardableResult
     func apply(_ tokens: [MarkdownHighlighter.Token], to storage: NSTextStorage, images: (String) -> NSImage? = { _ in nil },
-               diagrams: (String) -> NSImage? = { _ in nil }, math: (String, Bool) -> MathPicture? = { _, _ in nil },
-               revealed: NSRange = NSRange(location: 0, length: 0), textWidth: CGFloat = .greatestFiniteMagnitude) -> Resolved {
+               loadedImages: (String) -> NSImage? = { _ in nil }, diagrams: (String) -> NSImage? = { _ in nil },
+               math: (String, Bool) -> MathPicture? = { _, _ in nil }, revealed: NSRange = NSRange(location: 0, length: 0),
+               textWidth: CGFloat = .greatestFiniteMagnitude, range: NSRange? = nil) -> Resolved {
         let text = storage.string as NSString
+        let whole = range ?? NSRange(location: 0, length: text.length)
         // The rendered look everywhere but the revealed lines, which keep the source look and get
         // the source presentation's coloring.
-        for range in Self.complement(of: revealed, in: NSRange(location: 0, length: text.length)) where range.length > 0 {
+        for range in Self.complement(of: revealed, in: whole) where range.length > 0 {
             storage.addAttributes(style.renderedAttributes, range: range)
         }
-        if revealed.length > 0 {
+        if NSIntersectionRange(revealed, whole).length > 0 {
             for span in MarkdownHighlighter.spans(from: tokens) where NSLocationInRange(span.range.location, revealed) && NSMaxRange(span.range) <= text.length {
                 storage.addAttributes(style.attributes(for: span.kind), range: span.range)
             }
-            setRevealedRhythm(revealed, in: storage)
+            setRevealedRhythm(NSIntersectionRange(revealed, whole), in: storage)
         }
         let callouts = MarkdownHighlighter.calloutBlocks(in: tokens, text: text)
         for token in tokens where !NSLocationInRange(token.range.location, revealed) {
@@ -325,7 +388,7 @@ struct InlineStyle {
         }
         alignTables(tokens, in: storage, revealed: revealed)
         let blocks = Self.fencedBlocks(in: tokens, text: text)
-        return Resolved(images: reserveImages(tokens, in: storage, images: images, revealed: revealed, textWidth: textWidth),
+        return Resolved(images: reserveImages(tokens, in: storage, images: images, loaded: loadedImages, revealed: revealed, textWidth: textWidth),
                         diagrams: reserveDiagrams(blocks, in: storage, diagrams: diagrams, revealed: revealed, textWidth: textWidth),
                         math: reserveMath(tokens, blocks: blocks, in: storage, math: math, revealed: revealed, textWidth: textWidth))
     }
@@ -598,16 +661,19 @@ struct InlineStyle {
         return range.location > 0 && !markers.isHidden(range.location - 1) ? range.location - 1 : nil
     }
 
-    /// The first image of a rendered paragraph that loads gets drawn under it: the paragraph's
-    /// spacing grows by the fitted height plus a gap, and the picture rides along as an attribute.
-    private func reserveImages(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, images: (String) -> NSImage?, revealed: NSRange, textWidth: CGFloat) -> Set<Int> {
+    /// The first image of a paragraph that loads gets drawn under it: the paragraph's spacing grows
+    /// by the fitted height plus a gap, and the picture rides along as an attribute. A revealed
+    /// paragraph keeps the picture it has (`loaded`) under its source and asks for none.
+    private func reserveImages(_ tokens: [MarkdownHighlighter.Token], in storage: NSTextStorage, images: (String) -> NSImage?,
+                               loaded: (String) -> NSImage?, revealed: NSRange, textWidth: CGFloat) -> Set<Int> {
         let text = storage.string as NSString
         var resolved: Set<Int> = []
         var decorated: Set<Int> = []
         for token in tokens {
             guard case .image(let destination) = token.kind else { continue }
             let paragraph = text.paragraphRange(for: token.range)
-            guard !decorated.contains(paragraph.location), !Self.touches(revealed, paragraph), let image = images(destination),
+            guard !decorated.contains(paragraph.location),
+                  let image = Self.touches(revealed, paragraph) ? loaded(destination) : images(destination),
                   image.size.width > 0, image.size.height > 0 else { continue }
             let existing = storage.attribute(.paragraphStyle, at: paragraph.location, effectiveRange: nil) as? NSParagraphStyle
             let available = max(40, textWidth - (existing?.headIndent ?? 0))

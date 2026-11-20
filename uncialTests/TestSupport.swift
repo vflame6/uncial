@@ -113,3 +113,139 @@ func withWebPage<T>(_ html: String, appearance: NSAppearance.Name? = nil, _ body
     }
     return try await body(webView)
 }
+
+/// Waits until `condition` holds, `seconds` at most: for what arrives in another turn of the main actor.
+/// Suites share that actor, so a fixed pause ends first when other tests are busy on it.
+@MainActor
+func eventually(within seconds: Double = 3, _ condition: () -> Bool) async {
+    let deadline = ContinuousClock.now + .seconds(seconds)
+    while !condition(), ContinuousClock.now < deadline {
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+}
+
+/// The editor as the app builds it (`MarkdownTextView.makeScrollView`), `width` × `height` points in a
+/// window that is never shown, restyled after every edit as the SwiftUI coordinator does. `configure`
+/// runs before the text goes in (loaders, renderers, the base URL). Close it when done.
+@MainActor
+final class EditorWindow: NSObject, NSTextViewDelegate {
+    let window: NSWindow
+    let scrollView: NSScrollView
+    let textView: ThemedTextView
+
+    init(_ text: String, presentation: EditorPresentation = .inline, width: CGFloat = 800, height: CGFloat = 600,
+         configure: (ThemedTextView) -> Void = { _ in }) {
+        scrollView = MarkdownTextView.makeScrollView()
+        textView = scrollView.documentView as! ThemedTextView
+        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height), styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        super.init()
+        window.contentView = scrollView
+        window.layoutIfNeeded()
+        textView.delegate = self
+        textView.presentation = presentation
+        configure(textView)
+        textView.replaceText(with: text)
+        textView.setSelectedRange(NSRange(location: 0, length: 0))
+    }
+
+    func textDidChange(_ notification: Notification) {
+        textView.rehighlight()
+    }
+
+    func close() {
+        window.close()
+    }
+
+    /// Where the visible part of the text starts, in the text view's coordinates.
+    var scrollOffset: CGFloat { scrollView.contentView.bounds.origin.y }
+
+    /// Puts the caret at `location` and scrolls it into view.
+    func moveCaret(to location: Int) {
+        textView.setSelectedRange(NSRange(location: location, length: 0))
+        textView.scrollRangeToVisible(NSRange(location: location, length: 0))
+    }
+
+    /// The top of the line fragment holding the character at `location`, from the top of the visible part.
+    func visibleTop(ofCharacterAt location: Int) -> CGFloat {
+        let layoutManager = textView.layoutManager!
+        let fragment = layoutManager.lineFragmentRect(forGlyphAt: layoutManager.glyphIndexForCharacter(at: location), effectiveRange: nil)
+        return fragment.minY + textView.textContainerOrigin.y - scrollOffset
+    }
+
+    /// What the layout shows, one entry per line on screen: where the line is, the characters it holds,
+    /// which of them are hidden or stand for a picture, and the glyphs they are drawn with. Two layouts
+    /// of a text that agree on this look the same.
+    func layoutSnapshot() -> [String] {
+        let layoutManager = textView.layoutManager!
+        layoutManager.ensureLayout(for: textView.textContainer!)
+        func number(_ value: CGFloat) -> String { String(format: "%.2f", value) }
+        var lines: [String] = []
+        var glyph = 0
+        while glyph < layoutManager.numberOfGlyphs {
+            var glyphs = NSRange()
+            let rect = layoutManager.lineFragmentRect(forGlyphAt: glyph, effectiveRange: &glyphs)
+            guard glyphs.length > 0 else { break }
+            let used = layoutManager.lineFragmentUsedRect(forGlyphAt: glyph, effectiveRange: nil)
+            let characters = layoutManager.characterRange(forGlyphRange: glyphs, actualGlyphRange: nil)
+            var hidden: [Int] = []
+            var boxes: [Int] = []
+            var drawn: [CGGlyph] = []
+            var shapes = [CGGlyph](repeating: 0, count: glyphs.length)
+            var properties = [NSLayoutManager.GlyphProperty](repeating: [], count: glyphs.length)
+            var indexes = [Int](repeating: 0, count: glyphs.length)
+            layoutManager.getGlyphs(in: glyphs, glyphs: &shapes, properties: &properties, characterIndexes: &indexes, bidiLevels: nil)
+            for index in 0..<glyphs.length {
+                if properties[index].contains(.null) {
+                    hidden.append(indexes[index])
+                } else if properties[index].contains(.controlCharacter) {
+                    boxes.append(indexes[index])
+                } else {
+                    drawn.append(shapes[index])
+                }
+            }
+            lines.append("y \(number(rect.minY)) h \(number(rect.height)) used \(number(used.minX))+\(number(used.width)) at \(number(used.minY)) "
+                + "characters \(characters.location)+\(characters.length) hidden \(hidden) boxes \(boxes) glyphs \(drawn.count):\(drawn.reduce(UInt64(17)) { ($0 &* 31) &+ UInt64($1) })")
+            glyph = NSMaxRange(glyphs)
+        }
+        lines.append("extra \(number(layoutManager.extraLineFragmentRect.minY)) \(number(layoutManager.extraLineFragmentRect.height))")
+        return lines
+    }
+
+    /// `layoutSnapshot()` after every glyph and line is made again: what the layout must be at any time.
+    func layoutSnapshotMadeAgain() -> [String] {
+        let layoutManager = textView.layoutManager!
+        let whole = NSRange(location: 0, length: textView.textStorage!.length)
+        layoutManager.invalidateGlyphs(forCharacterRange: whole, changeInLength: 0, actualCharacterRange: nil)
+        layoutManager.invalidateLayout(forCharacterRange: whole, actualCharacterRange: nil)
+        return layoutSnapshot()
+    }
+
+    /// The text's height when all of it is laid out from nothing: what the height must be at any time.
+    func heightLaidOutAgain() -> CGFloat {
+        let layoutManager = textView.layoutManager!
+        layoutManager.invalidateLayout(forCharacterRange: NSRange(location: 0, length: textView.textStorage!.length), actualCharacterRange: nil)
+        layoutManager.ensureLayout(for: textView.textContainer!)
+        return layoutManager.usedRect(for: textView.textContainer!).height
+    }
+}
+
+/// Every stretch of text a storage reports as edited: what its layout managers lay out again.
+final class StorageEdits: NSObject, NSTextStorageDelegate {
+    private(set) var ranges: [NSRange] = []
+
+    func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
+        ranges.append(editedRange)
+    }
+
+    /// The edits `body` makes to `storage`.
+    @MainActor
+    static func during(_ storage: NSTextStorage, _ body: () -> Void) -> [NSRange] {
+        let edits = StorageEdits()
+        let previous = storage.delegate
+        storage.delegate = edits
+        defer { storage.delegate = previous }
+        body()
+        return edits.ranges
+    }
+}

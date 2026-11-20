@@ -167,7 +167,9 @@ A remote image: ![Rickrolling QR code](https://upload.wikimedia.org/wikipedia/co
 
 *Expect:* the local icon drawn under its line at 128 pt with the alt text above
 it; the remote one appears the same way once it has loaded (Live Preview and the
-rendered page both fetch it; Quick Look has no network and shows nothing).
+rendered page both fetch it; Quick Look has no network and shows nothing). In
+Live Preview a picture stays where it is while the cursor is on its line, under
+the source.
 
 ## Links and anchors
 

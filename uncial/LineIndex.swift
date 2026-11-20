@@ -43,6 +43,11 @@ nonisolated struct LineIndex {
         return low
     }
 
+    /// Where `line` starts; the text's end for a line past the last one.
+    func start(ofLine line: Int) -> Int {
+        line < lineStarts.count ? lineStarts[max(line, 0)] : length
+    }
+
     /// The line's characters without its line break (clamped to an existing line).
     func range(ofLine line: Int) -> NSRange {
         let index = min(max(line, 0), lineStarts.count - 1)

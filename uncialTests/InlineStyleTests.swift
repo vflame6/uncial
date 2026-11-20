@@ -240,10 +240,14 @@ import UncialCore
         InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: narrow, images: provider, textWidth: 100)
         #expect((narrow.attribute(.inlineImage, at: 0, effectiveRange: nil) as? InlineImage)?.size == NSSize(width: 100, height: 50))
         #expect(paragraph(narrow, 0)?.paragraphSpacing == 58)
-        // A revealed paragraph is source: no picture.
+        // A revealed paragraph loads no picture; one that is loaded already stays under its source.
         let shown = NSTextStorage(string: text, attributes: style.baseAttributes)
         let none = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: shown, images: provider, revealed: NSRange(location: 0, length: 14), textWidth: 400)
         #expect(none.images.isEmpty && shown.attribute(.inlineImage, at: 0, effectiveRange: nil) == nil)
+        let kept = NSTextStorage(string: text, attributes: style.baseAttributes)
+        let some = InlineStyle(style: style).apply(MarkdownHighlighter.tokens(in: text), to: kept, loadedImages: provider, revealed: NSRange(location: 0, length: 14), textWidth: 400)
+        #expect(some.images == [0] && paragraph(kept, 0)?.paragraphSpacing == 108)
+        #expect((kept.attribute(.font, at: 5, effectiveRange: nil) as? NSFont) == style.regular)
     }
 
     @Test func layoutManagerDrawsImagesUnderTheirLine() {

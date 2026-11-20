@@ -78,20 +78,32 @@ nonisolated final class RemoteImageLoader: NSObject, URLSessionDataDelegate, @un
               let height = properties[kCGImagePropertyPixelHeight] as? Int else {
             return NSImage(data: data)
         }
+        guard let bitmap = bitmap(from: source, maxPixelSize: maxPixelSize) else { return nil }
+        return NSImage(cgImage: bitmap, size: size(pixelWidth: width, pixelHeight: height, properties: properties))
+    }
+
+    /// The source's first picture, turned upright, at most `maxPixelSize` on either side, decoded here and now.
+    static func bitmap(from source: CGImageSource, maxPixelSize: Int) -> CGImage? {
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
             kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
             kCGImageSourceShouldCacheImmediately: true,
         ]
-        guard let bitmap = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+
+    /// The size in points of a picture of that many pixels with those ImageIO properties: the pixels at
+    /// the file's resolution (72 to the inch when it names none), width and height swapped for a picture
+    /// that is stored lying on its side.
+    static func size(pixelWidth: Int, pixelHeight: Int, properties: [CFString: Any]) -> NSSize {
         let dpiWidth = (properties[kCGImagePropertyDPIWidth] as? Double).flatMap { $0 > 0 ? $0 : nil } ?? 72
         let dpiHeight = (properties[kCGImagePropertyDPIHeight] as? Double).flatMap { $0 > 0 ? $0 : nil } ?? 72
-        var size = NSSize(width: Double(width) * 72 / dpiWidth, height: Double(height) * 72 / dpiHeight)
+        let size = NSSize(width: Double(pixelWidth) * 72 / dpiWidth, height: Double(pixelHeight) * 72 / dpiHeight)
         // Orientations 5 to 8 swap width and height.
         if let orientation = properties[kCGImagePropertyOrientation] as? Int, (5...8).contains(orientation) {
-            size = NSSize(width: size.height, height: size.width)
+            return NSSize(width: size.height, height: size.width)
         }
-        return NSImage(cgImage: bitmap, size: size)
+        return size
     }
 }

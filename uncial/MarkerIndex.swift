@@ -14,13 +14,9 @@ nonisolated struct MarkerIndex: Equatable {
     let hidden: [NSRange]
     /// Character indexes of `-`, `*` and `+` list markers, drawn as bullets.
     let bullets: Set<Int>
-    /// `bullets` in order, for `hasBullet(in:)`.
-    private let sortedBullets: [Int]
     /// Fenced code and math blocks including both fence lines (an unclosed one runs to its last line),
     /// and callouts: what reveals as a whole.
     let blocks: [NSRange]
-    /// Sorted character indexes that stand for a formula's picture.
-    let anchors: [Int]
 
     /// `calloutBlocks` (`MarkdownHighlighter.calloutBlocks`) reveal as a whole too.
     init(tokens: [MarkdownHighlighter.Token], resolvedImages: Set<Int> = [], resolvedDiagrams: Set<Int> = [], resolvedMath: [Int: Int] = [:], calloutBlocks: [NSRange] = []) {
@@ -79,9 +75,7 @@ nonisolated struct MarkerIndex: Equatable {
         }
         self.hidden = Self.merged(hidden)
         self.bullets = bullets
-        self.sortedBullets = bullets.sorted()
         self.blocks = blocks + calloutBlocks
-        self.anchors = resolvedMath.values.sorted()
     }
 
     /// Sorted by location, with overlapping ranges joined.
@@ -118,71 +112,6 @@ nonisolated struct MarkerIndex: Equatable {
             }
         }
         return false
-    }
-
-    /// Whether a hidden range overlaps `range`. Binary search: the glyph delegate asks for every glyph
-    /// run, and a scan over thousands of markers cost 50–90 ms per keystroke (PERF-3).
-    func hasHidden(in range: NSRange) -> Bool {
-        guard range.length > 0 else { return false }
-        // The first hidden range that ends after `range` starts; `hidden` is sorted and non-overlapping,
-        // so the ends are in order too.
-        var low = 0
-        var high = hidden.count
-        while low < high {
-            let mid = (low + high) / 2
-            if NSMaxRange(hidden[mid]) <= range.location {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        while low < hidden.count, hidden[low].location < NSMaxRange(range) {
-            if hidden[low].length > 0 { return true }
-            low += 1
-        }
-        return false
-    }
-
-    /// Whether a bullet lies inside `range`, by binary search as `hasHidden(in:)`.
-    func hasBullet(in range: NSRange) -> Bool {
-        var low = 0
-        var high = sortedBullets.count
-        while low < high {
-            let mid = (low + high) / 2
-            if sortedBullets[mid] < range.location {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        return low < sortedBullets.count && sortedBullets[low] < NSMaxRange(range)
-    }
-
-    func isAnchor(_ index: Int) -> Bool {
-        !anchors(in: NSRange(location: index, length: 1)).isEmpty
-    }
-
-    /// The anchors inside `range`, in order.
-    func anchors(in range: NSRange) -> ArraySlice<Int> {
-        var low = 0
-        var high = anchors.count
-        while low < high {
-            let mid = (low + high) / 2
-            if anchors[mid] < range.location {
-                low = mid + 1
-            } else {
-                high = mid
-            }
-        }
-        var end = low
-        while end < anchors.count, anchors[end] < NSMaxRange(range) {
-            end += 1
-        }
-        return anchors[low..<end]
-    }
-
-    func hasAnchor(in range: NSRange) -> Bool {
-        !anchors(in: range).isEmpty
     }
 
     /// The paragraphs the selection touches, widened to any fenced block they are in. The selection
